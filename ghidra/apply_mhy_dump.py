@@ -11,6 +11,23 @@
 
 import json
 
+from ghidra.program.model.symbol import SourceType
+
+
+def safe_name(n):
+    """Ghidra symbols reject some characters; map them to '_' (Il2CppDumper
+    names may contain generic backticks etc.)."""
+    out = []
+    for c in n:
+        if c.isalnum() or c in '_.$<>':
+            out.append(c)
+        else:
+            out.append('_')
+    r = ''.join(out)
+    if r and r[0].isdigit():
+        r = '_' + r
+    return r or 'il2cpp_method'
+
 
 def to_addr(va):
     # Jython is Python 2: hex() of a big int yields a trailing "L" that Ghidra
@@ -36,8 +53,12 @@ def run():
                 if fn is not None:
                     created += 1
             if fn is not None:
-                fn.setName(e["Name"], True)
-                applied += 1
+                try:
+                    fn.setName(e["Name"], SourceType.USER_DEFINED)
+                    applied += 1
+                except Exception:
+                    fn.setName(safe_name(e["Name"]), SourceType.USER_DEFINED)
+                    applied += 1
             else:
                 failed += 1
         except Exception:
