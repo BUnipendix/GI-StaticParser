@@ -43,3 +43,6 @@ def run():
         if i % 50000 == 0:
             print("progress: %d/%d" % (i, len(methods)))
     print("done: %d named, %d functions created, %d failed" % (applied, created, failed))
+
+
+run()
