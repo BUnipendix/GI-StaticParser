@@ -122,7 +122,13 @@ fn dump_cmd(exe: &str, metadata: &str, out: &str, only: Option<&[usize]>) -> Res
     let gm = std::fs::read(metadata)?;
     let md = static_mhy_dumper::decrypt::file::load(&ga, &gm)?;
     if !md.tables.tables_ok {
-        anyhow::bail!("full dump requires the runtime-table anchors (typearr/methodptrs), which are not yet ported for this build; use 'types-dump' / 'decode-one' meanwhile");
+        // current-generation path: MethodDefinition table + method-pointer array
+        let f = std::fs::File::create(out)?;
+        let mut w = std::io::BufWriter::new(f);
+        let (nt, nm_out, nm_total) = static_mhy_dumper::methods_71::dump_full(&md, &mut w)?;
+        w.flush()?;
+        println!("wrote {out}: {nt} types, {nm_out} methods emitted (of {nm_total})");
+        return Ok(());
     }
     let dm = static_mhy_dumper::metadata::DecodedMetadata::new(&md);
     let f = std::fs::File::create(out)?;

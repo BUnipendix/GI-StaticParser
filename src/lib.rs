@@ -16,6 +16,7 @@ pub mod il2cpp_api;
 pub mod mem;
 pub mod metadata;
 pub mod method_meta;
+pub mod methods_71;
 pub mod pe;
 pub mod td_dump;
 pub mod typenames;
