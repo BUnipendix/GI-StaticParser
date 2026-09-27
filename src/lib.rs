@@ -17,4 +17,5 @@ pub mod mem;
 pub mod metadata;
 pub mod method_meta;
 pub mod pe;
+pub mod td_dump;
 pub mod typenames;

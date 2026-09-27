@@ -5,6 +5,11 @@
 
 use crate::mem::Memory;
 
+const M1: u64 = 0xB33E_4042_7D56_68C0;
+const X1: u64 = 0x6D8C_4AAB_00FE_8E27;
+const X2: u64 = 0x30EE_5B43_130F_E0CD;
+const M4: u64 = 0x0889_EEEA_326A_FB36;
+
 /// Decode a string at `strsec` (offset of the string section within the body buffer) for packed
 /// index `idx`. Generic over the backing store.
 pub fn decode_str<M: Memory>(mem: &M, strsec: usize, idx: u32) -> String {
@@ -13,22 +18,23 @@ pub fn decode_str<M: Memory>(mem: &M, strsec: usize, idx: u32) -> String {
     }
     let off = (idx & 0xFF_FFFF) as usize;
     let len = ((idx >> 24) & 0xFF) as usize;
+    if len == 0 {
+        return String::new();
+    }
     let nq = (len + 7) >> 3;
     let src = strsec.wrapping_add(off);
     if !mem.readable(src, nq * 8 + 8) {
         return String::new();
     }
-    let a = 0x7EC9_2DE8_77F1_13F2u64.wrapping_mul(off as u64) ^ 0x17AE_9BC6_7ADF_D24D;
-    let c = 0x2534_E544_4975_26A1u64
-        .wrapping_mul(a)
-        .wrapping_add(0x54EB_1A52_1F01_14C9)
-        ^ 0x68A6_9E94_2939_701D;
-    let mut key = 0x5CDE_4E05_62F8_84EAu64.wrapping_mul(c);
+    let mut key = (off as u64)
+        .wrapping_mul(M1)
+        .wrapping_add(X1)
+        ^ X2;
     let mut buf = Vec::with_capacity(nq * 8);
     for k in 0..nq {
         let enc = mem.read_u64(src + 8 * k);
         buf.extend_from_slice(&(enc ^ key).to_le_bytes());
-        key = key.wrapping_add(0x6C80_2BDA_2DB0_1DBB);
+        key = key.wrapping_add(M4);
     }
     buf.truncate(len);
     if let Some(z) = buf.iter().position(|&b| b == 0) {

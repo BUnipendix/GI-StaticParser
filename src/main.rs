@@ -37,6 +37,16 @@ enum Cmd {
         #[arg(long)]
         metadata: String,
     },
+    /// Walk the TypeDefinition table and dump type names.
+    TypesDump {
+        #[arg(long)]
+        exe: String,
+        #[arg(long)]
+        metadata: String,
+        /// Output path.
+        #[arg(short, long, default_value = "typedefs.txt")]
+        out: String,
+    },
     /// Locate il2cpp runtime API functions (il2cpp_init & friends) via anchor strings + call graph.
     Il2CppFns {
         /// Path to the main PE image (the game executable).
@@ -77,9 +87,24 @@ fn main() -> Result<()> {
         Cmd::PeValidate { exe } => pe_validate(&exe),
         Cmd::DecodeOne { exe, metadata, idx } => decode_one(&exe, &metadata, idx),
         Cmd::HeaderDump { exe, metadata } => header_dump(&exe, &metadata),
+        Cmd::TypesDump { exe, metadata, out } => types_dump(&exe, &metadata, &out),
         Cmd::Il2CppFns { exe } => il2cpp_fns(&exe),
         Cmd::Dump { exe, metadata, out, only } => dump_cmd(&exe, &metadata, &out, only.as_deref()),
     }
+}
+
+/// Walk the TypeDefinition table (current-generation layout).
+fn types_dump(exe: &str, metadata: &str, out: &str) -> Result<()> {
+    let ga = std::fs::read(exe)?;
+    let gm = std::fs::read(metadata)?;
+    let md = static_mhy_dumper::decrypt::file::load(&ga, &gm)?;
+    use std::io::Write;
+    let f = std::fs::File::create(out)?;
+    let mut w = std::io::BufWriter::new(f);
+    let (nt, nh) = static_mhy_dumper::td_dump::dump_types(&md, &mut w)?;
+    w.flush()?;
+    println!("wrote {out}: {nt} visible types, {nh} hidden-marker records skipped");
+    Ok(())
 }
 
 /// Locate il2cpp runtime API functions by anchor strings + direct-call graph.
@@ -96,6 +121,9 @@ fn dump_cmd(exe: &str, metadata: &str, out: &str, only: Option<&[usize]>) -> Res
     let ga = std::fs::read(exe)?;
     let gm = std::fs::read(metadata)?;
     let md = static_mhy_dumper::decrypt::file::load(&ga, &gm)?;
+    if !md.tables.tables_ok {
+        anyhow::bail!("full dump requires the runtime-table anchors (typearr/methodptrs), which are not yet ported for this build; use 'types-dump' / 'decode-one' meanwhile");
+    }
     let dm = static_mhy_dumper::metadata::DecodedMetadata::new(&md);
     let f = std::fs::File::create(out)?;
     let mut w = std::io::BufWriter::new(f);
@@ -123,6 +151,9 @@ fn header_dump(exe: &str, metadata: &str) -> Result<()> {
     let ga = std::fs::read(exe)?;
     let gm = std::fs::read(metadata)?;
     let md = static_mhy_dumper::decrypt::file::load(&ga, &gm)?;
+    if !md.tables.tables_ok {
+        anyhow::bail!("header-dump reports the old-generation table set; runtime-table anchors for this build are not ported yet (see types-dump / decode-one)");
+    }
     let dm = static_mhy_dumper::metadata::DecodedMetadata::new(&md);
     println!("Metadata loaded:");
     println!("  header (f418): {} bytes (embedded .rdata MHY blob)", md.header.len());

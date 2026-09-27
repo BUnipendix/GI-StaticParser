@@ -18,9 +18,9 @@ use crate::pe::Image;
 /// `f420 = file_buffer + 0x210`).
 pub const BODY_OFFSET: usize = 0x210;
 
-/// `strsec = f420 + (i32(header+272) - 1426623823)`.
-const STRSEC_HDR_OFF: usize = 272;
-const STRSEC_BIAS: i64 = 1426623823;
+/// `strsec = f420 + (i32(header+0x150) - STRSEC_BIAS)`.
+const STRSEC_HDR_OFF: usize = 0x150;
+const STRSEC_BIAS: i64 = 0x37AB_D22E as i64;
 
 // Static pointer-chain anchors (VAs into GenshinImpact.exe), written into globals at load time by the
 // registration fn `0x1402A7C20`.
@@ -43,7 +43,22 @@ pub fn load(game_assembly: &[u8], global_metadata: &[u8]) -> Result<Metadata> {
     let img = Image::parse(game_assembly)?;
     let header = find_embedded_header(&img, &body)
         .ok_or_else(|| anyhow!("could not locate the embedded MHY header in GenshinImpact .rdata"))?;
-    let tables = resolve_tables(&img)?;
+    let tables = match resolve_tables(&img) {
+        Ok(t) => Tables { tables_ok: true, ..t },
+        Err(e) => {
+            eprintln!("[warn] runtime table chains not resolved for this build ({e}); typearr/methodptrs-dependent output will be wrong");
+            Tables {
+                tables_ok: false,
+                image_base: img.image_base(),
+                typearr: 0,
+                methodptrs: 0,
+                generic_classes: 0,
+                rdata_va_start: 0,
+                rdata_file_start: 0,
+                rdata_size: 0,
+            }
+        }
+    };
 
     Ok(Metadata {
         header,
@@ -76,6 +91,7 @@ fn resolve_tables(img: &Image) -> Result<Tables> {
         .section(".rdata")
         .ok_or_else(|| anyhow!(".rdata section missing"))?;
     let tables = Tables {
+        tables_ok: true,
         image_base: img.image_base(),
         typearr: to_file(typearr_va, "typearr")?,
         methodptrs: to_file(methodptrs_va, "methodptrs")?,
