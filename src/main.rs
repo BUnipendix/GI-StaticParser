@@ -37,6 +37,12 @@ enum Cmd {
         #[arg(long)]
         metadata: String,
     },
+    /// Locate il2cpp runtime API functions (il2cpp_init & friends) via anchor strings + call graph.
+    Il2CppFns {
+        /// Path to the main PE image (the game executable).
+        #[arg(short, long)]
+        exe: String,
+    },
     /// Milestones (e)/(f): emit dump.cs. With --only, restrict to given TypeDefIndices.
     Dump {
         #[arg(long)]
@@ -71,8 +77,18 @@ fn main() -> Result<()> {
         Cmd::PeValidate { exe } => pe_validate(&exe),
         Cmd::DecodeOne { exe, metadata, idx } => decode_one(&exe, &metadata, idx),
         Cmd::HeaderDump { exe, metadata } => header_dump(&exe, &metadata),
+        Cmd::Il2CppFns { exe } => il2cpp_fns(&exe),
         Cmd::Dump { exe, metadata, out, only } => dump_cmd(&exe, &metadata, &out, only.as_deref()),
     }
+}
+
+/// Locate il2cpp runtime API functions by anchor strings + direct-call graph.
+fn il2cpp_fns(exe: &str) -> Result<()> {
+    let ga = std::fs::read(exe)?;
+    let img = static_mhy_dumper::pe::Image::parse(&ga)?;
+    let report = static_mhy_dumper::il2cpp_api::analyze(&img)?;
+    print!("{report}");
+    Ok(())
 }
 
 /// Milestones (e)/(f): emit dump.cs.

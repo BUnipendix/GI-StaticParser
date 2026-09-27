@@ -12,6 +12,7 @@ pub mod decrypt;
 pub mod default_values;
 pub mod dump;
 pub mod field_meta;
+pub mod il2cpp_api;
 pub mod mem;
 pub mod metadata;
 pub mod method_meta;
