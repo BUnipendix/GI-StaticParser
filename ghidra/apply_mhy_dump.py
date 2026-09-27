@@ -13,7 +13,9 @@ import json
 
 
 def to_addr(va):
-    return currentProgram.getAddressFactory().getDefaultAddressSpace().getAddress(hex(int(va)))
+    # Jython is Python 2: hex() of a big int yields a trailing "L" that Ghidra
+    # rejects, so pass the numeric offset directly.
+    return currentProgram.getAddressFactory().getDefaultAddressSpace().getAddress(long(va))
 
 
 def run():
