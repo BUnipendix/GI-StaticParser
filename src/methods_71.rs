@@ -68,7 +68,39 @@ pub fn find_methodptrs(md: &Metadata) -> Option<(usize, usize)> {
 /// Full dump: types grouped from the TypeDefinition table, methods from the
 /// MethodDefinition table with code addresses from the pointer array.
 /// Writes an Il2CppDumper-flavoured dump.cs.
-pub fn dump_full(md: &Metadata, w: &mut dyn Write) -> Result<(usize, usize, usize)> {
+/// Escape a string for inclusion in a JSON string literal (names may contain quotes/backslashes).
+fn json_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// Il2CppDumper-compatible script.json (ScriptMethod entries; the classic
+/// Ghidra-Il2CppDumper plugin and our bundled ghidra/apply script consume it).
+pub fn write_script_json(w: &mut dyn Write, methods: &[(u64, String)]) -> std::io::Result<()> {
+    writeln!(w, "{{")?;
+    writeln!(w, "\"ScriptMethod\": [")?;
+    for (i, (va, name)) in methods.iter().enumerate() {
+        let comma = if i + 1 == methods.len() { "" } else { "," };
+        writeln!(w, "  {{\"Address\": {}, \"Name\": \"{}\", \"Signature\": \"\", \"TypeSignature\": \"\"}}{comma}",
+                 va, json_escape(name))?;
+    }
+    writeln!(w, "],")?;
+    writeln!(w, "\"ScriptString\": [],")?;
+    writeln!(w, "\"ScriptMetadata\": [],")?;
+    writeln!(w, "\"ScriptMetadataMethod\": [],")?;
+    writeln!(w, "\"Addresses\": [0, 0, 0]")?;
+    writeln!(w, "}}")
+}
+
+pub fn dump_full(md: &Metadata, w: &mut dyn Write, wj: &mut dyn Write) -> Result<(usize, usize, usize)> {
     let body = Buffer::new(&md.body);
     let strsec = strsec_of(md);
 
@@ -108,6 +140,7 @@ pub fn dump_full(md: &Metadata, w: &mut dyn Write) -> Result<(usize, usize, usiz
 
     // group by declaring type: (code VA, decoded name) per type
     let mut per_type: Vec<Vec<(u64, String)>> = vec![Vec::new(); type_names.len()];
+    let mut all_methods: Vec<(u64, String)> = Vec::with_capacity(n_methods);
     let mut unnamed = 0usize;
     for i in 0..n_methods {
         let rec = md_base + i * MD_STRIDE;
@@ -139,6 +172,7 @@ pub fn dump_full(md: &Metadata, w: &mut dyn Write) -> Result<(usize, usize, usiz
             for (mi, (va, name)) in ms.iter().enumerate() {
                 let rva = va - md.tables.image_base;
                 let display = if name.is_empty() { format!("M_{mi}") } else { name.clone() };
+                all_methods.push((*va, format!("{tname}.{display}")));
                 writeln!(w, "\t// RVA 0x{rva:X} VA 0x{va:X}")?;
                 writeln!(w, "\tpublic void {display}();")?;
                 m_out += 1;
@@ -146,6 +180,7 @@ pub fn dump_full(md: &Metadata, w: &mut dyn Write) -> Result<(usize, usize, usiz
         }
         writeln!(w, "}}")?;
     }
+    write_script_json(wj, &all_methods)?;
     Ok((type_names.len(), m_out, n_methods))
 }
 

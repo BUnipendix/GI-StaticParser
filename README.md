@@ -62,3 +62,15 @@ constants are specific to one build; a different version needs the recipe re-der
 ## License
 
 [GPL-3.0](LICENSE).
+
+## Ghidra integration
+
+`mhydump dump` writes `dump.cs` plus an Il2CppDumper-compatible `script.json`
+(beside it). To apply names inside Ghidra:
+
+1. import the game executable, run auto-analysis (or skip it);
+2. Script Manager -> run `ghidra/apply_mhy_dump.py`, select the `script.json`;
+3. every method address gets its fully-qualified managed name
+   (`Namespace.Class.Method`); functions are created where missing.
+
+Any Il2CppDumper-compatible Ghidra plugin can consume the same `script.json`.

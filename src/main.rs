@@ -123,11 +123,18 @@ fn dump_cmd(exe: &str, metadata: &str, out: &str, only: Option<&[usize]>) -> Res
     let md = static_mhy_dumper::decrypt::file::load(&ga, &gm)?;
     if !md.tables.tables_ok {
         // current-generation path: MethodDefinition table + method-pointer array
+        let json_path = match out.rfind('/') {
+            Some(p) => format!("{}script.json", &out[..=p]),
+            None => "script.json".to_string(),
+        };
         let f = std::fs::File::create(out)?;
         let mut w = std::io::BufWriter::new(f);
-        let (nt, nm_out, nm_total) = static_mhy_dumper::methods_71::dump_full(&md, &mut w)?;
+        let fj = std::fs::File::create(&json_path)?;
+        let mut wj = std::io::BufWriter::new(fj);
+        let (nt, nm_out, nm_total) = static_mhy_dumper::methods_71::dump_full(&md, &mut w, &mut wj)?;
         w.flush()?;
-        println!("wrote {out}: {nt} types, {nm_out} methods emitted (of {nm_total})");
+        wj.flush()?;
+        println!("wrote {out} + {json_path}: {nt} types, {nm_out} methods emitted (of {nm_total})");
         return Ok(());
     }
     let dm = static_mhy_dumper::metadata::DecodedMetadata::new(&md);
