@@ -44,6 +44,8 @@ pub fn dump_types(md: &Metadata, w: &mut dyn Write) -> Result<(usize, usize)> {
             hidden += 1;
             run_bad += 1;
             if run_bad > 5000 { break; }
+            // hidden records still occupy a TypeDefIndex slot — keep indices aligned
+            writeln!(w, "{i}\t<hidden_{}>", hidden)?;
             continue;
         }
         run_bad = 0;

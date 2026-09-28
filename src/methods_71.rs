@@ -109,6 +109,7 @@ pub fn dump_full(md: &Metadata, w: &mut dyn Write, wj: &mut dyn Write) -> Result
         ^ crate::td_dump::TD_HDR_XOR) as usize;
     let mut type_names: Vec<String> = Vec::new();
     let mut run_bad = 0usize;
+    let mut hidden_ct = 0usize;
     let n_td = md.body.len().saturating_sub(td_base) / crate::td_dump::TD_STRIDE;
     for i in 0..n_td.min(300_000) {
         let rec = td_base + i * crate::td_dump::TD_STRIDE;
@@ -116,6 +117,9 @@ pub fn dump_full(md: &Metadata, w: &mut dyn Write, wj: &mut dyn Write) -> Result
         if (magic as i32) != crate::td_dump::REC_MAGIC {
             run_bad += 1;
             if run_bad > 5000 { break; }
+            // hidden records still occupy a TypeDefIndex slot — keep indices aligned
+            hidden_ct += 1;
+            type_names.push(format!("<hidden_{}>", hidden_ct));
             continue;
         }
         run_bad = 0;
