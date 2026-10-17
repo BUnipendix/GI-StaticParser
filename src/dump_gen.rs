@@ -429,12 +429,11 @@ fn type_modifiers(td: &Td) -> String {
         7 => s.push_str("protected internal "),
         _ => s.push_str("internal "),
     }
-    if f & 0x80 != 0 && f & 0x100 != 0 {
-        s.push_str("static ");
-    } else if f & 0x20 == 0 && f & 0x80 != 0 {
+    // Reference dumps NEVER print `sealed` or `static` on a type header (verified: 0
+    // occurrences of `sealed class/struct`; static classes render as `abstract`).
+    // Only `abstract` (TypeAttributes.Abstract, 0x80) survives.
+    if f & 0x80 != 0 {
         s.push_str("abstract ");
-    } else if td.bitfield & 1 == 0 && td.bitfield & 2 == 0 && f & 0x100 != 0 {
-        s.push_str("sealed ");
     }
     s
 }
@@ -445,6 +444,13 @@ fn base_name(m: &Meta, tds: &[Td], parent_tarr: u32) -> Option<String> {
         return None;
     }
     let (kind, data, _) = m.il2cpp_type(parent_tarr as usize)?;
+    // GENERICINST parent (0x15): the reference dump prints the generic DEFINITION name with
+    // its arity suffix (`: Task`1`, `: ParameterOverride`1`) — not the instantiated form.
+    // Resolve the generic-class index to its definition typeDef and use the raw metadata name.
+    if kind == 0x15 {
+        let (def_tdi, _args) = m.generic_instance(data)?;
+        return tds.get(def_tdi as usize).map(|t| t.name.clone());
+    }
     // CLASS (0x12) / VALUETYPE (0x11) / OBJECT (0x1C): the parent of a direct System.Object
     // subclass is stored as an OBJECT-kind Il2CppType, so 0x1C must be accepted here
     // (otherwise thousands of classes lose their `: Object` base in the header).
@@ -973,12 +979,12 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
             for &gmi in &per_type[i] {
                 let md = &mds[gmi];
                 let (is_get, prop) = if let Some(rest) = md.name.strip_prefix("get_") {
-                    if md.param_count != 0 {
-                        continue;
-                    }
+                    // Indexers (e.g. `get_Chars(int)`) are properties too: the reference dump
+                    // prints them with the plain property name and no parameter list
+                    // (`public System.Char Chars { get; }`), so any parameter count is accepted.
                     (true, rest)
                 } else if let Some(rest) = md.name.strip_prefix("set_") {
-                    if md.param_count != 1 {
+                    if md.param_count == 0 {
                         continue;
                     }
                     (false, rest)
@@ -991,7 +997,10 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
                 let ptype = if is_get {
                     type_name(m, &tds, &parents, md.ret_type, 0)
                 } else {
-                    match m.param_type(md.param_start) {
+                    // The property type is the setter's LAST parameter (indexers carry the
+                    // index parameters before the value).
+                    let pidx = md.param_start.wrapping_add(md.param_count as u32 - 1);
+                    match m.param_type(pidx) {
                         Some(Some(ti)) => type_name(m, &tds, &parents, ti, 0),
                         _ => continue,
                     }

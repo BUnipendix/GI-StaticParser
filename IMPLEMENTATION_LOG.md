@@ -4346,3 +4346,34 @@ oracle：`3.40282347e+38f`、`9.99999975e-06f`、`0.0174532924f`、`2.0f`（低�
 ### 61.4 验证
 
 回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法。
+
+## 62. R11 第二十九轮：类型修饰符 / 泛型基类 / indexer 属性（2026-10-17）
+
+> 不是需求，是执行记录。
+
+### 62.1 类型修饰符：oracle 从不打印 sealed/static
+
+实测 6.4 oracle：`sealed class/struct` **0 处**、`static class` **0 处**，只有 `abstract`（5,584 处，含静态类——C# 静态类 = abstract+sealed，oracle 只打印 abstract）。
+我们此前输出 `public sealed`（15,602 型）/`private sealed`（11,232 型）/`public static`（4,344 型）。
+修复：类型修饰符 = 可见性 + (TypeAttributes.Abstract 0x80 ⇒ `abstract`)，其余忽略。修复后 sealed/static 类型头 **0 处**，abstract 6,259（版本增长合理）。
+
+### 62.2 泛型基类缺失（`kind 0x15` parent）
+
+oracle 对泛型基类打印**定义名+arity 后缀**（`: Task`1`、`: ParameterOverride`1`），不打印实例化形式。
+我们此前 `base_name` 只接受 0x11/0x12/0x1C，泛型基类直接丢失。修复：kind 0x15 → `generic_instance(g)` 取定义 tdi → 原样输出 `td.name`（保留反引号）。
+
+### 62.3 indexer 属性（get_X 带参数）
+
+oracle 把 indexer 当普通属性打印（`public System.Char Chars { get; }`，无参数列表）。我们此前要求 getter 0 参 ⇒ 所有 indexer 属性丢失（如 String.Chars）。
+修复：getter 允许任意参数；setter 允许 ≥1 参且属性类型取**最后一个参数**。属性数 62,879 → **63,117**。
+
+### 62.4 效果（vs 6.4 oracle）
+
+- 类基类精确率 97.13% → **98.96%**（16,293/16,464）
+- 头部（kind+base+ifaces）全等 83.76% → **84.33%**
+- System.String 块与 oracle 逐行几乎一致（含 [NonSerialized]、const `// 0x0`、Chars/Length 属性）
+- 方法签名相交率保持 79.29%（本轮修复影响类型头，不影响方法行）
+
+### 62.5 验证
+
+回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法。
