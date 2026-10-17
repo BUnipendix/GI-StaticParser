@@ -4772,3 +4772,37 @@ dump-gen --dummy-out 的 JSONL 新增列：
 ### 77.3 与参考实现的剩余差异
 - 多程序集划分（75 个 DLL，参考实现按 image 生成）：依赖类型→程序集映射；当前卡在 startup-metadata image 表列掩码（本轮已尝试列解，未成功，见 §76）。
 - GenericParam 表与 Address 的 Offset 字段（需要 exe 段表映射）未生成；v1 的已知差异仍成立。
+
+## 78. image 表解列：反汇编 loader 得到全部列公式，确认无 typeStart/typeCount（目标第 6 轮）
+
+> 不是需求，是执行记录。
+
+### 78.1 loader 位置与解码公式（capstone 反汇编 0x140536d60–0x140537104）
+- image 表基址：startup + i32(hdr[0x84]) ^ 0x582F3633；行 stride 0x28；
+- 行掩码（所有列共用）：r15d = (((i*0xBD1E70EB664)>>16) + 0x724F4CCB) ^ 0x2BE02F3D（与 name 列 profile 参数一致）；
+- 各列解码（t=行内 u32，m=行掩码）：
+  +0x00: ((t^0x57631D22)-m)+0x3A3F5F30     +0x04: (((t-m)+0xBB4B5110)^0x4FBFA07B)
+  +0x08: (((t-m)+0x96612B2C)^0x7362B478)   +0x0c: (t^0x1066FCA3)-m
+  +0x10: (t-m)+0xD3ED43CA                  +0x14: ((t^0x0F90FC6D)-m)+0x50105F4F
+  +0x18: (t^0x5E8998A9)-m（name）           +0x1c: (t-m)+0xB789942C
+  +0x20: (((t-m)+0xD61DDDDC)^0x06E0B2A6)   +0x24: ((t^0x40B24EE6)-m)^0x07B236BA
+- 目标结构 stride 0x58：name 存 +0x48、+0x04/+0x08/+0x18/+0x28/+0x2c/+0x30/+0x40/+0x50 各列。
+
+### 78.2 实测解码结果（用上述公式解 75 行）
+- **+0x0c 列 = 0,1,2,...,74**（图像序号，严格 +1）。
+- +0x10 列：单调递增，差值像类型数（1335, 85, 665, …），但全 75 行累计仅 **11,748**（≈ exportedType 数量级），不是 88,902。
+- 其余列：常量/指针/字符串索引量级，无 0..88902 的累计语义。
+- 结论：7.1 的 image 定义行**只保留 name、索引、exported 范围等，不含全量 typeStart/typeCount**（GI 剥离）。
+  这也解释了我们此前按「start 累加 == 88,902」约束解列必然无解。
+
+### 78.3 影响
+- 参考 Il2CppDumper 的 DummyDll 以 75 个程序集输出，其划分依赖 image.typeStart/count；7.1 该数据被剥离 →
+  多程序集 DummyDll **静态不可复现**（当前单程序集 DummyDll 是 7.1 能给出的最接近形态）。
+- 静态字段偏移的「每程序集 arena」分组同样缺少程序集边界；后续改为不依赖分组的路线（见下）。
+- assemblies 表：base = startup + (i32(hdr[0x6c]) + 0xE028E1F0)，行 stride 0x2c，行掩码
+  eax = ((((i*0x95F44748)+0x0BBE3F00)^0x24A3038F)+0x42C9B098)^0x76878AF8（本轮到 assembly 表为止）。
+
+### 78.4 下一步（替代路线）
+1. 静态偏移：不依赖 image 分组——在 exe 的静态数据里按「已知 instance 偏移序列」匹配每类型 fieldOffsets 数组
+   （类型内字段顺序已知、instance 偏移由布局重算已知），命中后同一数组即含该类型的静态字段偏移；
+2. 或用 6.4 oracle 的静态偏移 + 跨版本类型对照做回归校验（只校验，不生成）。
