@@ -689,9 +689,6 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
 
     // script.json first (streamed); fill ScriptMethod from all methods
     let mut script_methods: Vec<(u64, String)> = Vec::with_capacity(mds.len());
-    // File-scope sequential token for non-constructor methods (reference dumps number
-    // them 0x06000001.. in TypeDefIndex/methodStart order; constructors get Token 0).
-    let mut method_token: u32 = 0;
     let mut unresolved_props = 0usize;
     let mut synthesized_props = 0usize;
     let mut props_synth_types = 0usize;
@@ -969,8 +966,9 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
             let ret = type_name(m, &tds, &parents, md.ret_type, 0);
             let (params, n_unresolved) = self_params(m, &tds, &parents, md);
             unresolved_params += n_unresolved;
-            // Constructors carry Token 0 in the reference dumps (tokens number the
-            // non-constructor methods sequentially from 0x06000001 in file order).
+            // Real metadata token: tokens are assigned in method-table order starting at
+            // 0x06000001, constructors included (verified against the 6.4 reference dump).
+            let token = 0x0600_0001u32.wrapping_add(gmi as u32);
             writeln!(
                 w,
                 "\t{}{} {}({}) {{ }} // RVA: 0x{:X} Token: 0x{:08X} Slot: {}",
@@ -979,7 +977,7 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
                 md.name,
                 params.join(", "),
                 md.rva,
-                0u32,
+                token,
                 md.slot
             )?;
             nmethods += 1;
@@ -997,8 +995,7 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
             let ret = type_name(m, &tds, &parents, md.ret_type, 0);
             let (params, n_unresolved) = self_params(m, &tds, &parents, md);
             unresolved_params += n_unresolved;
-            method_token = method_token.wrapping_add(1);
-            let token = 0x0600_0000u32 | method_token;
+            let token = 0x0600_0001u32.wrapping_add(gmi as u32);
             writeln!(
                 w,
                 "\t{}{} {}({}) {{ }} // RVA: 0x{:X} Token: 0x{:08X} Slot: {}",

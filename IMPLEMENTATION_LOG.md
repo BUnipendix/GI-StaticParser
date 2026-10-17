@@ -4045,3 +4045,33 @@ oracle 用**全限定 C# 名**（`System.Void`/`System.Int32`/`System.String`/`S
 ### 52.5 遗留
 
 - 泛型**参数引用**（kind 0x13 VAR / 0x1E MVAR）仍输出 `object/*k0x13*/` 占位（字段 7,937 + 2,246 处）：需要 genericParameters 表（nameIndex）——应在 startup-metadata 的 slot 0x2C(0x43020)/0x6C(0x3DE954) 等表中，下一轮解析。
+
+## 53. R11 第二十轮：方法 Token 修正（真实元数据 token）（2026-10-17）
+
+> 不是需求，是执行记录。
+
+### 53.1 问题：ctor Token 被硬编码为 0（未验证假设）
+
+旧代码注释声称「参考 dump 中构造函数 Token 为 0」，实测 **6.4 oracle 中 631,108 条方法 Token 无一个 0**；
+我们 7.1 dump 有 82,004 个（11.2%）Token 0x00000000，**全部是 .ctor/.cctor**。
+
+### 53.2 修正
+
+Token = `0x06000001 + 方法表行号`（与方法表顺序一致，构造器同样有 token）。
+
+验证（vs 6.4 oracle，共享类型 20,189）：
+- 对齐方法 86,481 对；
+- **同类型内相邻方法的 (our-oracle) delta 100% 保持恒定**（65,422/65,422）⇒ token 顺序/编号规则与参考工具一致；
+- 85.77% 共享类型内 delta 全程恒定（= 无版本插入）；delta 差异来自 7.1 在之前插入了更多方法（版本差异，非错误）。
+
+修正后 dump 中 Token 0 数量：82,004 → **0**。
+
+### 53.3 其他探测（本轮）
+
+- 泛型参数名（kind 0x13/0x1E）仍未定位：全程序 29 处字符串解码调用点逐一分析（0x1404D965A / 0x1405159BE / 0x14051DA23 等），
+  分别对应 method 名（slot 0x1E0 表 = 方法表本身）、field 名（slot 0x4C 字段表）、类型名，均非 genericParameters；
+- startup-metadata 的 44B 行表（0x3DE954，`{add 0xFE3F0D29}/0x1C 名字 + {add 0xE291EE7B}`）经解码确认为 **assembly 名表**（mscorlib/Mono.Security/System/UnityEngine.*），非泛型参数表。
+
+### 53.4 验证
+
+回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法。
