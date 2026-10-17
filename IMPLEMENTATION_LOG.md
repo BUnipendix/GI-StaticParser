@@ -3348,3 +3348,43 @@ fs/fc 链 60000/60000 零坏行；ns/methodStart/methodCount/elementType/bitfiel
 2. 字段偏移（#1）：已排除——不是明文连续数组（.rdata 无 1.76MB 小 int32 长跑），静态注册结构里
    相关成员是 BSS 指针（运行时填充）。下一步：追类初始化代码写入 FieldInfo 的路径。
 3. 其余 8 项按 gap-inventory 顺序推进。
+
+## 34. R11 单版本全量：逆向进展（Slot 验证 / 参数表 / 特性表）（2026-10-17）
+
+> 不是需求，是执行记录。方法：对 .text 里的槽常数做字节定位 → capstone 反汇编窗口 → 读真实变换。
+
+### 34.1 方法行构建器定位（关键）
+
+掩码链常数（0x4E94/0x62D8B7B8/0x7572748A/0x1F4D9EEA/0x6E8931D6/0xC6FC9C8B/0x39036375）
+在 .text 有 6–21 个站点；首个完整构建器 @ **0x1405155FC..0x1405157xx**（方法行 → 内部结构）。
+
+实测语义（逐指令）：
+- md_base = hdr[0x1E0] ^ 0x2EE480FB + body（一致）
+- 行偏移 rdi = 26×i（lea 链确认）
+- **slot**：`movzx ecx,[row+0xC]; xor ecx,0x1E2A; sub ecx,r8d; movsx edx,cx`，
+  其中 r8 = mask2 = chain(i)×0x39036375 → **与引擎 XorCSubMask2I16 逐句一致**；gap #5 的「1,833 个值各一次」
+  来自二进制本身（GI 7.1 元数据确实几乎无 vtable slot），不是解码 bug。
+- **paramCount**：`movzx edx,[row+0x12]; sub edx,r8d; add edx,0xFFFF8D97; [out+0x28]=dx`；
+  但 +0x18 u8 方向才是引擎用的：**逐行验证已知签名**（Locale..ctor=0、GetText(msg)=1、
+  GetText(fmt,args)=2、SR.Format=2、Mono.Runtime..ctor=0）→ u8@0x18 变换正确，paramCount 无需改。
+
+### 34.2 参数「特性/键值表」定位（gap #6 相关）
+
+- 全文本唯一引用 hdr[0x1D0] 的代码：**0x1405287A0**（参数信息访问器，唯一调用者 0x14052ADB0）。
+- 表：hdr[0x1D0]^0x07D0BBF9，行 12B `{key@0(明文), typeIdx@4(i32,-1=null), dataOff@8(i32,-1=null)}`，
+  行数 =(hdr[0x18]+0xA1C835BE)/12 = **25,374**（稀疏，key∈[4868,548372]）。
+- key 计算（反汇编确认）：`(raw@方法行+0x08 ^ 0x20D55D01) + pmask(i)×0xC6FC9C8B + [paramInfo+0x10]`。
+- dataOff 指向 hdr[0x128]^0x371354A2 的 **u32 数据区**（实测是 0,1,2,3,4 序列表，不是字符串堆）
+  ⇒ 该表不是「参数名表」，更像参数上的特性数据（gap #6）。
+
+### 34.3 对 gap #2（参数名/类型）的结论
+
+- 已知事实：hdr[0x1D0] 全文本仅一个代码引用（keyed 查找），没有顺序遍历 → 它不是全参数表。
+- 参数名/类型全表（548,097 行）**尚未定位**；三种可能：MHY 在 dat 里换槽存放 / 按 image 存放 /
+  只在 .upx0 类初始化时生成。下一步：追「方法行构建器」的输出结构被谁消费（MethodInfo 参数填充）。
+- 已排除：参数名不在主字符串堆的 8 对齐位置（名字串解析验证过）；也不在 hdr[0x128] 区（u32 表）。
+
+### 34.4 本轮未做但已标记
+
+- gap #5 Slot：结论「实现忠实」→ 从缺陷清单移到「已验证」；oracle 差异记录为 oracle 侧语义。
+- gap #6 attributes：疑似表已定位（34.2），下一轮做数据/结构验证后接线。
