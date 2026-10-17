@@ -3653,3 +3653,41 @@ FUN_1405359e0（§2 的启动序列）。其模式（0x140535E9B..0x140535FA6 �
 
 - gap #7 关闭。剩余：泛型渲染（#11，需加载器追踪）、参数名/类型（疑剥离）、Properties/Events、接口精确化、
   stringLiterals/script.json ScriptString、attributes。
+
+## 43. R11 第十轮：未识别大表排查（参数表/属性表/泛型表）负结果与新线索（2026-10-17）
+
+> 不是需求，是执行记录。目的是避免下轮重复研究。
+
+### 43.1 已排查但未找到（负结果）
+
+1. **参数定义表（Il2CppParameterDefinition {nameIdx, token, typeIdx}）**：
+   - 用「12B 行 + 合法 typearr 索引 + 可解码名字」扫描 86 个已解表基址 × stride 8/12/16/20/24 → 0 命中；
+   - 用全 body 向量化扫描「任一字段 = 合法 typearr 索引」的长游程（≥10 万行）→ 只有 0x13A73C0 区的 166k 行命中，
+     但该区每 3 字出现 -1，且值不是我们 typearr 的索引空间（对已知 List<GameObject> 的 typearr 索引 0 命中）⇒ 不是参数表；
+   - 结论：参数表（548,097 行）**不是**以「原始 type 索引」明文存放；名字/类型列可能整列变换，或该表在 7.1 被剥离。
+     需要新证据源（如运行时 GetParameters 路径）才能定论，**目前不能断言已剥离**。
+2. **Properties/Events 表**：用「两/三个字段为合法 method 索引（<733,442）」扫描 stride 16/20/24/28/32 → 长游程候选经检查
+   均为 `{i32, i32, -1}` 三元组（见 43.2），不是属性/事件；名字列解不出（变换未知）。
+3. **0x188 表**（原文档标「泛型实例表」）：实测行内容 `{f0:0/16/-1, f1:-1/0, f2:769+行号递增}` —— **不是**泛型类表；
+   0x188 的用法（0x140001214）是「打包 (3bit kind|29bit idx) → typearr 索引 + 调用解析」，与 metadata usage 相关。
+
+### 43.2 新识别的大表家族：`{i32, i32, -1}` 12B 三元组
+
+- 位置（body 偏移）：0x122FA34（~474,887 行）、0x138CC78/0x138CC84（~156,279 行）、0x13A73C0（~166,000 行）。
+- 结构：每条 12B = `{a, b, -1}`；a/b 均为 <733,442 的整数（部分落在 typearr 索引区间但**不是**我们的 typearr 索引空间）。
+- 候选语义（未验证）：virtual/vtable 方法对（impl↔decl）、generic 方法实例参数对、接口实现对。
+- 与 Il2CppDumper dump.cs/script.json 的直接数据项关系未知；若为 vtable 对，则不属于 dump.cs 数据项，优先级低。
+
+### 43.3 其它线索
+
+- **0x118 大表**（26 站点）：0x1404B2400 反汇编显示它是 **8B 行 {packedKey, value} 的二分查找表**：
+  键 = 打包类型（`tag 0x2000000 | typeDefIndex`），查找后调用 0x140526AF0。疑似 metadata usage 映射表
+  （对 script.json 的 ScriptMetadata/Addresses 有用，待验证）。行内容 = {(0x02000000+n), (0x01000000+m)} 递增。
+- 大表空隙（与已解表互补）：0x122FA34+5.70MB、0x3633350+6.30MB、0x1F6A08C+4.39MB 等区段仍未归属；
+  其中 0x3633350/0x1F6A08C 区「packed-name 形」比例 ~25%（可能是某种索引列，变换未知）。
+
+### 43.4 下一步建议
+
+1. 用**运行时路径**定参数表：找 `GetParameters`/ParameterInfo 代码，看它怎么读 param 表（槽位+列变换），比盲扫高效；
+2. 0x118 表验证：用 Il2CppDumper 的 metadataUsage 语义对照（encodedSourceIndex 3-bit tag）；
+3. 泛型渲染：继续按「加载器区域 → 32B 泛型类表」路线（§40–41）。
