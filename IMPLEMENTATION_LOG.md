@@ -3568,3 +3568,32 @@ hdr[0x70] 解析出的 iface 表（profile iface_base=0x973064, stride 6）条�
 1. 92.71% → 目标 >97%：分析失配簇（父链/泛型/显式布局漏检）。
 2. 参数默认值接线（25,374 条已定位）。
 3. Properties/Events 槽位、stringLiterals、script.json ScriptString/Addresses/Signature。
+
+## 40. R11 第七轮：GENERICINST 渲染缺口定位（2026-10-17）
+
+> 不是需求，是执行记录。目标：补齐「泛型类型渲染」——此前未列入差距清单的大缺口。
+
+### 40.1 缺口量化
+
+- 我们 dump 中字段类型渲染为裸 `object` 的：**42,313 个**；
+- 与 6.4 oracle 共享的 89,275 字段里，oracle 泛型类型 5,017 个，我们渲染成 object 的 4,517 个
+  （≈90% 的泛型类型丢失）；
+- 影响面：字段类型、方法返回/参数、基类、接口列表。
+
+### 40.2 运行时解析路径（反汇编确认）
+
+- GENERICINST（kind 0x15）的 Il2CppType.data = **32B Il2CppGenericClass 表的索引**；
+  代码：`140525362 movzx eax,[rsi+0xa]; shl eax,0x10; cmp eax,0x150000;` 命中后：
+  `mov rax,[G+8]; rcx=data; shl rcx,5; mov rsi,[rax+rcx+8]` → class_inst（{argc@0, argv@8}）；
+  另一路径 0x140525095 同构，并读 entry+0x10（method_inst）。
+- entry 布局 = 标准 Il2CppGenericClass：+0 type*、+8 class_inst*、+0x10 method_inst*、+0x18 klass*。
+- **表基址 [G+8] 的全局 G=0x145AD5E98 在 .data BSS（运行时初始化）**：静态反查 .rdata/.data 找不到
+  32B 静态表（结构扫描 0 命中）⇒ 表由加载器在启动时从元数据构建。
+- 0x188 表（12B 行）实测内容 = {f0:0/16/-1, f1:-1/0, f2:769+行号递增} —— **不是** 泛型类表，
+  其语义仍待定（原 doc 的「泛型实例表」标注需修正）。
+
+### 40.3 结论与下一步
+
+- 泛型渲染需要：定位加载器构建 32B 泛型类表的输入表（候选：0x118 大表 8B 行、typearr 相邻区）；
+  或改从 typearr 的 GENERICINST entry + 某输入表重建。
+- 已确认 0x118 首行 {0x02000059, 0x01000000} 递增模式，符合「(打包类|索引) 双字段表」，下一轮验证。

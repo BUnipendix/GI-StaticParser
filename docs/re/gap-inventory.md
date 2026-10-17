@@ -49,6 +49,7 @@ Token 前 3 个 = 0x06000001/2/3 与 oracle 完全一致。回归 17 passed / 0 
 | 8 | stringLiterals.json | 689,799 串 | 字符串字面量表（独立于用户串堆）|
 | 9 | script.json ScriptString/Addresses/Signature | 689,799 / 239,153 | 依赖 #8 + 方法特征定位 |
 | 10 | il2cpp.h / DummyDll | 整套 | 依赖以上全部 |
+| 11 | **泛型类型渲染**（新发现，2026-10-17）| 42,313 字段 | 我们渲染裸 `object`，oracle 显示 `List<…>`/`Nullable<…>` 等。GENERICINST.data = 32B Il2CppGenericClass 表索引（entry {type*, class_inst*, method_inst*, klass*}），表基址 [G+8]，G=0x145AD5E98 为 BSS 运行时初始化 ⇒ 需追加载器构建输入表（候选 0x118 大表）；0x188 表非泛型表（实测语义待定）|
 
 ## 三、script.json 现状
 
