@@ -846,6 +846,19 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
                     Some(l) => format!(" = {}", l),
                     None => String::new(),
                 };
+                // [NonSerialized] / [CompilerGenerated]: reference dumps print these two
+                // attribute lines on fields. NonSerialized maps to the FieldAttributes
+                // NotSerialized bit (0x80) carried in the field type's attrs word;
+                // CompilerGenerated marks C# auto-property backing fields (verified 1:1 in the
+                // 6.4 reference: 8,538 attribute lines == 8,538 k__BackingField fields). The
+                // custom-attribute range table is not available, so only these derivable ones
+                // are emitted (explicitly derived, never invented).
+                if attrs & 0x80 != 0 {
+                    writeln!(w, "\t[NonSerialized]")?;
+                }
+                if fname.contains("k__BackingField") {
+                    writeln!(w, "\t[CompilerGenerated]")?;
+                }
                 writeln!(w, "\t{}{} {}{};{}", field_modifiers(attrs), tn, fname, value, tail)?;
                 match offset {
                     Some(_) => computed_offsets += 1,

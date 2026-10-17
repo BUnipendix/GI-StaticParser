@@ -4152,3 +4152,36 @@ attribute ranges（成员 → `{start,count}`）表未定位：
 ### 55.4 验证
 
 回归 17 passed / 0 failed（本轮无代码改动）。
+
+## 56. R11 第二十三轮：特性行（可推导子集）实现（2026-10-17）
+
+> 不是需求，是执行记录。
+
+### 56.1 规则来源（对 oracle 实测反推，非猜测）
+
+6.4 oracle 共 11,525 条 `\t[...]` 行，**只有 5 种**：CompilerGenerated 8,538 / DllImport 1,296 /
+FixedAddressValueType 893 / NonSerialized 750 / MarshalAs 48。逐条核对放置对象：
+
+| 特性 | 实测规则 | 证据 |
+|---|---|---|
+| `[CompilerGenerated]` | 出现在**每个** `k__BackingField` 字段前、且仅在此类字段前 | 8,538 行 == 8,538 个 `k__BackingField` 字段，严格 1:1（脚本验证 0 例外）|
+| `[NonSerialized]` | 字段前；对应 FieldAttributes.NotSerialized (0x80) | 该 attrs 由字段类型的 Il2CppType.attrs 提供（既有 const/static/readonly 修饰符同源，字段修饰符一致率 99.91%）|
+| `[DllImport]` | 方法前，全部为 extern（PInvokeImpl 0x2000）| oracle 中 0 条例外；本轮**未实现**（见 56.3）|
+| `[FixedAddressValueType]` | `__StaticArrayInitTypeSize=N` 静态 readonly 字段前，但**不是全部**（893/1,088）| 无法用命名规则精确区分，未实现 |
+| `[MarshalAs]` | 少量特定位（48 条）| 需字段 marshal 信息，未实现 |
+
+### 56.2 实现
+
+- 字段 attrs bit7 → 输出 `\t[NonSerialized]`；
+- 字段名含 `k__BackingField` → 输出 `\t[CompilerGenerated]`；
+- 7.1 实测：CompilerGenerated **9,980** 条、NonSerialized **829** 条（vs 6.4 oracle 8,538/750，量级吻合，差异为版本增长）。
+
+### 56.3 属性行一致率（vs 6.4 oracle，共享类型 20,189）
+
+- 共享类型内 oracle 字段特性对 2,650，我们命中 **2,006（75.70%）**；
+- 其余 oracle-only = 字段被跨版本改名/删除（469 CompilerGenerated）或需属性表（FixedAddressValueType 100、MarshalAs 45、NonSerialized 30）。
+- `[DllImport]` 未实现：我们的 extern（PInvokeImpl）方法数 19,486 ≫ oracle 1,296（GI 7.1 的 Mono 包装方法 `__Gen_Wrap_*` 也带该 flag）；直接按 flag 输出会过度生成，需先判明 GI 中 0x2000 的真实语义。
+
+### 56.4 验证
+
+回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法。
