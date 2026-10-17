@@ -23,16 +23,24 @@ pub fn gen71() -> Profile {
         str_hdr_off: 0x150,
         str_sub: 0x37AB_D22E,
 
-        type_defs: TableBase { hdr_off: 0xDC, sub: None, xor: Some(0x5278_CA3B) },
-        method_defs: TableBase { hdr_off: 0x1E0, sub: None, xor: Some(0x2EE4_80FB) },
-        fields: TableBase { hdr_off: 0x158, sub: Some(0x1D54_5CCC), xor: None },
-        params: TableBase { hdr_off: 0x1D0, sub: None, xor: Some(0x07D0_BBF9) },
+        type_defs: TableBase { hdr_off: 0xDC, sub: None, xor: Some(0x5278_CA3B), add: None },
+        // typeDef-table BYTE SIZE (hdr[0x60] ^ 0x15335474 = 6,223,280); rows = /0x46 = 88,904.
+        // The structural chain walk stops early (88,872); the last two rows are padding.
+        td_size: Some(TableBase { hdr_off: 0x60, sub: None, xor: Some(0x1533_5474), add: None }),
+        method_defs: TableBase { hdr_off: 0x1E0, sub: None, xor: Some(0x2EE4_80FB), add: None },
+        // Method-table BYTE SIZE (hdr[0x134] + 0x8EEFDB56 -> 19,070,516); rows = size/0x1A =
+        // 733,481, verified against the data (last valid row 733,480). The method-pointer
+        // array only covers 460,282 methods that have direct code pointers, so it cannot
+        // be used as the row count (that truncation silently dropped 273,199 methods).
+        md_size: Some(TableBase { hdr_off: 0x134, sub: None, xor: None, add: Some(0x8EEF_DB56) }),
+        fields: TableBase { hdr_off: 0x158, sub: Some(0x1D54_5CCC), xor: None, add: None },
+        params: TableBase { hdr_off: 0x1D0, sub: None, xor: Some(0x07D0_BBF9), add: None },
         // MEASURED WRONG, and currently dead: `derive::anchor` recovers the real code as
         // `mov edx,[r13+0x200] ; mov eax,0xB43E0EB1 ; add edx,eax` (=> body + 0xA03E64),
         // whereas this `sub` resolves to 0x9824_2102, outside the body. `Meta::slot_base`
         // has no reader, so nothing consumes it today; left as-is on purpose (changing a
         // shared constant is a behaviour change, not a fix). See IMPLEMENTATION_LOG §12.
-        slot_table: TableBase { hdr_off: 0x200, sub: Some(0xB43E_0EB1), xor: None },
+        slot_table: TableBase { hdr_off: 0x200, sub: Some(0xB43E_0EB1), xor: None, add: None },
 
         td_stride: 0x46,
         td_magic: -0x2145_AFB7,
@@ -56,7 +64,7 @@ pub fn gen71() -> Profile {
 
         // Full field table (all images): stride 8 {name_raw@0, type_raw@4}; per-row mask
         // with a 64-bit add (add1 > 2^32) and a pre-truncation shift. 440172 rows.
-        field_names: TableBase { hdr_off: 0x4C, sub: Some(0xE5D2_49BFu32.wrapping_neg()), xor: None },
+        field_names: TableBase { hdr_off: 0x4C, sub: Some(0xE5D2_49BFu32.wrapping_neg()), xor: None, add: None },
         field_stride: 8,
         field_mask: FieldMaskChain {
             mul1: 0x23CF,
@@ -78,7 +86,7 @@ pub fn gen71() -> Profile {
         // Interface-offsets table hdr[0x70] - 0x6EA5B3FD, stride 6 {typeIdx i32, off i16};
         // per-type start = u16@0x3A ^ 0x4BCE (0xFFFF = none); count = next distinct start
         // (offsets list includes interfaces inherited from bases).
-        iface_table: TableBase { hdr_off: 0x70, sub: Some(0x6EA5_B3FD), xor: None },
+        iface_table: TableBase { hdr_off: 0x70, sub: Some(0x6EA5_B3FD), xor: None, add: None },
         iface_stride: 6,
         td_iface_start_off: 0x3A,
         td_iface_start_xor: 0x4BCE,

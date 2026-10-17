@@ -41,8 +41,9 @@ pub struct Md {
 
 pub fn collect<'a>(m: &'a Meta) -> (Vec<Td>, Vec<Md>) {
     let p = &m.profile;
-    // chain-walk count: real slots tile the field rows exactly; padding ends the table
-    let (n_td, _n_field_rows) = m.td_walk();
+    // row count: the typeDef size slot is authoritative (the tiling walk undercounts),
+    // same rule as the method table below.
+    let n_td = m.td_count();
     let n_md = m.md_count();
     let mut tds = Vec::with_capacity(n_td);
     for i in 0..n_td {
@@ -339,9 +340,9 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
     let mut unresolved_props = 0usize;
 
     for (i, td) in tds.iter().enumerate() {
-        if td.name.is_empty() {
-            continue;
-        }
+        // Reference dumps emit nameless typeDefs as empty names (`class  : Object`) rather
+        // than dropping them, so no name-based skip here: the row count already excludes
+        // the all-sentinel padding tail.
         ntypes += 1;
         writeln!(w, "\n// Namespace: {}", td.namespace)?;
         // kind + extends clause; interface count = next distinct iface start (offsets

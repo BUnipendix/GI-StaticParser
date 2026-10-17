@@ -37,7 +37,9 @@ mhydump dump --exe <main-module> --metadata <global-metadata.dat> --out dump.cs
 | `header-dump --exe <m> --metadata <d>` | Load metadata, print resolved table offsets |
 | `dump --exe <m> --metadata <d> [--only 28,42,...] [--out dump.cs]` | Emit `dump.cs` |
 
-A full dump produces ~82k types / ~405k fields / ~672k methods (80 MB+) in ~1 s.
+A full dump produces 88,902 types / 440,172 fields / 733,442 methods (~112 MB) in a few seconds
+on the 7.1.0 sample. Row counts come from the table-size header slots, not from the structural
+chain walk or the code-pointer array (both undercount; see `docs/re/gap-inventory.md` §0).
 
 ## Layout
 

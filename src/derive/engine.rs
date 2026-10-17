@@ -21,6 +21,11 @@ pub struct Meta<'a> {
     pub strsec: usize,
     pub td_base: usize,
     pub md_base: usize,
+    /// Real method-row count (from the method-table size slot when the profile has one;
+    /// falls back to the code-pointer array length, which is only a lower bound).
+    pub md_rows: usize,
+    /// typeDef-row count from the table-size slot (padding trimmed in `td_count`).
+    pub td_rows: usize,
     pub fd_base: usize,
     pub param_base: usize,
     pub slot_base: usize,
@@ -55,10 +60,28 @@ impl<'a> Meta<'a> {
             locate_methodptrs(exe, image_base).ok_or_else(|| anyhow!("method pointers not located"))?;
 
         let schedule = profile.schedule();
+        // Method-row count: the table-size slot is authoritative. The code-pointer array
+        // length is only a lower bound (7.1.0: 460,282 vs 733,481 real rows) because
+        // generic/shared methods have no direct pointer.
+        let md_stride = profile.md_stride.max(1) as usize;
+        let body_cap = (body.size().saturating_sub(profile.method_defs.resolve(&header_bytes))) / md_stride;
+        let md_rows = match &profile.md_size {
+            Some(t) => (t.resolve(&header_bytes) / md_stride).min(body_cap),
+            None => methodptrs_len.min(body_cap),
+        };
+        // typeDef-row count: same rule; the chain walk undercounts (7.1.0: 88,872 vs 88,904).
+        let td_stride = profile.td_stride.max(1) as usize;
+        let td_cap = body.size().saturating_sub(profile.type_defs.resolve(&header_bytes)) / td_stride;
+        let td_rows = match &profile.td_size {
+            Some(t) => (t.resolve(&header_bytes) / td_stride).min(td_cap),
+            None => 0, // 0 = fall back to the chain walk in td_count()
+        };
         Ok(Self {
             schedule,
             td_base: profile.type_defs.resolve(&header_bytes),
             md_base: profile.method_defs.resolve(&header_bytes),
+            md_rows,
+            td_rows,
             fd_base: profile.fields.resolve(&header_bytes),
             param_base: profile.params.resolve(&header_bytes),
             slot_base: profile.slot_table.resolve(&header_bytes),
@@ -115,11 +138,33 @@ impl<'a> Meta<'a> {
     }
 
     pub fn md_count(&self) -> usize {
-        (self.body.size().saturating_sub(self.md_base) / self.profile.md_stride as usize)
-            .min(self.methodptrs_len)
+        self.md_rows
     }
 
     pub fn td_count(&self) -> usize {
+        if self.td_rows > 0 {
+            // Size-slot count; trim trailing all-sentinel padding rows (no name, no
+            // methods, no fields).
+            let p = &self.profile;
+            let stride = p.td_stride as usize;
+            let mut n = self.td_rows.min((self.body.size().saturating_sub(self.td_base)) / stride);
+            while n > 0 {
+                let rec = self.td_base + (n - 1) * stride;
+                let raw_name = self.body.read_u32(rec + p.td_name.offset as usize);
+                let name_empty = raw_name == p.td_name_sentinel
+                    || self.decode_str(raw_name.wrapping_add(p.td_name.c)).is_empty();
+                let ms = self.body.read_u32(rec + p.td_method_start.offset as usize)
+                    ^ p.td_method_start.c;
+                let fs_raw = self.body.read_u32(rec + p.td_field_start.offset as usize);
+                if name_empty && ms == u32::MAX && fs_raw == p.td_fs_sentinel_raw {
+                    n -= 1;
+                } else {
+                    break;
+                }
+            }
+            return n;
+        }
+        // Fallback (profiles without a typeDef size slot): magic-column walk.
         let stride = self.profile.td_stride as usize;
         let mut n = 0usize;
         let mut run_bad = 0usize;

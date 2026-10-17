@@ -67,11 +67,14 @@ impl MaskChain {
 pub struct TableBase {
     /// Header field offset (into the embedded MHY header).
     pub hdr_off: u32,
-    /// Transform: `plain = i32(hdr[hdr_off]) - sub` or `plain = u32(hdr[hdr_off]) ^ xor`.
+    /// Transform: `plain = i32(hdr[hdr_off]) - sub` or `plain = u32(hdr[hdr_off]) ^ xor`
+    /// or `plain = u32(hdr[hdr_off]) + add`.
     #[serde(default)]
     pub sub: Option<u32>,
     #[serde(default)]
     pub xor: Option<u32>,
+    #[serde(default)]
+    pub add: Option<u32>,
 }
 
 impl TableBase {
@@ -80,9 +83,10 @@ impl TableBase {
         let raw = u32::from_le_bytes(
             hdr[self.hdr_off as usize..self.hdr_off as usize + 4].try_into().unwrap(),
         );
-        match (self.sub, self.xor) {
-            (Some(s), _) => (raw.wrapping_sub(s)) as usize,
-            (_, Some(x)) => (raw ^ x) as usize,
+        match (self.sub, self.xor, self.add) {
+            (Some(s), _, _) => (raw.wrapping_sub(s)) as usize,
+            (_, Some(x), _) => (raw ^ x) as usize,
+            (_, _, Some(a)) => (raw.wrapping_add(a)) as usize,
             _ => raw as usize,
         }
     }
@@ -175,7 +179,19 @@ pub struct Profile {
     pub str_sub: u32,
 
     pub type_defs: TableBase,
+    /// typeDef-table BYTE SIZE (not an offset): `rows = size / td_stride`. The structural
+    /// chain walk stops at the first tiling irregularity and undercounts (7.1.0: 88,872 vs
+    /// 88,904 rows); the size slot is authoritative. Trailing all-sentinel padding rows are
+    /// trimmed after the division. 7.1.0: header slot 0x60 ^ 0x15335474 = 6,223,280.
+    #[serde(default)]
+    pub td_size: Option<TableBase>,
     pub method_defs: TableBase,
+    /// Method-table BYTE SIZE (not an offset): `rows = size / md_stride`. Needed because the
+    /// method-pointer array covers only the methods that have a direct code pointer
+    /// (7.1.0: 460,282 of 733,481 rows), so it is not a valid row-count source.
+    /// 7.1.0: header slot 0x134 + 0x8EEFDB56 = 19,070,516 -> 733,481 rows.
+    #[serde(default)]
+    pub md_size: Option<TableBase>,
     pub fields: TableBase,
     pub params: TableBase,
     pub slot_table: TableBase,
