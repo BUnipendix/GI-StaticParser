@@ -378,6 +378,64 @@ impl<'a> Meta<'a> {
         }
     }
 
+    /// Attribute-instance type (typearr index) for instance `i`, when the profile has the
+    /// attribute table (7.1.0: body 0x9BACA4, 74,864 plaintext entries).
+    pub fn attribute_type_idx(&self, i: u32) -> Option<u32> {
+        let off = self.profile.attribute_types_off?;
+        let count = self.profile.attribute_count?;
+        if i >= count {
+            return None;
+        }
+        let at = off as usize + 4 * i as usize;
+        let b = self.body.read_slice(at, 4)?;
+        Some(u32::from_le_bytes(b.try_into().ok()?))
+    }
+
+    pub fn attribute_instance_count(&self) -> u32 {
+        self.profile.attribute_count.unwrap_or(0)
+    }
+
+    /// `instance -> member token` map for the custom-attribute pair table.
+    ///
+    /// 7.1.0 stores it as 8-byte rows `{member token, tag + instance}` spread over several
+    /// sorted chunks of the body (not one contiguous array), so the whole body is scanned:
+    /// any 8-byte row whose second word is `tag + i` for `i < attribute_count` contributes
+    /// the mapping. First occurrence wins; rows with a zero/invalid token are ignored by the
+    /// caller (the token space is validated there against table sizes).
+    pub fn attribute_instance_tokens(&self) -> Vec<(u32, u32)> {
+        let (Some(tag), Some(count)) = (
+            self.profile.attribute_instance_tag,
+            self.profile.attribute_count,
+        ) else {
+            return Vec::new();
+        };
+        let mut out: Vec<Option<u32>> = vec![None; count as usize];
+        let bytes = self.body.size();
+        let mut at = 0usize;
+        // Scan u64-aligned windows: read (a,b) at +0 and (b,c) at +4 is unnecessary — the pair
+        // table rows are 8-byte aligned in every chunk, so step by 4 and read both words.
+        while at + 8 <= bytes {
+            let (Some(a), Some(b)) = (
+                self.body.read_u32_opt(at),
+                self.body.read_u32_opt(at + 4),
+            ) else {
+                break;
+            };
+            let va = b.wrapping_sub(tag);
+            if va < count {
+                let slot = &mut out[va as usize];
+                if slot.is_none() {
+                    *slot = Some(a);
+                }
+            }
+            at += 4;
+        }
+        out.into_iter()
+            .enumerate()
+            .filter_map(|(i, t)| t.map(|t| (i as u32, t)))
+            .collect()
+    }
+
     /// Per-row field-table mask.
     #[inline]
     pub fn field_mask(&self, i: u32) -> u32 {

@@ -316,6 +316,17 @@ pub struct Profile {
     /// The table lives in the sibling **`startup-metadata.dat`** (loaded at the same time as
     /// global-metadata), not in the metadata body; the offset is `hdr[slot] op imm`.
     /// 7.1.0: slot 0x120 ^ 0x1C3F68EA (loader 0x1405365C5).
+    /// Custom-attribute data (7.1.0): body offset of the attribute-instance array (one u32
+    /// typearr index per attribute instance) and its length. Verified 2026-10-17:
+    /// 74,864 instances at body 0x9BACA4, every entry a valid Il2CppType index.
+    #[serde(default)]
+    pub attribute_types_off: Option<u32>,
+    #[serde(default)]
+    pub attribute_count: Option<u32>,
+    /// Tag added to the attribute-instance index in the `{member token, tag+instance}` pair
+    /// table that maps each instance to its member (7.1.0: 0x01000000).
+    #[serde(default)]
+    pub attribute_instance_tag: Option<u32>,
     /// `startup-metadata` images table (7.1.0: 75 records, 40-byte rows, name at +0x18).
     /// header slot 0x84 ^ 0x582F3633; per-row name mask: ((i * 0xBD1E70EB664) >> 16)
     /// + 0x724F4CCB then ^ 0x2BE02F3D; packed = (raw ^ 0x5E8998A9) - mask.

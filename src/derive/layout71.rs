@@ -60,6 +60,9 @@ pub fn gen71() -> Profile {
         // Generic-class rows live in startup-metadata.dat (loader 0x1405365BE..0x140536660):
         //   base = startup + (i32(hdr[0x120]) ^ 0x1C3F68EA); rows = {defTdi u32, genericInstIndex i32}
         // GenericInst structs: registration+0x28 -> 16B {argc, pad, Il2CppType** argv}.
+        attribute_types_off: Some(0x9B_ACA4),
+        attribute_count: Some(74_864),
+        attribute_instance_tag: Some(0x0100_0000),
         startup_images: Some(crate::derive::profile::StartupNameTable {
             table: TableBase { hdr_off: 0x84, sub: None, xor: Some(0x582F_3633), add: None },
             stride: 0x28,

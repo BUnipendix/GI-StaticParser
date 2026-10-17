@@ -4431,3 +4431,52 @@ Assembly-CSharp.dll↔Assembly-CSharp）。`--images-out` 现在同时输出 `As
 ### 64.3 验证
 
 `cargo test --release` 17 passed；`--images-out` 输出 75 Images / 75 Assemblies / 75 AssemblyImages，首尾与 Python 独立解码一致。
+
+## 66. R11 第三十二轮：custom-attribute 渲染实现（2026-10-17）
+
+> 不是需求，是执行记录。
+
+### 66.1 实现（profile 驱动）
+
+- `Profile::attribute_types_off` (7.1: body **0x9BACA4**) / `attribute_count` (**74,864**) / `attribute_instance_tag` (**0x01000000**)；
+- `Meta::attribute_type_idx(i)`、`Meta::attribute_instance_tokens()`（全 body 扫 8B 行 `{token, tag+i}`，first-wins）；
+- `dump_gen` 构建 `token → [属性类短名]`：
+  1. token 种类校验（0x02/0x04/0x06/0x08 且索引在表界内）；
+  2. `attributeTypes[i]` → typearr → 必须 `kind=0x12` → typeDef（属性类）；
+  3. **仅当属性类存在无参 `.ctor`** 时渲染 `[Class]`（这正是 C# 允许 `[Attr]` 简写的条件；含参属性需要参数 blob，尚未解出 ⇒ 明确跳过并计数）；
+  4. 类名按 C# 习惯去掉 `Attribute` 后缀。
+- 输出位置：typeDef 头（列 0）、字段（`\t[Class]`）、构造器、方法；属性/参数上的属性无 dump 语法位置，计入 skipped。
+
+### 66.2 实测（7.1）
+
+```
+[warn] custom attributes: 47976 rendered as [Class] ..., 22146 skipped because their constructor
+       takes arguments ..., 2113 skipped (parameter attribute / unknown token kind),
+       2629 attribute instances have no member row
+```
+47,976+22,146+2,113+2,629 = **74,864** ✓（与 attributeTypes 长度完全对上）。
+
+| 渲染出的属性 | 行数 |
+|---|---|
+| `[SerializeField]` | 44,191 |
+| `[CompilerGenerated]`（标志位启发式）| 9,980 |
+| `[Preserve]` | 2,032 |
+| `[DllImport]`（标志位）| 1,351 |
+| `[FixedAddressValueType]`（标志位）| 934 |
+| `[NonSerialized]`（标志位）| 829 |
+| 混淆名 `[BOOJLDIOCFM]` | 345 |
+| `[ShowInInspector]` | 326 |
+| `[RequiredByNativeCode]` | 118 |
+| `[ThreadStatic]` | 73 |
+
+属性行总计 **61,070**（上轮 13,094），其中 47,976 条来自真实属性表。
+放置核对：字段 56,256、方法 3,849、类型 767，其余为连续属性行（198）。
+
+### 66.3 负结果：属性参数 blob 未定位
+
+attributeTypes 数组之后（0xA03E64）是 769 个小整数（0..176），随后即 `0xFFFFFFFF/0x27/0x8D…` 数据，非 74,864 项参数表；
+0xA03E64–0xC00000 区间无明文可打印串（字符串参数会以加密串堆索引出现）。属性参数仍需另行定位。
+
+### 66.4 验证
+
+`cargo test --release` 17 passed；dump 88,902 类型 / 440,172 字段 / 733,442 方法；dump 耗时 ~7 s。

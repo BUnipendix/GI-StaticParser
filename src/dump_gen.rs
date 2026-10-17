@@ -689,6 +689,34 @@ fn default_literal(m: &Meta, tix: u32, dataoff: i32, unsigned: bool) -> Result<S
 }
 
 /// Full dump: write `dump.cs` (Il2CppDumper style) and `script.json`.
+/// Write `[Class]` lines for the custom attributes attached to `token` (member token space).
+fn write_member_attrs<W: Write>(
+    w: &mut W,
+    attrs: &std::collections::HashMap<u32, Vec<String>>,
+    token: u32,
+) -> std::io::Result<()> {
+    if let Some(list) = attrs.get(&token) {
+        for a in list {
+            writeln!(w, "\t[{}]", a)?;
+        }
+    }
+    Ok(())
+}
+
+/// Write `[Class]` lines for a type declaration (no leading tab, C# top-level form).
+fn write_type_attrs<W: Write>(
+    w: &mut W,
+    attrs: &std::collections::HashMap<u32, Vec<String>>,
+    token: u32,
+) -> std::io::Result<()> {
+    if let Some(list) = attrs.get(&token) {
+        for a in list {
+            writeln!(w, "[{}]", a)?;
+        }
+    }
+    Ok(())
+}
+
 pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(usize, usize, usize)> {
     let (tds, mds) = collect(m);
     // group methods by declaring type (method_start order), hidden rows keep slots
@@ -717,6 +745,69 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
         }
     }
 
+
+    // ---- Custom attributes (7.1.0 data layer, docs/re/attr-decoding.md) ----
+    // The pair table maps every attribute instance to its member token. Only attributes whose
+    // class has a parameterless constructor can be written as the C# shorthand `[Name]`; the
+    // rest need constructor arguments (the attribute argument blob is not recovered yet) and
+    // are skipped with an explicit count — no arguments are invented.
+    let mut attr_by_token: std::collections::HashMap<u32, Vec<String>> = std::collections::HashMap::new();
+    let mut attrs_rendered = 0usize;
+    let mut attrs_arg_required = 0usize;
+    let mut attrs_unsupported = 0usize;
+    let mut attrs_unmapped = 0usize;
+    {
+        let count = m.attribute_instance_count() as usize;
+        let pairs = m.attribute_instance_tokens();
+        attrs_unmapped = count.saturating_sub(pairs.len());
+        let mut ctor0_cache: std::collections::HashMap<u32, bool> = std::collections::HashMap::new();
+        for (inst, token) in pairs {
+            let (kind, idx) = (token >> 24, token & 0x00FF_FFFF);
+            let member_ok = match kind {
+                0x02 => idx >= 1 && (idx as usize) <= tds.len(),
+                0x04 => idx >= 1,
+                0x06 => idx >= 1 && (idx as usize) <= mds.len(),
+                0x08 => idx >= 1, // parameter attribute: not rendered (no place in the dump grammar)
+                _ => false,
+            };
+            if !member_ok || kind == 0x08 {
+                attrs_unsupported += 1;
+                continue;
+            }
+            let Some(ti) = m.attribute_type_idx(inst) else { continue };
+            let Some((ak, adata, _)) = m.il2cpp_type(ti as usize) else { continue };
+            if ak != 0x12 {
+                attrs_unsupported += 1;
+                continue;
+            }
+            let tdi = adata as usize;
+            let Some(td) = tds.get(tdi) else {
+                attrs_unsupported += 1;
+                continue;
+            };
+            let ctor0 = *ctor0_cache.entry(adata).or_insert_with(|| {
+                per_type
+                    .get(tdi)
+                    .map(|ms| {
+                        ms.iter().any(|&g| mds[g].name == ".ctor" && mds[g].param_count == 0)
+                    })
+                    .unwrap_or(false)
+            });
+            if !ctor0 {
+                attrs_arg_required += 1;
+                continue;
+            }
+            let mut name = td.name.clone();
+            if let Some(stripped) = name.strip_suffix("Attribute") {
+                name = stripped.to_string();
+            }
+            if name.is_empty() {
+                continue;
+            }
+            attr_by_token.entry(token).or_default().push(name);
+            attrs_rendered += 1;
+        }
+    }
     let mut ntypes = 0usize;
     let mut nfields = 0usize;
     let mut nmethods = 0usize;
@@ -771,6 +862,7 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
         // the all-sentinel padding tail.
         ntypes += 1;
         writeln!(w, "\n// Namespace: {}", td.namespace)?;
+        write_type_attrs(w, &attr_by_token, 0x0200_0001u32.wrapping_add(i as u32))?;
         // kind + extends clause (Il2CppDumper rules: value types/enums/interfaces print no
         // base; base is unqualified; interfaces are qualified; every list is ` : a, b, c`).
         let kind = type_kind(m, &tds, td);
@@ -938,6 +1030,7 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
                 // 6.4 reference: 8,538 attribute lines == 8,538 k__BackingField fields). The
                 // custom-attribute range table is not available, so only these derivable ones
                 // are emitted (explicitly derived, never invented).
+                write_member_attrs(w, &attr_by_token, 0x0400_0001u32.wrapping_add(row))?;
                 if attrs & 0x80 != 0 {
                     writeln!(w, "\t[NonSerialized]")?;
                 }
@@ -1084,6 +1177,7 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
             // 0x06000001, constructors included (verified against the 6.4 reference dump).
             // [DllImport]: reference dumps put this line before every P/Invoke method
             // (MethodAttributes.PinvokeImpl, 0x2000) and nowhere else — verified 0 exceptions.
+            write_member_attrs(w, &attr_by_token, 0x0600_0001u32.wrapping_add(gmi as u32))?;
             if md.flags & 0x2000 != 0 {
                 writeln!(w, "\t[DllImport]")?;
             }
@@ -1116,6 +1210,7 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
             unresolved_params += n_unresolved;
             // [DllImport]: reference dumps put this line before every P/Invoke method
             // (MethodAttributes.PinvokeImpl, 0x2000) and nowhere else — verified 0 exceptions.
+            write_member_attrs(w, &attr_by_token, 0x0600_0001u32.wrapping_add(gmi as u32))?;
             if md.flags & 0x2000 != 0 {
                 writeln!(w, "\t[DllImport]")?;
             }
@@ -1165,6 +1260,11 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
         eprintln!(
             "[warn] properties: {synthesized_props} entries SYNTHESIZED from get_/set_ accessor methods across {props_synth_types} types (the property metadata table is not located; accessor visibility maps to the {{{{ get; private set; }}}} form, property attributes are not available)"
         );
+    if attrs_rendered + attrs_arg_required + attrs_unsupported > 0 {
+        eprintln!(
+            "[warn] custom attributes: {attrs_rendered} rendered as [Class] (classes with a parameterless ctor), {attrs_arg_required} skipped because their constructor takes arguments (the attribute argument blob is not recovered), {attrs_unsupported} skipped (parameter attribute / unknown token kind), {attrs_unmapped} attribute instances have no member row"
+        );
+    }
     }
     if unresolved_iface_generic > 0 {
         eprintln!(
