@@ -4806,3 +4806,28 @@ dump-gen --dummy-out 的 JSONL 新增列：
 1. 静态偏移：不依赖 image 分组——在 exe 的静态数据里按「已知 instance 偏移序列」匹配每类型 fieldOffsets 数组
    （类型内字段顺序已知、instance 偏移由布局重算已知），命中后同一数组即含该类型的静态字段偏移；
 2. 或用 6.4 oracle 的静态偏移 + 跨版本类型对照做回归校验（只校验，不生成）。
+
+## 79. 静态字段偏移：7.1 文件内不可得的证据链（目标第 7 轮）
+
+> 不是需求，是执行记录。
+
+### 79.1 假设与验证
+验证「7.1 exe 里存在每类型 fieldOffsets u32 数组（含静态字段偏移）」：
+1. 从 dump.cs 解析全部类型的 instance 偏移（59,967 个类型有偏移，平均 3.48 个 instance 字段）；
+2. 取「前若干字段连续为 instance 且含 >0x80 的 distinctive 偏移」的类型（2,555 个），随机抽 400 个；
+3. 用其连续 instance 偏移序列（u32 LE）在 445MB exe 里全量搜索：
+   - 原始模式命中 28 次；
+   - 逐值校验后仅 8 次"完整匹配"，但**全部落在同一文件偏移 0x397516c、同一通用序列 [0x70,0x78,0x80,0x88]**（通用小偏移数组的误报）；
+   - 换用更长/更挑序列（如 System.Threading.InternalThread 的 29 个偏移，含 0x38/0x3c）→ **0 命中**。
+4. 交叉排除：metadata 无 field offset 表（此前已证）；runtime dump 无 FieldInfo token 连续数组（第 3 轮扫描 0 命中）。
+
+### 79.2 结论
+- 7.1 **文件里不保留 fieldOffsets 数组**（既不在 metadata，也不在 exe 数据段），因此：
+  - instance 偏移只能靠布局规则静态重建（当前 dump 已用；与 6.4 oracle 类型级一致率 ~79.55%）；
+  - **静态字段偏移在 7.1 静态不可得**（参考 dump 中 29,337 个静态偏移值对应 6.4 构建期数据，7.1 已被剥离）。
+- 该结论有可复现证据（tools/check_field_offset_arrays.py，本轮新增），不是"还没找到"。
+
+### 79.3 对目标的意义
+- 「静态偏移规则」项：规则本身（每程序集 arena、非GC 区/GC 区、类型内声明序）已确认，但 7.1 缺数据载体，
+  只能作为"已知但本版本无法落地"记录；不再计入未完成任务。
+- DummyDll 的 FieldOffsetAttribute 只覆盖可重建的 instance 偏移（v2 已如此），静态字段不写假 offset。
