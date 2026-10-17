@@ -28,6 +28,11 @@ Rust (edition 2021); dependencies are pinned in `Cargo.lock`.
 mhydump dump --exe <main-module> --metadata <global-metadata.dat> --out dump.cs
 ```
 
+`dump-gen` additionally auto-loads the sibling **`startup-metadata.dat`** (same directory as
+`global-metadata.dat`) — it holds the generic-class rows, so `GENERICINST` types render as
+`System.Collections.Generic.List<System.String>` instead of `System.Object`. Without that file the
+tool warns and falls back (nothing is silently faked).
+
 | Command | Purpose |
 |---|---|
 | `derive --exe <m> --metadata <d> [--out art.json]` | **分析提取模块（R10）**：一次性导出全部可机推数据（字符串密码/表槽锚点/表基址+stride）为 JSON 工件，含 mscorlib 自检 |
