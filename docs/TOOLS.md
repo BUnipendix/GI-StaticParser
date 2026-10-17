@@ -30,7 +30,7 @@
 
 | 命令 | 用途 | 状态 |
 |---|---|---|
-| `derive --exe --metadata [--out art.json]` | **R10 分析提取模块**：一次性导出字符串密码+表槽锚点+表基址（含 stride）为 JSON 工件；内置 mscorlib 自检，失败拒绝导出 | 6.7.0/7.1.0 实测 ✓（7.1 typeDef 槽 0xDC ^0x5278CA3B 与已知一致） |
+| `derive --exe --metadata [--out art.json]` | **R10 分析提取模块**：一次性导出字符串密码+表槽锚点+表基址（含 stride）为 JSON 工件；内置 mscorlib 自检，失败拒绝导出 | 26 版实测：**20 版成功**（4.8.0–7.1.0），6 版失败（4.2.0–4.7.0 另一纪元）；6.x/7.1 常数与历史逐位一致（version-matrix §7） |
 | `cipher --exe --metadata [--json]` | 无常数推导字符串密码（3/5 常数世代）+ strsec | 26 版验证；6.7.0 实测 ✓ |
 | `anchors --exe --metadata [--json] [--site VA]` | 恢复头槽锚点 + 已解析表基址（含 stride） | 6.7.0 实测：354 锚点，typeDef 表直接给出 |
 | `strings --exe --metadata [--out] [--head]` | 解密整个字符串堆并枚举 | ✓ |
