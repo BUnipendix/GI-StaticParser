@@ -4480,3 +4480,30 @@ attributeTypes 数组之后（0xA03E64）是 769 个小整数（0..176），随�
 ### 66.4 验证
 
 `cargo test --release` 17 passed；dump 88,902 类型 / 440,172 字段 / 733,442 方法；dump 耗时 ~7 s。
+
+## 67. R11 第三十三轮：attributes.json 工件（2026-10-17）
+
+> 不是需求，是执行记录。
+
+### 67.1 新工件
+
+`dump-gen --attributes-out <path>`：把**全部**属性实例导出为 JSON，包括无法在 dump.cs 里写成 `[Name]` 的含参属性：
+
+```json
+{"AttributeCount": 74864, "Recovered": 70693, "Attributes": [
+  {"Instance": 6, "MemberToken": 33554571, "Member": "TypeDef: System.LocalDataStore", "Attribute": "ComVisible"},
+  {"Instance": 743, "MemberToken": 100670846, "Member": "Method: System.Threading.OSSpecificSynchronizationContext::Post", "Attribute": "MonoPInvokeCallback"}
+]}
+```
+
+成员身份解析：`TypeDef: 全限定名` / `Field: 类型::字段名` / `Method: 类型::方法名` / `Parameter: 参数名` / `Property: #索引`（属性表未解）。
+7.1 实测：`AttributeCount` 74,864、`Recovered` **70,693**（9.6 MB）。
+
+### 67.2 修复一处接线错误
+
+上轮把 `attributes_out` 块误插进 `images_out` 块内部（且复用了同名 `p`），导致 `--attributes-out` 从不执行、`--images-out` 还会把 image JSON 写到属性路径。已移出并回归：`--images-out` 75 images/75 assemblies、`--attributes-out` 70,693 条，二者同时指定互不影响。
+
+### 67.3 验证
+
+`cargo test --release` 17 passed；完整 dump 88,902 类型 / 440,172 字段 / 733,442 方法（6.9 s）；
+产物写入 `~/gire/out/71/`（dump.cs 120 MB、script.json 77 MB、attributes.json 9.6 MB）——**不再写 /tmp**（ramdisk，曾写满导致工具链不可用）。

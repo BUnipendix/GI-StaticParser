@@ -144,6 +144,9 @@ enum Cmd {
         /// Write the recovered image / assembly name tables (from startup-metadata) as JSON.
         #[arg(long)]
         images_out: Option<String>,
+        /// Write every recovered custom-attribute instance (class + member identity) as JSON.
+        #[arg(long)]
+        attributes_out: Option<String>,
     },
     /// Milestones (e)/(f): emit dump.cs. With --only, restrict to given TypeDefIndices.
     Dump {
@@ -186,7 +189,7 @@ fn main() -> Result<()> {
         Cmd::TypesDump { exe, metadata, out } => types_dump(&exe, &metadata, &out),
         Cmd::Derive { exe, metadata, out } => derive_cmd(&exe, &metadata, out.as_deref()),
         Cmd::Il2CppFns { exe } => il2cpp_fns(&exe),
-        Cmd::DumpGen { exe, metadata, out, profile_in, profile_out, no_cipher_check, images_out } =>
+        Cmd::DumpGen { exe, metadata, out, profile_in, profile_out, no_cipher_check, images_out, attributes_out } =>
             dump_gen_cmd(
                 &exe,
                 &metadata,
@@ -195,6 +198,7 @@ fn main() -> Result<()> {
                 profile_out.as_deref(),
                 no_cipher_check,
                 images_out.as_deref(),
+                attributes_out.as_deref(),
             ),
         Cmd::Dump { exe, metadata, out, only } => dump_cmd(&exe, &metadata, &out, only.as_deref()),
     }
@@ -657,6 +661,7 @@ fn dump_gen_cmd(
     profile_out: Option<&str>,
     no_cipher_check: bool,
     images_out: Option<&str>,
+    attributes_out: Option<&str>,
 ) -> Result<()> {
     use static_mhy_dumper::derive::profile::Profile;
     let ga = std::fs::read(exe)?;
@@ -773,6 +778,10 @@ fn dump_gen_cmd(
             doc["Images"].as_array().map(|a| a.len()).unwrap_or(0),
             doc["Assemblies"].as_array().map(|a| a.len()).unwrap_or(0)
         );
+    }
+    if let Some(p) = attributes_out {
+        let n = static_mhy_dumper::dump_gen::write_attributes_json(&m, p)?;
+        println!("wrote {p}: {n} attribute instances");
     }
     let json_path = match out.rfind('/') {
         Some(p) => format!("{}script.json", &out[..=p]),

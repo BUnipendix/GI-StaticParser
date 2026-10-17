@@ -1336,6 +1336,126 @@ fn json_escape(s: &str) -> String {
     out
 }
 
+/// Write every recovered custom-attribute instance as JSON, including the ones whose class
+/// needs constructor arguments (they cannot be rendered as `[Name]` in dump.cs but the data
+/// itself is recovered: class + member identity). Members are resolved through the metadata
+/// tables; parameter and property attributes get a best-effort name.
+pub fn write_attributes_json(m: &Meta, path: &str) -> Result<usize> {
+    use std::io::Write;
+    let (tds, mds) = collect(m);
+    let mut parents: Vec<Option<u32>> = vec![None; tds.len()];
+    for i in 0..tds.len() {
+        let (Some(start), Some(count)) = (m.td_nested_start(i), m.td_nested_count(i)) else {
+            continue;
+        };
+        if start == 0xFFFF || count == 0 {
+            continue;
+        }
+        for k in 0..count {
+            if let Some(child) = m.nested_types_at(start + k) {
+                if (child as usize) < parents.len() {
+                    parents[child as usize] = Some(i as u32);
+                }
+            }
+        }
+    }
+    // field row -> declaring typeDef index
+    let mut field_owner: Vec<u32> = vec![u32::MAX; 0];
+    let mut max_row = 0usize;
+    for td in tds.iter() {
+        if td.fields_start != u32::MAX {
+            max_row = max_row.max(td.fields_start as usize + td.fields_count as usize);
+        }
+    }
+    field_owner.resize(max_row, u32::MAX);
+    for (ti, td) in tds.iter().enumerate() {
+        if td.fields_start == u32::MAX {
+            continue;
+        }
+        for k in 0..td.fields_count {
+            let row = td.fields_start as usize + k as usize;
+            if row < field_owner.len() {
+                field_owner[row] = ti as u32;
+            }
+        }
+    }
+
+    let mut out: Vec<(u32, u32, String, String)> = Vec::new();
+    for (inst, token) in m.attribute_instance_tokens() {
+        let (kind, idx) = (token >> 24, token & 0x00FF_FFFF);
+        if idx == 0 {
+            continue;
+        }
+        let member = match kind {
+            0x02 => {
+                let tdi = (idx - 1) as usize;
+                if tdi >= tds.len() {
+                    continue;
+                }
+                format!("TypeDef: {}", joined_type_name(&tds, &parents, tdi as u32, 0))
+            }
+            0x04 => {
+                let row = (idx - 1) as usize;
+                let owner = field_owner.get(row).copied().unwrap_or(u32::MAX);
+                let owner_name = if owner != u32::MAX {
+                    joined_type_name(&tds, &parents, owner, 0)
+                } else {
+                    String::new()
+                };
+                format!("Field: {}::{}", owner_name, m.field_name(row as u32))
+            }
+            0x06 => {
+                let gmi = (idx - 1) as usize;
+                let Some(md) = mds.get(gmi) else { continue };
+                format!(
+                    "Method: {}::{}",
+                    joined_type_name(&tds, &parents, md.decl, 0),
+                    md.name
+                )
+            }
+            0x08 => {
+                let pi = (idx - 1) as usize;
+                format!("Parameter: {}", m.param_name(pi as u32).unwrap_or_default())
+            }
+            0x17 => format!("Property: #{}", idx - 1),
+            _ => continue,
+        };
+        let Some(ti) = m.attribute_type_idx(inst) else { continue };
+        let Some((ak, adata, _)) = m.il2cpp_type(ti as usize) else { continue };
+        if ak != 0x12 {
+            continue;
+        }
+        let Some(td) = tds.get(adata as usize) else { continue };
+        let mut name = td.name.clone();
+        if let Some(stripped) = name.strip_suffix("Attribute") {
+            name = stripped.to_string();
+        }
+        out.push((inst, token, member, name));
+    }
+    out.sort_unstable_by_key(|r| r.0);
+    let f = std::fs::File::create(path)?;
+    let mut w = std::io::BufWriter::new(f);
+    writeln!(w, "{{")?;
+    writeln!(w, "\"AttributeCount\": {},", m.attribute_instance_count())?;
+    writeln!(w, "\"Recovered\": {},", out.len())?;
+    writeln!(w, "\"Attributes\": [")?;
+    for (i, (inst, token, member, name)) in out.iter().enumerate() {
+        let comma = if i + 1 == out.len() { "" } else { "," };
+        writeln!(
+            w,
+            "  {{\"Instance\": {}, \"MemberToken\": {}, \"Member\": \"{}\", \"Attribute\": \"{}\"}}{comma}",
+            inst,
+            token,
+            json_escape(member),
+            json_escape(name)
+        )?;
+    }
+    writeln!(w, "]")?;
+    writeln!(w, "}}")?;
+    w.flush()?;
+    Ok(out.len())
+}
+
 pub fn write_script_json(w: &mut dyn Write, methods: &[(u64, String)]) -> std::io::Result<()> {
     writeln!(w, "{{")?;
     writeln!(w, "\"ScriptMethod\": [")?;
