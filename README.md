@@ -42,6 +42,9 @@ on the 7.1.0 sample. Row counts come from the table-size header slots, not from 
 chain walk or the code-pointer array (both undercount; see `docs/re/gap-inventory.md` §0).
 Field offsets are reconstructed by sequential layout (the dat has no offset table): 321,796 of
 440,172 fields carry a `// 0x…` comment; static fields have no derivable offset statically.
+Method signatures carry real parameter names and types (parameter-definition table at
+`hdr[0x68]^0x146BE503`, 8-byte rows), and const fields / enum members carry their values
+(field default-value table at `hdr[0x164]^0x03893506`).
 
 ## Layout
 
