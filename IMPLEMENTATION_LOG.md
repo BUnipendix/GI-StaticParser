@@ -3620,3 +3620,36 @@ FUN_1405359e0（§2 的启动序列）。其模式（0x140535E9B..0x140535FA6 �
 1. 0x140500180 的函数语义（memcpy？解密？是否是「从 dat 复制并解密」）——决定输入表能否静态提取；
 2. 48B 描述符结构布局（哪些字段是 count/ptr）；
 3. 30MB 区域（hdr[0xC]<<20）与 hdr[0x8]/0x10/0x14 区域各是什么表（可能是类型数组副本/泛型类/泛型实例等）。
+
+## 42. R11 第九轮：枚举字面值/字段默认值解出并接线（gap #7 关闭）（2026-10-17）
+
+### 42.1 表与解码（反汇编 0x1404C7C00）
+
+- **字段默认值表**：base = `hdr[0x164] ^ 0x03893506`，**12B 行 {valueOffset@0, fieldIndex@4, typeIndex@8}**，
+  行数 = `(hdr[0x144] + 0xD1F800F2) / 12`（7.1.0: **75,548 行**）。
+  查找方式 = 线性扫描比较 row.fieldIndex（构建器对每个字段做一次）。
+- **值数据区**：`body + (hdr[0x128] ^ 0x371354A2) + valueOffset`，按值的 Il2CppType kind 解码：
+  原始类型按 kind 尺寸直接读；**字符串 = {u32 长度, UTF-8 字节}**（实测 "True"/"False"/"ticks"）。
+- 反汇编证据：0x1404C7C94 起 `sar rdi,5 → [klass+0x60] → xor 0x72628007 (fs) → +fieldIdx`，
+  表基址/计数/行布局与上述一致；0x1404C7D57 值指针计算；0x1404C7D6B 按 kind 分派（2..0xc 原始类型）。
+
+### 42.2 Rust 接线（dump_gen）
+
+- profile 新增 `field_defaults / field_defaults_size / default_value_data`（layout71 已填）。
+- engine：load 时构建 fieldIndex→(valueOff,typeIdx) 映射 + 值区基址；新增 `field_default()` /
+  `default_value_bytes()`。
+- dump_gen：const 字段渲染 ` = {literal}`（包含枚举成员、const 字符串/数值）。
+  有符号规则对齐参考输出：**枚举成员按无符号**（4294967295/255/32768），**普通原始类型 const 按有符号**（-32768）。
+  float/double 支持 ±Infinity/NaN 字面风格；char 输出 `'\uXXXX'`。
+
+### 42.3 验证
+
+- 7.1.0 实测：**74,614 个 const 字段全部渲染**，0 未解。
+- 枚举字面值 vs 6.4 oracle：**9,582/9,598 = 99.83%**（失配均为 7.x 真实改值，如 InteractionType 数值右移）。
+- 全部 const 值 vs oracle：99.26%（余差为浮点格式差异 9.99999975e-06f vs 0.00001f，数值等价）。
+- 回归 17 passed / 0 failed。
+
+### 42.4 状态
+
+- gap #7 关闭。剩余：泛型渲染（#11，需加载器追踪）、参数名/类型（疑剥离）、Properties/Events、接口精确化、
+  stringLiterals/script.json ScriptString、attributes。

@@ -66,6 +66,12 @@ pub fn gen71() -> Profile {
         // with a 64-bit add (add1 > 2^32) and a pre-truncation shift. 440172 rows.
         field_names: TableBase { hdr_off: 0x4C, sub: Some(0xE5D2_49BFu32.wrapping_neg()), xor: None, add: None },
         field_stride: 8,
+        // Field default-value table (12B rows {valueOff, fieldIdx, typeIdx}) + shared value blob.
+        // From the runtime accessor at 0x1404C7C00: base = hdr[0x164] ^ 0x03893506,
+        // count = (hdr[0x144] + 0xD1F800F2) / 12, values at body + (hdr[0x128] ^ 0x371354A2) + off.
+        field_defaults: Some(TableBase { hdr_off: 0x164, sub: None, xor: Some(0x0389_3506), add: None }),
+        field_defaults_size: Some(TableBase { hdr_off: 0x144, sub: None, xor: None, add: Some(0xD1F8_00F2) }),
+        default_value_data: Some(TableBase { hdr_off: 0x128, sub: None, xor: Some(0x3713_54A2), add: None }),
         field_mask: FieldMaskChain {
             mul1: 0x23CF,
             xor1: 0x3D27_C42E,

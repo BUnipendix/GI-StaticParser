@@ -222,6 +222,17 @@ pub struct Profile {
     /// The full field table (all images): stride 8, `{name_raw@0, type_raw@4}` per row.
     pub field_names: TableBase,
     pub field_stride: u32,
+    /// Field DEFAULT-VALUE table (12-byte rows `{value_offset, field_index, type_index}`; -1 = none).
+    /// Located by disassembly of the runtime accessor at 0x1404C7C00: base = hdr[0x164] ^ 0x03893506,
+    /// row count = (hdr[0x144] + 0xD1F800F2) / 12. 7.1.0: 75,548 rows.
+    #[serde(default)]
+    pub field_defaults: Option<TableBase>,
+    #[serde(default)]
+    pub field_defaults_size: Option<TableBase>,
+    /// Shared default-value DATA region (byte blob): body + (hdr[0x128] ^ 0x371354A2).
+    /// Values are read at `base + value_offset`, length/kind from the value's Il2CppType.
+    #[serde(default)]
+    pub default_value_data: Option<TableBase>,
     /// Per-row mask shared by both field columns.
     pub field_mask: FieldMaskChain,
     /// `name_idx = name_raw ^ mask ^ field_name_xor`.

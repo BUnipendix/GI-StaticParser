@@ -419,6 +419,106 @@ fn field_modifiers(attrs: u16) -> String {
     s
 }
 
+/// C# literal for a field default value (enum members, const fields).
+/// Values live in the shared blob, decoded according to the value's Il2CppType kind —
+/// the same dispatch the runtime uses at 0x1404C7D6B (kind in 2..=0xc -> primitive).
+/// Returns `Err(kind)` for kinds we cannot render statically (string/valuetype/class).
+fn default_literal(m: &Meta, tix: u32, dataoff: i32, unsigned: bool) -> Result<String, u8> {
+    let Some((kind, _data, _attrs)) = m.il2cpp_type(tix as usize) else {
+        return Err(0);
+    };
+    match kind {
+        0x02 => {
+            let b = m.default_value_bytes(dataoff, 1).ok_or(0)?;
+            Ok(if b[0] != 0 { "true".into() } else { "false".into() })
+        }
+        0x03 => {
+            let b = m.default_value_bytes(dataoff, 2).ok_or(0)?;
+            let v = u16::from_le_bytes(b.try_into().unwrap());
+            Ok(format!("'\\u{:04X}'", v))
+        }
+        0x04 => {
+            let b = m.default_value_bytes(dataoff, 1).ok_or(0)?;
+            if unsigned { Ok(format!("{}", b[0])) } else { Ok(format!("{}", b[0] as i8)) }
+        }
+        0x05 => {
+            let b = m.default_value_bytes(dataoff, 1).ok_or(0)?;
+            Ok(format!("{}", b[0]))
+        }
+        0x06 => {
+            let b = m.default_value_bytes(dataoff, 2).ok_or(0)?;
+            if unsigned { Ok(format!("{}", u16::from_le_bytes(b.try_into().unwrap()))) }
+            else { Ok(format!("{}", i16::from_le_bytes(b.try_into().unwrap()))) }
+        }
+        0x07 => {
+            let b = m.default_value_bytes(dataoff, 2).ok_or(0)?;
+            Ok(format!("{}", u16::from_le_bytes(b.try_into().unwrap())))
+        }
+        0x08 => {
+            let b = m.default_value_bytes(dataoff, 4).ok_or(0)?;
+            if unsigned { Ok(format!("{}", u32::from_le_bytes(b.try_into().unwrap()))) }
+            else { Ok(format!("{}", i32::from_le_bytes(b.try_into().unwrap()))) }
+        }
+        0x09 => {
+            let b = m.default_value_bytes(dataoff, 4).ok_or(0)?;
+            Ok(format!("{}", u32::from_le_bytes(b.try_into().unwrap())))
+        }
+        0x0A => {
+            let b = m.default_value_bytes(dataoff, 8).ok_or(0)?;
+            if unsigned { Ok(format!("{}", u64::from_le_bytes(b.try_into().unwrap()))) }
+            else { Ok(format!("{}", i64::from_le_bytes(b.try_into().unwrap()))) }
+        }
+        0x0B => {
+            let b = m.default_value_bytes(dataoff, 8).ok_or(0)?;
+            Ok(format!("{}", u64::from_le_bytes(b.try_into().unwrap())))
+        }
+        0x0C => {
+            let b = m.default_value_bytes(dataoff, 4).ok_or(0)?;
+            let v = f32::from_le_bytes(b.try_into().unwrap());
+            Ok(if v.is_nan() { "float.NaN".into() }
+               else if v.is_infinite() { if v > 0.0 { "float.PositiveInfinity".into() } else { "float.NegativeInfinity".into() } }
+               else if v.fract() == 0.0 { format!("{:.1}f", v) }
+               else { format!("{}f", v) })
+        }
+        0x0D => {
+            let b = m.default_value_bytes(dataoff, 8).ok_or(0)?;
+            let v = f64::from_le_bytes(b.try_into().unwrap());
+            Ok(if v.is_nan() { "double.NaN".into() }
+               else if v.is_infinite() { if v > 0.0 { "double.PositiveInfinity".into() } else { "double.NegativeInfinity".into() } }
+               else if v.fract() == 0.0 { format!("{:.1}", v) }
+               else { format!("{}", v) })
+        }
+        0x0E => {
+            // String default: {u32 byte-length, UTF-8 bytes} in the shared blob.
+            let lb = m.default_value_bytes(dataoff, 4).ok_or(0x0E)?;
+            let len = u32::from_le_bytes(lb.try_into().unwrap()) as usize;
+            if len > 4096 {
+                return Err(0x0E);
+            }
+            let bytes = m
+                .default_value_bytes(dataoff + 4, len)
+                .ok_or(0x0E)?;
+            let s = String::from_utf8_lossy(bytes);
+            let mut out = String::with_capacity(s.len() + 2);
+            out.push('"');
+            for ch in s.chars() {
+                match ch {
+                    '"' => out.push_str("\\\""),
+                    '\\' => out.push_str("\\\\"),
+                    '\n' => out.push_str("\\n"),
+                    '\r' => out.push_str("\\r"),
+                    '\t' => out.push_str("\\t"),
+                    c => out.push(c),
+                }
+            }
+            out.push('"');
+            Ok(out)
+        }
+        0x0F | 0x12 => Ok("null".into()),
+        other => Err(other),
+    }
+}
+
 /// Full dump: write `dump.cs` (Il2CppDumper style) and `script.json`.
 pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(usize, usize, usize)> {
     let (tds, mds) = collect(m);
@@ -457,6 +557,8 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
     let mut unresolved_offsets = 0usize;
     let mut computed_offsets = 0usize;
     let mut static_offsets = 0usize;
+    let mut defaults_rendered = 0usize;
+    let mut defaults_unrendered = 0usize;
 
     // Distinct interface-offsets starts, computed once. This used to be rebuilt and
     // re-sorted inside the per-type loop, which made the whole dump O(types^2 log
@@ -547,7 +649,45 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
                     Some(o) => format!(" // 0x{:X}", o),
                     None => String::new(),
                 };
-                writeln!(w, "\t{}{} {};{}", field_modifiers(attrs), tn, fname, tail)?;
+                // Const fields (enum members, literal constants) get their value from the
+                // field default-value table (gap #7): `= 3` before the offset comment.
+                let literal = if attrs & 0x40 != 0 {
+                    // Enum members print their underlying value unsigned (reference-dump
+                    // behaviour); plain primitive consts print signed.
+                    let is_enum = {
+                        let fti = m.field_type_idx(row);
+                        match m.il2cpp_type(fti as usize) {
+                            Some((0x11, tdi, _)) => tds
+                                .get(tdi as usize)
+                                .map(|t| t.bitfield & 2 != 0)
+                                .unwrap_or(false),
+                            _ => false,
+                        }
+                    };
+                    match m.field_default(row) {
+                        Some((dataoff, tix)) => match default_literal(m, tix, dataoff, is_enum) {
+                            Ok(lit) => {
+                                defaults_rendered += 1;
+                                Some(lit)
+                            }
+                            Err(_) => {
+                                defaults_unrendered += 1;
+                                None
+                            }
+                        },
+                        None => {
+                            defaults_unrendered += 1;
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+                let value = match literal {
+                    Some(l) => format!(" = {}", l),
+                    None => String::new(),
+                };
+                writeln!(w, "\t{}{} {}{};{}", field_modifiers(attrs), tn, fname, value, tail)?;
                 match offset {
                     Some(_) => computed_offsets += 1,
                     None if static_ => static_offsets += 1,
@@ -637,6 +777,11 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
     if computed_offsets > 0 || unresolved_offsets > 0 || static_offsets > 0 {
         eprintln!(
             "[warn] field offsets: {computed_offsets} computed by sequential layout (validated 97.9% core against the 6.4 reference), {unresolved_offsets} unresolved (explicit layout / not statically sizeable), {static_offsets} static fields have no offset (module-level static area is not derivable statically)"
+        );
+    }
+    if defaults_rendered > 0 || defaults_unrendered > 0 {
+        eprintln!(
+            "[warn] default values: {defaults_rendered} rendered, {defaults_unrendered} const fields without a renderable default (string/valuetype/class kinds or missing row)"
         );
     }
     if unresolved_params > 0 {

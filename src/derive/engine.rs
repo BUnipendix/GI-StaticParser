@@ -31,6 +31,10 @@ pub struct Meta<'a> {
     pub slot_base: usize,
     pub field_base: usize,
     pub iface_base: usize,
+    /// Field default values: field-table index -> (value byte offset in the shared blob, value Il2CppType index).
+    pub field_defaults: std::collections::HashMap<u32, (i32, u32)>,
+    /// Body offset of the shared default-value data blob.
+    pub default_values: usize,
 }
 
 impl<'a> Meta<'a> {
@@ -76,6 +80,28 @@ impl<'a> Meta<'a> {
             Some(t) => (t.resolve(&header_bytes) / td_stride).min(td_cap),
             None => 0, // 0 = fall back to the chain walk in td_count()
         };
+        // Field default values (12-byte rows {valueOff, fieldIdx, typeIdx}) + shared value blob.
+        let mut field_defaults = std::collections::HashMap::new();
+        let mut default_values = 0usize;
+        if let (Some(tb), Some(szb), Some(vd)) = (
+            profile.field_defaults.as_ref(),
+            profile.field_defaults_size.as_ref(),
+            profile.default_value_data.as_ref(),
+        ) {
+            let base = tb.resolve(&header_bytes);
+            let count = szb.resolve(&header_bytes) / 12;
+            default_values = vd.resolve(&header_bytes);
+            for r in 0..count {
+                let at = base + r * 12;
+                let Some(b) = body.read_slice(at, 12) else { break };
+                let dataoff = i32::from_le_bytes(b[0..4].try_into().unwrap());
+                let fidx = i32::from_le_bytes(b[4..8].try_into().unwrap());
+                let tix = i32::from_le_bytes(b[8..12].try_into().unwrap());
+                if fidx >= 0 {
+                    field_defaults.insert(fidx as u32, (dataoff, tix as u32));
+                }
+            }
+        }
         Ok(Self {
             schedule,
             td_base: profile.type_defs.resolve(&header_bytes),
@@ -87,6 +113,8 @@ impl<'a> Meta<'a> {
             slot_base: profile.slot_table.resolve(&header_bytes),
             field_base: profile.field_names.resolve(&header_bytes),
             iface_base: profile.iface_table.resolve(&header_bytes),
+            field_defaults,
+            default_values,
             profile,
             body,
             image: exe,
@@ -268,6 +296,21 @@ impl<'a> Meta<'a> {
     /// typeDef parent (typearr index; u32::MAX = no base — interfaces / System.Object).
     /// Mask material is the per-record tag at +0x1C.
     #[inline]
+    /// Field default value: (value-offset in the shared blob, value Il2CppType index).
+    #[inline]
+    pub fn field_default(&self, field_idx: u32) -> Option<(i32, u32)> {
+        self.field_defaults.get(&field_idx).copied()
+    }
+
+    /// Bytes of a default value inside the shared blob.
+    #[inline]
+    pub fn default_value_bytes(&self, off: i32, len: usize) -> Option<&[u8]> {
+        if off < 0 {
+            return None;
+        }
+        self.body.read_slice(self.default_values + off as usize, len)
+    }
+
     /// typeDef flags (TypeAttributes) — None when the profile lacks the column.
     pub fn td_flags(&self, i: usize) -> Option<u32> {
         let p = &self.profile;

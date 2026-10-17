@@ -45,7 +45,7 @@ Token 前 3 个 = 0x06000001/2/3 与 oracle 完全一致。回归 17 passed / 0 
 | 4 | 接口列表精确化 | 41,789 近似 | **2026-10-17 三假设全负**：①typeDef 索引 stride6 ②typearr 索引 stride6/8/4 ③typearr kind==0x11 data=td 均无命中 ⇒ 接口表不是简单索引数组（加密/未识别槽/派生）。当前 run-length 近似仍是唯一可用 |
 | 5 | 方法 Slot 精确值 | REF 211,652 非零 | **已结论（2026-10-17）**：反汇编 0x1405155FC 构建器确认 slot=(i16)((u16@0x0C^0x1E2A)−mask2)，与引擎逐句一致；GI 7.1 元数据本身几乎全 -1。oracle 6.4 的非零 Slot 属 oracle 侧语义，不再视为缺陷 |
 | 6 | 属性 [Attribute] | 11,525 | **判读修正（2026-10-17）**：hdr[0x1D0] 的表是 **ParameterDefaultValue**（按类型解码默认值），不是特性表；参数默认值侧已定位（25,374 条）。字段默认值（枚举字面值）应有同构表待找 |
-| 7 | 枚举字面值 | — | fieldDefaultValues：与参数默认值同构（key=field 表索引，typeIndex+dataIndex），按 0x1405287A0 同法定位 |
+| 7 | 枚举字面值 | **已解（2026-10-17）** | **已关闭**：字段默认值表 base = `hdr[0x164]^0x03893506`，12B 行 `{valueOff, fieldIndex, typeIdx}`，行数 `(hdr[0x144]+0xD1F800F2)/12`（75,548 行）；值区 `body+(hdr[0x128]^0x371354A2)+valueOff`，按 kind 解码；字符串 = `{u32 len, UTF-8}`。dump 已渲染 74,614 个 const 值；vs 6.4 oracle 枚举值 99.83%、全 const 99.26% |
 | 8 | stringLiterals.json | 689,799 串 | 字符串字面量表（独立于用户串堆）|
 | 9 | script.json ScriptString/Addresses/Signature | 689,799 / 239,153 | 依赖 #8 + 方法特征定位 |
 | 10 | il2cpp.h / DummyDll | 整套 | 依赖以上全部 |
