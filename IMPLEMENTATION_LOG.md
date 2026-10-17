@@ -4729,3 +4729,24 @@ Slot 列不再标记为静态不可得；属于纯静态可恢复项（来源：
   且最长连续段仅 11 —— 不存在「属性构造函数 token 表」。
 - 结论：属性构造 token / 参数 blob 未在 metadata body 中以明文表存在（被删除或移入 exe 加密区）。
   与第 69 轮「属性参数运行时不可得」判定一致；参考 dump 的含参属性行无法静态复现。
+
+## 76. 静态字段偏移：arena 归属与 image 表障碍（目标第 4 轮）
+
+> 不是需求，是执行记录。
+
+### 76.1 新证据：offset 窗口分析（oracle 6.4，按 dump 顺序）
+- 0x380–0x400 窗口内出现同一 offset 被多个类型使用（如 0x3e0 同时出现在 MSCompatUnicodeTable 与 System.Empty.Value；
+  0x380 出现在 ParamsArray/CompareInfo 等）→ 说明偏移空间是「每程序集 arena」，重复来自不同程序集（GI 多程序集含重复类型定义）。
+- 同一类型内部：非 GC 字段偏移随声明顺序严格递增、按自然对齐（MSCompatUnicodeTable: bool 0x390 → int 0x394 → ptr 0x398 → 0x3a0 → … → 0x3f8），
+  证实「类型内按声明顺序 + 自然对齐」；GC 引用字段在另一区（该类型引用区 0xb80+）。
+- 由此确定 arena 规则：每程序集两个区（非GC 区、GC 区），类型内按声明顺序分配，类型间按「程序集的类型顺序」推进。
+
+### 76.2 障碍：6.4 的 image 分组无法从 oracle 直接得到
+- oracle 的 TypeDefIndex 注释是**全局 0..77,229 连续**（不是每 image 重置），无法据此切分程序集。
+- 尝试从 7.1 startup-metadata 的 image 表解出 typeStart/typeCount 以便建立类型→程序集映射，但该表所有列都被掩码
+  （row 值全为密文；name 列的掩码公式已知，其它列未知），结构化解列（找 start/count 累加关系）无解。
+- 下一步两条路（下轮）：① 先解 image 表其余列的掩码（同 name 列的 mask 形式，用「start 累加 == 77/88k」做约束求解）；
+  ② 或先实现 DummyDll v2 的自定义特性（不依赖 image 映射），再回头做偏移。
+
+### 76.3 已保存分析脚本
+tools/analyze_static_offsets.py（第 1 轮的假设检验）；本轮的窗口/分组分析在其基础上扩展，结论记录于此。
