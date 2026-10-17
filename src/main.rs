@@ -742,9 +742,30 @@ fn dump_gen_cmd(
                 assemblies.len()
             );
         }
+        // The two tables are index-aligned (verified: image name minus `.dll` equals the
+        // assembly name for every row). Only emit the pairing when that invariant holds,
+        // otherwise report the mismatch instead of inventing a mapping.
+        let pairs: Vec<serde_json::Value> = if images.len() == assemblies.len() {
+            images
+                .iter()
+                .zip(assemblies.iter())
+                .enumerate()
+                .map(|(i, (img, asm))| {
+                    serde_json::json!({"Index": i, "Image": img, "Assembly": asm})
+                })
+                .collect()
+        } else {
+            tracing::warn!(
+                "image count {} != assembly count {}; AssemblyImages pairing omitted",
+                images.len(),
+                assemblies.len()
+            );
+            Vec::new()
+        };
         let doc = serde_json::json!({
             "Images": images,
             "Assemblies": assemblies,
+            "AssemblyImages": pairs,
         });
         std::fs::write(p, serde_json::to_string_pretty(&doc)?)?;
         println!(

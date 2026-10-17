@@ -4408,3 +4408,26 @@ oracle 把 indexer 当普通属性打印（`public System.Char Chars { get; }`�
 
 `cargo test --release` 17 passed；`--profile-out` 往返正常（新字段序列化）；
 完整 dump 仍 88,902 类型 / 440,172 字段 / 733,442 方法。
+
+## 64. R11 第三十一轮：assembly↔image 配对 + 三处负结果（2026-10-17）
+
+> 不是需求，是执行记录。
+
+### 64.1 assembly↔image 配对（已验证不变量）
+
+75 个 image 与 75 个 assembly **按索引一一对应**：`image 名去掉 .dll == assembly 名`，75/75 全部成立（mscorlib.dll↔mscorlib …
+Assembly-CSharp.dll↔Assembly-CSharp）。`--images-out` 现在同时输出 `AssemblyImages: [{Index, Image, Assembly}]`；
+数量不等时只告警、不臆造映射。
+
+### 64.2 负结果（勿重复）
+
+1. **header 槽枚举**：把 132 个槽 × {raw, ^c, +c, −c}（已知常数集合）里落进 startup/body 对齐区的候选逐一检查；
+   除已知表外只多出 `hdr[0x108]`（raw 0xF6EF70 → body 16MB 处）与 `hdr[0x204]^0x4009A6BF`（→ body 0x217FF70），
+   实测两区都是**均匀随机字节**（hi-byte 直方图平坦、<2M 词 0/2000），且反查 344 个 header 读取点没有代码用这两个槽 ⇒ 不是表锚点（前者更像尺寸，后者是我把 slot 0x118 的常数错配）。
+2. **image 行其余列**：40B 行里 10 个 u32 列全部随机（75 行内无小值列、无单调列）⇒ typeStart/typeCount 等列同样被逐行掩码，需 loader 掩码公式才能解。
+3. **assembly 行其余列**：44B 行 11 列中 0–8 全随机，仅 col9/col10 有 63/75 行为 0（疑为残留/尾部字段），非 imageIndex。
+4. **startup 内 string-literal 表**：扫 8B `{len 1..200, dataOff 落在 body 明文串区 0x8E0000–0x940000 / 0x4600000+}` 双相位稠密窗口 = 0。
+
+### 64.3 验证
+
+`cargo test --release` 17 passed；`--images-out` 输出 75 Images / 75 Assemblies / 75 AssemblyImages，首尾与 Python 独立解码一致。
