@@ -4637,3 +4637,24 @@ Slot 是 C# vtable 布局的确定性结果，可纯静态重算。
 ### 71.4 结论
 Slot 列不再标记为静态不可得；属于纯静态可恢复项（来源：metadata 方法/接口表 + C# 布局规则）。
 
+
+## 72. 静态字段偏移：oracle 统计与 arena 模型（2026-10-17 目标第 1 轮）
+
+> 不是需求，是执行记录。
+
+### 72.1 先用 6.4 oracle 量化「静态偏移到底有多少可真值」
+- oracle 6.4 中 static 字段带 offset 注释共 30,587 个；其中非零真值 29,337（95.9%），0x0（常量或读不到）1,250。
+- 结论：Il2CppDumper 能给出绝大多数静态偏移，不能简单按「运行时不可得」略过。
+
+### 72.2 形态：每程序集独立 arena，非 GC 区在前、GC 引用区在后
+- 偏移分布：min 0x10、max 0x30410，存在同偏移重复（多个程序集各自从 0x10 起算）→ 每程序集一个 static arena。
+- 反例证据：DateTime 非 GC 字段 MaxValue=0x20/MinValue=0x28，GC 引用 DaysToMonth365/366=0x60/0x68；
+  ContractionComparer.Instance（单引用字段）=0xb80，与 MSCompatUnicodeTable 的引用区 0xbc0/0xbd0 同段。
+- 用 oracle 全量验证：同时含 GC 与非 GC 静态字段的类型 2,344 个，其中 2,248（95.9%）满足 max(非GC偏移) < min(GC偏移)
+  （剩余 4% 主要是 oracle 无字段类型信息导致的值类型误判）。分析脚本：tools/analyze_static_offsets.py。
+
+### 72.3 剩余未知与下一步
+- arena 内精确打包顺序（按 程序集→类型→字段？对齐规则）尚未确定；需要 6.4 metadata 解码结果做拟合。
+- 已尝试 mhydump derive 6.4 → 产物是半成品（缺列解 ops），需走 version-triage：derive → colsolve4 → colverify → profile。
+- 备选：用 images 表的 typeStart/count 得到 7.1 类型→程序集映射后，直接模拟 arena 规则；用 6.4 oracle 的
+  DateTime/MSCompatUnicodeTable 等类型做定点核对。
