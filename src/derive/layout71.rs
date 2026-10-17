@@ -116,6 +116,10 @@ pub fn gen71() -> Profile {
         iface_stride: 6,
         td_iface_start_off: 0x3A,
         td_iface_start_xor: 0x4BCE,
+        // interfacesCount: u8@0x42 + 0xA2 (validated: count == next-start run length for 86,587
+        // types; sum 108,758 ~= run total 109,607). Removes the run-length approximation.
+        td_iface_count_off: Some(0x42),
+        td_iface_count_add: 0xA2,
 
         md_stride: 0x1A,
         md_ret_type: Column { offset: 0x00, kind: ColKind::AddCSubMask2, c: 0xE5EE_4081 },

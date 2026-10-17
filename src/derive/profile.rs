@@ -286,6 +286,12 @@ pub struct Profile {
     pub iface_stride: u32,
     pub td_iface_start_off: u32,
     pub td_iface_start_xor: u32,
+    /// Per-type interface COUNT column (u8): 7.1 = `(raw@0x42 + 0xA2) & 0xFF`. With it the
+    /// per-type interface list is exact instead of the next-start run-length approximation.
+    #[serde(default)]
+    pub td_iface_count_off: Option<u32>,
+    #[serde(default)]
+    pub td_iface_count_add: u32,
 
     pub md_stride: u32,
     pub md_ret_type: Column,

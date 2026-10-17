@@ -379,6 +379,14 @@ impl<'a> Meta<'a> {
             .and_then(|b| b.get(0..4).map(|s| u32::from_le_bytes(s.try_into().unwrap())))
     }
 
+    /// typeDef interfacesCount (u8 column, `raw + add`); None when the profile lacks it.
+    pub fn td_iface_count(&self, i: usize) -> Option<u32> {
+        let off = self.profile.td_iface_count_off? as usize;
+        let rec = self.td_base + self.profile.td_stride as usize * i;
+        let raw = *self.body.read_slice(rec + off, 1)?.first()? as u32;
+        Some(raw.wrapping_add(self.profile.td_iface_count_add) & 0xFF)
+    }
+
     /// typeDef flags (TypeAttributes) — None when the profile lacks the column.
     pub fn td_flags(&self, i: usize) -> Option<u32> {
         let p = &self.profile;

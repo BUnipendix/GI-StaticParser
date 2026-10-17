@@ -3821,3 +3821,31 @@ decoded 结构里，实测公式 B 正确）
 
 - 回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法；
 - 参数类型一致性 83.2%（嵌套类型解析后提升），参数名 91.37% 不变。
+
+## 47. R11 第十四轮：接口 own-count 列解出（接口列表精确化）（2026-10-17）
+
+> 不是需求，是执行记录。
+
+### 47.1 定位
+
+- 数据驱动：候选小列测试「decoded_count ≤ 同起点 run 长度」约束，`u8@0x42 + 0xA2` 满足：
+  **86,587/88,902 类型 count == run 长度**、sum(count)=108,758 ≈ 近似表总长 109,607、47,108 类型 count=0；
+  703 处 count > 相邻起点差（原因是相邻类型共享同一起点——用 count 直接遍历即可，不再依赖 run 长度）。
+- 语义确认：doc 早先的「0x42 +0xA2 →klass+0xC2 小列」就是 **interfacesCount**。
+- 验证：Selectable 用 count=8 输出 8 个接口，与 6.4 oracle **完全一致**（旧近似多出 IPointerClickHandler/ISubmitHandler）。
+
+### 47.2 实现
+
+- profile：`td_iface_count_off=Some(0x42)`、`td_iface_count_add=0xA2`；engine `td_iface_count(i)`；
+  dump_gen 优先用 count，缺失时才退回 next-start run 近似。
+- 泛型接口（GENERICINST 0x15）暂不能渲染（gap #11）→ **跳过并计数**，不再输出 bogus `object`：
+  7.1 实测 24,529 条泛型接口被跳过（如 IEquatable<T>）；warn 明示。
+- 顺带修复：上一轮添加的「object 即截断」会把泛型接口当垃圾项截断，已改为仅对 kind 0x12=System.Object 截断。
+
+### 47.3 验证
+
+- 接口列表 vs 6.4 oracle（共享类型 20,189）：**严格全等 80.17%**；失配样例主要为
+  7.1 元数据真实差异（enum/delegate 的 InterfaceImpl 在 7.1 有、6.4 无：ICloneable/IComparable/IFormattable/IConvertible）
+  以及泛型接口被跳过。Selectable/ValueTuple/String 等关键类型与 oracle 一致。
+- 接口近似警告从「41,793 类型近似」降为 0（全部走 count 列）。
+- 回归 17 passed / 0 failed。

@@ -597,6 +597,7 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
     let mut nmethods = 0usize;
     // Diagnostics for the "never silently emit placeholders" rule (REQUIREMENTS R3/R4).
     let mut unresolved_iface_runs = 0usize;
+    let mut unresolved_iface_generic = 0usize;
     let mut unresolved_params = 0usize;
     let mut unresolved_offsets = 0usize;
     let mut computed_offsets = 0usize;
@@ -657,13 +658,19 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
             }
         }
         if let Some(iface_start) = td.iface_start {
-            // NOTE(known limitation): the per-type interface *count* column has not been
-            // located, so the run length is approximated by the next distinct start.
-            // This over-reports whenever the following rows belong to other types.
-            let span = match iface_starts.binary_search(&iface_start) {
-                Ok(k) => iface_starts.get(k + 1).map_or(0, |n| n - iface_start),
-                Err(_) => 0,
+            // Exact per-type interface count when the profile has the column (7.1: u8@0x42+0xA2);
+            // otherwise fall back to the next-distinct-start run length (over-reports).
+            let span = match m.td_iface_count(i) {
+                Some(c) => c,
+                None => match iface_starts.binary_search(&iface_start) {
+                    Ok(k) => iface_starts.get(k + 1).map_or(0, |n| n - iface_start),
+                    Err(_) => 0,
+                },
             };
+            if m.td_iface_count(i).is_none() {
+                unresolved_iface_runs += 1;
+            }
+            let _ = &iface_starts;
             let mut emitted = 0usize;
             for r in iface_start..iface_start + span {
                 let (t, _) = m.iface_entry(r);
@@ -674,10 +681,10 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
                 // Rows past the type's own run belong to other types and typically decode to an
                 // OBJECT kind, which is how the old approximation emitted dozens of bogus
                 // 'object' entries (e.g. 15,604 on one type).
-                match m.il2cpp_type(t as usize) {
-                    Some((k, _, _)) if matches!(k, 0x11 | 0x12 | 0x15) => {}
+                let entry_kind = match m.il2cpp_type(t as usize) {
+                    Some((k, _, _)) if matches!(k, 0x11 | 0x12 | 0x15) => k,
                     _ => break,
-                }
+                };
                 // Approximation guard: a System.Object entry means we walked past this type's
                 // own run (Object is never an interface).
                 if matches!(m.il2cpp_type(t as usize), Some((0x12, d, _)) if tds
@@ -687,17 +694,18 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
                 {
                     break;
                 }
-                let iname = type_name(m, &tds, &parents, t as u32, 0);
-                if iname == "object" {
-                    break;
+                // Generic-instantiated interfaces (IEquatable<T>, ...) cannot be rendered
+                // without the generic-class table (gap #11): skip + count instead of printing
+                // a bogus `object` entry.
+                if entry_kind == 0x15 {
+                    unresolved_iface_generic += 1;
+                    continue;
                 }
-                extends.push(iname);
+                extends.push(type_name(m, &tds, &parents, t as u32, 0));
                 emitted += 1;
             }
-            if emitted > 0 {
-                // Rendered from the run-length approximation: the per-type count column has
-                // not been located, so a list can include interfaces inherited from bases
-                // (and, for aliased starts, entries belonging to a neighbouring type).
+            if emitted > 0 && m.td_iface_count(i).is_none() {
+                // Only the run-length fallback can over-report; the count column is exact.
                 unresolved_iface_runs += 1;
             }
         }
@@ -874,6 +882,11 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
     if unresolved_props > 0 {
         eprintln!(
             "[warn] property/event tables not located: {unresolved_props} types emitted with an empty Properties section"
+        );
+    }
+    if unresolved_iface_generic > 0 {
+        eprintln!(
+            "[warn] generic-instantiated interface entries skipped: {unresolved_iface_generic} (GENERICINST rendering depends on the generic-class table, gap #11)"
         );
     }
     if unresolved_iface_runs > 0 {
