@@ -4111,3 +4111,44 @@ Token = `0x06000001 + 方法表行号`（与方法表顺序一致，构造器同
 ### 54.4 验证
 
 回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法。
+
+## 55. R11 第二十二轮：定位 attributeTypes 数组（特性表线索）（2026-10-17）
+
+> 不是需求，是执行记录。
+
+### 55.1 找到 attributeTypes 数组（明文）
+
+body 偏移 **0x9BACA4** 起、**74,864 项** u32，全部是 **kind 0x12 的 typearr 索引**，且这些类型都是特性类：
+
+- 分类器：特性类 = tdi 名以 `Attribute` 结尾 **或** parent 链到达 `System.Attribute`(tdi 169)（`SerializeField` 这类无后缀者靠父链识别）；
+- 该区纯连续 74,864 words 全部命中（全 body 最长纯 True run）；
+- 值分布（79 distinct）：`SerializeField` 45,156、`IDTagAttribute` 16,299、`MonoPInvokeCallbackAttribute` 4,283、
+  `PreserveAttribute` 1,391、`InternalsVisibleToAttribute` 1,093、`ComVisibleAttribute` 715、`ParamArrayAttribute` 469 …
+- 数组前（0x9A0000–0x9BACA4）是**打包/加密行表**（值形如 `0xD17E0017`/`0xAB990004`/`0x170005`）；数组后（0xA03E64 起）是另一张表（值 0,1,2,2,3,3,3…）。
+
+### 55.2 关键判读：参考 dump 的 [Attribute] 行只是「可解析的 5 种」
+
+6.4 oracle 共 11,525 条 `\t[...]` 行，**全部**是这 5 种（合计恰为 11,525）：
+
+| 特性 | 条数 |
+|---|---|
+| CompilerGenerated | 8,538 |
+| DllImport | 1,296 |
+| FixedAddressValueType | 893 |
+| NonSerialized | 750 |
+| MarshalAs | 48 |
+
+且 oracle 的 `extern` 数也是 1,296（= DllImport 数，对应 PInvokeImpl flag）。
+⇒ 参考工具只解析出 corelib 的少数特性；7.1 metadata 实际保有 74,864 条特性数据（含 45,156 个 `SerializeField`），
+若能解出 ranges 表，我们的输出会比 oracle **更完整**（Il2CppDumper 若能解析同样会打印全部）。
+
+### 55.3 未解
+
+attribute ranges（成员 → `{start,count}`）表未定位：
+- 明文 token 列扫描（高字节 0x02/0x04/0x06/0x08/0x14/0x17）→ 无匹配 12B 行表；
+- 「start 列 0→74,864 单调递增」列扫描（stride 2–12）→ 无匹配；
+- 数组前区域是加密行表，需 loader 访问点 RE（下一轮）：可用「数组首值 425,808 / 属性类型数组」的双层索引代码特征定位消费者。
+
+### 55.4 验证
+
+回归 17 passed / 0 failed（本轮无代码改动）。
