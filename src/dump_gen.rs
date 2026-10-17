@@ -231,6 +231,13 @@ pub fn type_name_inner(m: &Meta, tds: &[Td], parents: &[Option<u32>], ti: u32, d
     let Some((kind, data, _attrs)) = m.il2cpp_type(ti as usize) else {
         return "object".into();
     };
+    render_kind(m, tds, parents, kind, data, depth)
+}
+
+/// Render one Il2CppType from its already-decoded `(kind, data)` pair. Shared by the typearr
+/// path and by generic-instance arguments (which live as standalone 16-byte structs in the
+/// image, reachable only through the GenericInst array).
+fn render_kind(m: &Meta, tds: &[Td], parents: &[Option<u32>], kind: u8, data: u32, depth: u32) -> String {
     match kind {
         0x01 => "System.Void".into(),
         0x02 => "System.Boolean".into(),
@@ -245,13 +252,10 @@ pub fn type_name_inner(m: &Meta, tds: &[Td], parents: &[Option<u32>], ti: u32, d
         0x0B => "System.UInt64".into(),
         0x0C => "System.Single".into(),
         0x0D => "System.Double".into(),
-        0x0E | 0x18 | 0x19 | 0x16 => match kind {
-            0x0E => "System.String".into(),
-            0x18 => "System.IntPtr".into(),
-            0x19 => "System.UIntPtr".into(),
-            0x16 => "System.TypedReference".into(),
-            _ => "System.Object".into(),
-        },
+        0x0E => "System.String".into(),
+        0x16 => "System.TypedReference".into(),
+        0x18 => "System.IntPtr".into(),
+        0x19 => "System.UIntPtr".into(),
         0x11 | 0x12 | 0x1C => {
             // CLASS/VALUETYPE/OBJECT: data = typeDefIndex (mhy packs the tdi here).
             // Reference dumps always use the fully-qualified name (System.Object/System.String,
@@ -263,43 +267,96 @@ pub fn type_name_inner(m: &Meta, tds: &[Td], parents: &[Option<u32>], ti: u32, d
             }
         }
         0x15 => {
-            // GENERICINST: data = genericClass index; the def tdi lives at genericClasses[data]
-            let _ = data;
-            "object".into() // refined below via generic_classes when wired
-        }
-        0x1D => {
-            // SZARRAY: data = Il2CppType* (VA into .rdata)
-            let et = ptr_type_index(m, data);
-            match et {
-                Some(t) => format!("{}[]", type_name(m, tds, parents, t, depth + 1)),
-                None => "System.Object[]".into(),
+            // GENERICINST: data = generic-class index. The definition tdi and the argument
+            // types come from the 8-byte rows in startup-metadata.dat plus the Il2CppGenericInst
+            // struct array in the image (see engine::Meta::generic_instance).
+            match generic_inst_name(m, tds, parents, data, depth) {
+                Some(s) => s,
+                None => "System.Object".into(),
             }
         }
-        0x14 => {
-            let et = ptr_type_index(m, data);
-            match et {
-                Some(t) => format!("{}[,]", type_name(m, tds, parents, t, depth + 1)),
-                None => "Array".into(),
-            }
-        }
-        0x0F => {
-            let et = ptr_type_index(m, data);
-            match et {
-                Some(t) => format!("{}*", type_name(m, tds, parents, t, depth + 1)),
-                None => "System.Object*".into(),
-            }
-        }
-        0x10 => {
-            // BYREF: `T&` (the runtime parameter table has no per-param flags column, so we
-            // cannot tell `ref` from `out`; render the byref type form only).
-            let et = ptr_type_index(m, data);
-            match et {
-                Some(t) => format!("{}&", type_name(m, tds, parents, t, depth + 1)),
-                None => "System.Object&".into(),
-            }
-        }
+        0x1D => match pointee_name(m, tds, parents, data, depth) {
+            Some(e) => format!("{}[]", e),
+            None => "System.Object[]".into(),
+        },
+        0x14 => match pointee_name(m, tds, parents, data, depth) {
+            Some(e) => format!("{}[,]", e),
+            None => "Array".into(),
+        },
+        0x0F => match pointee_name(m, tds, parents, data, depth) {
+            Some(e) => format!("{}*", e),
+            None => "System.Object*".into(),
+        },
+        0x10 => match pointee_name(m, tds, parents, data, depth) {
+            Some(e) => format!("{}&", e),
+            None => "System.Object&".into(),
+        },
         _ => format!("object/*k{kind:#x}*/"),
     }
+}
+
+/// Render an Il2CppType given its *file offset* inside the image (used for generic-instance
+/// arguments, which are standalone structs rather than typearr slots).
+fn type_name_at(m: &Meta, tds: &[Td], parents: &[Option<u32>], off: usize, depth: u32) -> Option<String> {
+    if depth > 10 {
+        return None;
+    }
+    let (data, kind, flags) = m.il2cpp_type_at(off)?;
+    let mut s = render_kind(m, tds, parents, kind, data, depth);
+    if flags & 0x40 != 0 {
+        s.push('&');
+    }
+    Some(s)
+}
+
+/// Resolve the pointee of an array/pointer/byref `data` field to a rendered name. `data` is a
+/// truncated VA; the target may be a main-typearr entry or a standalone type struct.
+fn pointee_name(m: &Meta, tds: &[Td], parents: &[Option<u32>], data: u32, depth: u32) -> Option<String> {
+    if let Some(ti) = ptr_type_index(m, data) {
+        let off = m.typearr + ti as usize * 16;
+        return type_name_at(m, tds, parents, off, depth + 1);
+    }
+    let full = (m.image_base & 0xFFFF_FFFF_0000_0000) | data as u64;
+    let off = m.va_to_file(full)?;
+    type_name_at(m, tds, parents, off, depth + 1)
+}
+
+/// `System.Collections.Generic.List` + arity suffix -> without the suffix (reference dumps
+/// print generic definitions with their arguments instead of the metadata arity suffix).
+fn strip_generic_arity(s: &str) -> &str {
+    if let Some(pos) = s.rfind('`') {
+        if pos + 1 < s.len() && s[pos + 1..].bytes().all(|b| b.is_ascii_digit()) {
+            return &s[..pos];
+        }
+    }
+    s
+}
+
+/// Render a generic instantiation: `Def<Arg1,Arg2,...>` (reference dumps use the fully-qualified
+/// definition name without arity and comma-separated arguments without spaces).
+fn generic_inst_name(
+    m: &Meta,
+    tds: &[Td],
+    parents: &[Option<u32>],
+    g: u32,
+    depth: u32,
+) -> Option<String> {
+    if depth > 8 {
+        return None;
+    }
+    let (def_tdi, args) = m.generic_instance(g)?;
+    let def = joined_type_name(tds, parents, def_tdi, depth + 1);
+    let mut out = String::with_capacity(def.len() + 16);
+    out.push_str(strip_generic_arity(&def));
+    out.push('<');
+    for (i, off) in args.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        out.push_str(&type_name_at(m, tds, parents, *off, depth + 1)?);
+    }
+    out.push('>');
+    Some(out)
 }
 
 /// Map an Il2CppType `data` back to its typearr index. `data` is a 32-bit truncated
@@ -681,8 +738,8 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
                 // Rows past the type's own run belong to other types and typically decode to an
                 // OBJECT kind, which is how the old approximation emitted dozens of bogus
                 // 'object' entries (e.g. 15,604 on one type).
-                let entry_kind = match m.il2cpp_type(t as usize) {
-                    Some((k, _, _)) if matches!(k, 0x11 | 0x12 | 0x15) => k,
+                let (entry_kind, entry_data) = match m.il2cpp_type(t as usize) {
+                    Some((k, d, _)) if matches!(k, 0x11 | 0x12 | 0x15) => (k, d),
                     _ => break,
                 };
                 // Approximation guard: a System.Object entry means we walked past this type's
@@ -694,10 +751,10 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
                 {
                     break;
                 }
-                // Generic-instantiated interfaces (IEquatable<T>, ...) cannot be rendered
-                // without the generic-class table (gap #11): skip + count instead of printing
-                // a bogus `object` entry.
-                if entry_kind == 0x15 {
+                // Generic-instantiated interfaces (IEquatable<T>, ...) render through the
+                // startup-metadata generic-class rows; only count them as unresolved when that
+                // table is missing (no startup-metadata.dat on hand).
+                if entry_kind == 0x15 && m.generic_instance(entry_data).is_none() {
                     unresolved_iface_generic += 1;
                     continue;
                 }

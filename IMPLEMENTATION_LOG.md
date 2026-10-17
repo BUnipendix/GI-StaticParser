@@ -4003,3 +4003,45 @@ oracle 用**全限定 C# 名**（`System.Void`/`System.Int32`/`System.String`/`S
 1. 回到 0x140538F1C 附近确认 0x250/0x258 两个表的真实 stride（是否有 imul）；
 2. 若 startup[0] 是 28B 记录表，则按 28B 重解，直接得到 g → (def, args) 映射；
 3. 用已知 `List<GameObject>` 类型验证后接入 dump_gen 泛型渲染。
+
+## 52. R11 第十九轮：**泛型渲染打通**（gap #11 关闭）（2026-10-17）
+
+> 不是需求，是执行记录。
+
+### 52.1 完整数据链（已实测验证）
+
+`GENERICINST` 的 `data` = 泛型类索引 g，按以下链解析：
+
+1. **startup-metadata.dat** 中 8B 行表：`base = startup + (i32(hdr[0x120]) ^ 0x1C3F68EA)`；行 = `{defTypeDefIndex u32, genericInstIndex i32}`
+   （加载器 0x1405365BE..0x140536660：分配 0x20 条目，`entry[0]=row.u32`、`entry+8 = registration+0x28 + row.i32*16`）。
+2. **Il2CppGenericInst 数组** = `Il2CppMetadataRegistration+0x28` = VA 0x14234_4A40：16B 行 `{argc u32, pad u32, Il2CppType** argv}`。
+3. `argv` → 8B `Il2CppType*` 数组 → 每个 16B Il2CppType `{data u32, attrs u16@8, kind u8@0xA, flags u8@0xB}`。
+
+### 52.2 验证（Python 侧）
+
+| g | 结果 |
+|---|---|
+| 3347 | `List`1<UnityEngine.GameObject>` |
+| 0 | `InternalEnumerator`1<System.Object>` |
+| 100 | `IComparer`1<Mono.Globalization.Unicode.Level2Map>` |
+| 200000 | `ReadOnlyCollection`1<MoleMole.BeyondChatChannelMonoInfo>` |
+
+### 52.3 Rust 接入
+
+- `Profile` 新增 `generic_class_rows: Option<Box<TableBase>>`（槽 0x120 ^ 0x1C3F68EA）与 `generic_insts_va: Option<u64>`（0x1_4234_4A40）；
+- `Meta::load_with_startup(exe, dat, startup: Option<&[u8]>, profile)`，新增 `va_to_file` / `il2cpp_type_at` / `generic_instance(g)`；
+- `dump_gen`：`type_name_inner` 拆出 `render_kind(kind,data)`；新增 `type_name_at`（按文件偏移渲染独立 Il2CppType）、`pointee_name`（数组/指针/byref 目标可落在主 typearr 或独立类型结构）、`strip_generic_arity`、`generic_inst_name`；
+- dump.cs 输出格式对齐参考：`System.Collections.Generic.Dictionary<System.String,System.LocalDataStoreSlot>`（全限定定义名、去 arity、逗号无空格）；
+- 泛型接口不再跳过：`System.IEquatable<System.ValueTuple>` 等正常输出（仅当 startup 文件缺失时回退 + 计数）；
+- CLI：自动读取 `global-metadata.dat` 同目录的 `startup-metadata.dat`；缺失时显式 warn 并回退为 System.Object。
+
+### 52.4 实测效果（vs 6.4 oracle，共享类型 20,189）
+
+- **字段类型精确一致率 98.33%**（101,521/103,250）
+- **泛型字段类型一致率 95.23%**（5,276/5,540）
+- 剩余差异 = 混淆类型跨版本改名（如 `DPJCOILPAEL` vs `IGIAJAGDOND`），非解析错误
+- 回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法，11.5s
+
+### 52.5 遗留
+
+- 泛型**参数引用**（kind 0x13 VAR / 0x1E MVAR）仍输出 `object/*k0x13*/` 占位（字段 7,937 + 2,246 处）：需要 genericParameters 表（nameIndex）——应在 startup-metadata 的 slot 0x2C(0x43020)/0x6C(0x3DE954) 等表中，下一轮解析。

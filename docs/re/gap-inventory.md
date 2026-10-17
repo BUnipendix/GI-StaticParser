@@ -57,7 +57,7 @@ Token 前 3 个 = 0x06000001/2/3 与 oracle 完全一致。回归 17 passed / 0 
 | 8 | stringLiterals.json | 689,799 串 | 字符串字面量表（独立于用户串堆）|
 | 9 | script.json ScriptString/Addresses/Signature | 689,799 / 239,153 | 依赖 #8 + 方法特征定位 |
 | 10 | il2cpp.h / DummyDll | 整套 | 依赖以上全部 |
-| 11 | **泛型类型渲染**（新发现，2026-10-17）| 42,313 字段 | 我们渲染裸 `object`，oracle 显示 `List<…>`/`Nullable<…>` 等。GENERICINST.data = 32B Il2CppGenericClass 表索引（entry {type*, class_inst*, method_inst*, klass*}），表基址 [G+8]，G=0x145AD5E98 为 BSS 运行时初始化 ⇒ **需模拟执行**。已排除：0x188 表、`{i32,i32,-1}` 区、「行 g 含 def/arg 索引」全表搜索（0 命中）、「泛型定义 tdi 列」特征扫描（0 候选）。 |
+| 11 | **泛型类型渲染**（新发现，2026-10-17）| 42,313 字段 | **已关闭（2026-10-17，§52）**：`GENERICINST.data`=g → startup-metadata 8B 行表（`hdr[0x120]^0x1C3F68EA`，行=`{defTdi, genericInstIdx}`）→ `Il2CppMetadataRegistration+0x28` 的 16B `Il2CppGenericInst{argc,pad,argv}` → argv 的 `Il2CppType*`。实测 `List`1<GameObject>`/`IComparer`1<Level2Map>`/`ReadOnlyCollection`1<MoleMole…>` 全对；字段类型 vs 6.4 oracle **98.33%**（泛型字段 95.23%）。遗留：kind 0x13/0x1E 泛型参数引用仍是占位（需 genericParameters 表） |
 
 ## 三、script.json 现状
 

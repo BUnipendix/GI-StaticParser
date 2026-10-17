@@ -57,6 +57,11 @@ pub fn gen71() -> Profile {
         td_nested_start: Some(Column { offset: 0x36, kind: ColKind::XorC, c: 0xC87C }),
         td_nested_count: Some(Column { offset: 0x45, kind: ColKind::XorC, c: 0xAB }),
         nested_types: Some(TableBase { hdr_off: 0x1B8, sub: None, xor: Some(0x586A_BAF1), add: None }),
+        // Generic-class rows live in startup-metadata.dat (loader 0x1405365BE..0x140536660):
+        //   base = startup + (i32(hdr[0x120]) ^ 0x1C3F68EA); rows = {defTdi u32, genericInstIndex i32}
+        // GenericInst structs: registration+0x28 -> 16B {argc, pad, Il2CppType** argv}.
+        generic_class_rows: Some(TableBase { hdr_off: 0x120, sub: None, xor: Some(0x1C3F_68EA), add: None }),
+        generic_insts_va: Some(0x1_4234_4A40),
         nested_stride: 4,
         // flags = raw + 0xDFA09F90 (mod 2^32) — decoded from the .upx0 mutated class
         // builder 0x159F63C4D: `mov edx,0xDFA09F90; add edx,[row+0xC]; mov [klass+0xAC],edx`.

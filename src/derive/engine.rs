@@ -13,6 +13,15 @@ pub struct Meta<'a> {
     pub body: Buffer<'a>,
     pub image: &'a [u8],
     pub image_base: u64,
+    /// PE sections as `(rva, virtual_size, raw_pointer, raw_size)` (for VA -> file offset).
+    pub sections: Vec<(u32, u32, u32, u32)>,
+    /// Sibling `startup-metadata.dat` bytes (4 MB), when present. It holds the generic-class
+    /// row table and other tables that are NOT in the global-metadata body.
+    pub startup: Option<&'a [u8]>,
+    /// Offset of the 8-byte generic-class rows in `startup` (0 = not available).
+    pub gc_rows: usize,
+    /// File offset of the 16-byte `Il2CppGenericInst` struct array (0 = not available).
+    pub generic_insts: usize,
     pub typearr: usize,
     pub typearr_len: usize,
     pub methodptrs: usize,
@@ -43,6 +52,18 @@ pub struct Meta<'a> {
 
 impl<'a> Meta<'a> {
     pub fn load(exe: &'a [u8], dat: &'a [u8], profile: Profile) -> Result<Self> {
+        Self::load_with_startup(exe, dat, None, profile)
+    }
+
+    /// Like [`Meta::load`], but also accepts the sibling `startup-metadata.dat`, which carries
+    /// the generic-class row table (without it `GENERICINST` types have no static form and are
+    /// rendered as `System.Object`).
+    pub fn load_with_startup(
+        exe: &'a [u8],
+        dat: &'a [u8],
+        startup: Option<&'a [u8]>,
+        profile: Profile,
+    ) -> Result<Self> {
         const BODY_OFF: usize = 0x210;
         if dat.len() <= BODY_OFF || &dat[..4] != b"MHY\0" {
             bail!("global-metadata.dat missing MHY magic");
@@ -59,8 +80,25 @@ impl<'a> Meta<'a> {
 
         let img = crate::pe::Image::parse(exe)?;
         let image_base = img.image_base();
+        let sections: Vec<(u32, u32, u32, u32)> = img
+            .sections()
+            .iter()
+            .map(|s| (s.virtual_address, s.virtual_size, s.raw_pointer, s.raw_size))
+            .collect();
         let rd = img.section(".rdata").ok_or_else(|| anyhow!(".rdata missing"))?;
         let rdata = (image_base + rd.virtual_address as u64, rd.raw_pointer as usize, rd.raw_size as usize);
+
+        // Generic tables: the row table is in startup-metadata, the GenericInst struct array
+        // is in the image (registration+0x28). Both are optional — absence just means
+        // `GENERICINST` types cannot be rendered (explicit warning at dump time).
+        let gc_rows = match (&profile.generic_class_rows, startup) {
+            (Some(t), Some(_)) => t.resolve(&header_bytes),
+            _ => 0,
+        };
+        let generic_insts = match profile.generic_insts_va {
+            Some(va) => img.va_to_file(va).unwrap_or(0) as usize,
+            None => 0,
+        };
 
         let (typearr, typearr_len) =
             locate_typearr(exe, &rdata).ok_or_else(|| anyhow!("typearr not located"))?;
@@ -125,6 +163,10 @@ impl<'a> Meta<'a> {
             body,
             image: exe,
             image_base,
+            sections,
+            startup,
+            gc_rows,
+            generic_insts,
             typearr,
             typearr_len,
             methodptrs,
@@ -467,6 +509,72 @@ impl<'a> Meta<'a> {
             return None;
         }
         Some(self.image[o + 0xB])
+    }
+
+    /// Map an absolute VA back to a file offset through the PE section table.
+    pub fn va_to_file(&self, va: u64) -> Option<usize> {
+        let rva = va.checked_sub(self.image_base)?;
+        if rva > u32::MAX as u64 {
+            return None;
+        }
+        let rva = rva as u32;
+        for &(sva, vsz, ro, rsz) in &self.sections {
+            if rva >= sva && rva < sva.saturating_add(vsz.max(rsz)) {
+                let rel = rva - sva;
+                if rel < rsz {
+                    let off = ro as usize + rel as usize;
+                    if off < self.image.len() {
+                        return Some(off);
+                    }
+                }
+                return None;
+            }
+        }
+        None
+    }
+
+    /// Read one 16-byte Il2CppType struct at a file offset: `(data u32, kind u8, flags u8)`.
+    pub fn il2cpp_type_at(&self, off: usize) -> Option<(u32, u8, u8)> {
+        if off + 16 > self.image.len() {
+            return None;
+        }
+        let data = u32::from_le_bytes(self.image[off..off + 4].try_into().ok()?);
+        Some((data, self.image[off + 0xA], self.image[off + 0xB]))
+    }
+
+    /// Resolve one `GENERICINST` generic-class index (`typearr` data) to
+    /// `(definition typeDefIndex, argument Il2CppType file offsets)`.
+    ///
+    /// `startup-metadata.dat` holds 8-byte rows `{defTdi u32, genericInstIndex i32}`; the
+    /// `genericInstIndex` selects a 16-byte `Il2CppGenericInst {argc, pad, Il2CppType** argv}`
+    /// in the image, whose `argv` points at an array of `Il2CppType*`.
+    pub fn generic_instance(&self, g: u32) -> Option<(u32, Vec<usize>)> {
+        let startup = self.startup?;
+        if self.gc_rows == 0 || self.generic_insts == 0 {
+            return None;
+        }
+        let at = self.gc_rows.checked_add((g as usize).checked_mul(8)?)?;
+        let row = startup.get(at..at + 8)?;
+        let def_tdi = u32::from_le_bytes(row[0..4].try_into().ok()?);
+        let gi = i32::from_le_bytes(row[4..8].try_into().ok()?);
+        if gi < 0 {
+            return None;
+        }
+        let gi_off = self.generic_insts.checked_add(gi as usize * 16)?;
+        let b = self.image.get(gi_off..gi_off + 16)?;
+        let argc = u32::from_le_bytes(b[0..4].try_into().ok()?);
+        let argv_va = u64::from_le_bytes(b[8..16].try_into().ok()?);
+        if argc > 64 {
+            return None;
+        }
+        let argv_off = self.va_to_file(argv_va)?;
+        let mut args = Vec::with_capacity(argc as usize);
+        for a in 0..argc as usize {
+            let p_off = argv_off.checked_add(a * 8)?;
+            let p = u64::from_le_bytes(self.image.get(p_off..p_off + 8)?.try_into().ok()?);
+            args.push(self.va_to_file(p)?);
+        }
+        Some((def_tdi, args))
     }
 
     pub fn method_rva(&self, gmi: usize) -> u32 {

@@ -687,7 +687,29 @@ fn dump_gen_cmd(
         _ => {}
     }
 
-    let m = static_mhy_dumper::derive::engine::Meta::load(&ga, &gm, profile)?;
+    // The generic-class rows live in the sibling startup-metadata.dat (same directory as
+    // global-metadata.dat). Missing file = GENERICINST types fall back to System.Object with an
+    // explicit warning; nothing is silently faked. The bytes must outlive `m` (borrowed).
+    let startup_bytes: Option<Vec<u8>> = {
+        let startup_path = std::path::Path::new(metadata)
+            .parent()
+            .map(|d| d.join("startup-metadata.dat"))
+            .filter(|p| p.exists());
+        match &startup_path {
+            Some(p) => Some(std::fs::read(p)?),
+            None => {
+                tracing::warn!("startup-metadata.dat not found next to the metadata; \
+                                GENERICINST types will render as System.Object");
+                None
+            }
+        }
+    };
+    let m = static_mhy_dumper::derive::engine::Meta::load_with_startup(
+        &ga,
+        &gm,
+        startup_bytes.as_deref(),
+        profile,
+    )?;
     tracing::info!(
         "header OK: strsec=0x{:X} td=0x{:X} md=0x{:X} fd=0x{:X} params=0x{:X} typearr=0x{:X}({}) mptrs=0x{:X}({})",
         m.strsec, m.td_base, m.md_base, m.fd_base, m.param_base,

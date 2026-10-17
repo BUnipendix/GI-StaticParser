@@ -252,6 +252,20 @@ pub struct Profile {
     pub td_nested_count: Option<Column>,
     #[serde(default)]
     pub nested_types: Option<TableBase>,
+
+    /// Generic-class row table: 8-byte rows `{defTypeDefIndex u32, genericInstIndex i32}`.
+    /// The table lives in the sibling **`startup-metadata.dat`** (loaded at the same time as
+    /// global-metadata), not in the metadata body; the offset is `hdr[slot] op imm`.
+    /// 7.1.0: slot 0x120 ^ 0x1C3F68EA (loader 0x1405365C5).
+    #[serde(default)]
+    pub generic_class_rows: Option<TableBase>,
+
+    /// VA of the runtime `Il2CppGenericInst` struct array (16-byte rows
+    /// `{u32 argc, u32 pad, Il2CppType** argv}`), i.e. `Il2CppMetadataRegistration+0x28`.
+    /// 7.1.0: 0x14234_4A40. Requires the `generic_class_rows` table to resolve a
+    /// `GENERICINST` type (data = generic-class index -> row -> genericInst -> type* args).
+    #[serde(default)]
+    pub generic_insts_va: Option<u64>,
     #[serde(default)]
     pub nested_stride: u32,
 
