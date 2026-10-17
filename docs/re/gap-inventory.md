@@ -37,6 +37,11 @@ Token 前 3 个 = 0x06000001/2/3 与 oracle 完全一致。回归 17 passed / 0 
 
 ## 二、仍缺（按解锁难度排序）
 
+> **2026-10-17 重大发现（§50）**：Metadata 目录另有 **startup-metadata.dat（4.06MB）**，是 **附加表容器**。
+> main-header 槽位取值后加到 startup 指针上即为表偏移（例：槽 0x84 ^0x582F3633 → 0x35D5E8 = images/assemblies 名表，已解出 `mscorlib.dll`/`System.dll`/`UnityEngine.*`）。
+> 之前 derive 锚点中的小偏移（0x43020/0x3DE954/0x35D5E8 等）可能是 startup 偏移而非 global body 偏移；
+> **properties/events/genericParameters/genericContainers 很可能都在 startup-metadata 中**，这是剩余缺口的主攻方向。
+
 | # | 数据 | 参考量 | 阻塞点 / 解锁路径 |
 |---|---|---|---|
 | 1 | 字段偏移注释 | 440,061 | **已接线（2026-10-17）**：磁盘无偏移表 ⇒ dump_gen 新增顺序布局复算（97.9% 核心规则验证），显式布局（flags&0x18==0x10）排除。7.1 实测：**321,796 字段已计算**（73%）/ 9,162 未解 / 109,214 静态字段（模块静态区不可推）。交叉验证 92.71%。待：精度提升（失配簇分析）+ 静态字段偏移来源 |

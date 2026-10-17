@@ -3919,3 +3919,41 @@ oracle 用**全限定 C# 名**（`System.Void`/`System.Int32`/`System.String`/`S
 ### 49.5 验证
 
 回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法。
+
+## 50. R11 第十七轮：发现 startup-metadata.dat —— 附加表容器（2026-10-17）
+
+> 不是需求，是执行记录。本轮为**结构性发现**，为剩余缺口（泛型/属性/事件/泛型参数）打开新路径。
+
+### 50.1 事实
+
+1. 游戏 Metadata 目录除 global-metadata.dat（82.7MB）外还有 **startup-metadata.dat（4,060,728 字节）**。
+2. 加载器（0x14053617E 起）连续调用 0x140523F70（读文件）两次：
+   - 第一个 → global-metadata；**body = 数据+0x210** 存全局；
+   - 第二个 → startup-metadata；**数据指针存 BSS 全局 0x145AD62C8**。
+   随后按 main-header 槽分配运行时缓存数组：`[reg+0x30]^0x28A0FA2D` = 683,568（typearr 数量）×8、
+   `hdr[0x60]^0x15335474`/0x46 = 88,904 类型 ×8、`hdr[0x134]+0x8EEFDB56`/0x1A = 733,442 方法 ×8。
+3. **startup-metadata 是附加表容器**：main-header 的若干槽是「startup 数据内偏移」（加载器把槽值 XOR/ADD 常数后加到 startup 指针上），
+   记录按各自 stride/掩码解码。已知映射：
+
+| main-hdr 槽 | 变换 | startup 偏移 | 表 |
+|---|---|---|---|
+| 0x84 | `^0x582F3633` | 0x35D5E8 | **images/assemblies 名表**：28B 记录，名字@+0x18，nameIdx = `(raw ^ 0x5E8998A9) − ((((i*0xBD1E70EB664)>>16)+0x724F4CCB) ^ 0x2BE02F3D)` |
+| 0x2C | `+0xE412B6A9` | 0x43020 | 待解（也是 derive 锚点之一）|
+| 0x6C | `+0xE028E1F0` | 0x3DE954 | 待解 |
+| 0x78/0x15C/0x1A4/0x10/0x1C | 待解 | — | 加载器 0x140538DB9 附近使用 |
+
+4. 验证（images 表）：解码得到 `mscorlib.dll`、`Mono.Security.dll`、`System.dll`、`System.Core.dll`、
+   `System.Runtime.CompilerServices.Unsafe.dll`、`UnityEngine.CoreModule.dll`… 与 GI 程序集列表一致 ✓。
+
+### 50.2 重要影响
+
+- 之前 derive 的 87 个锚点里，**小偏移（<4MB）的锚点可能是 startup-metadata 偏移而非 global body 偏移**（两者数值相加方式相同，易混）。
+  candidates：0x43020(slot 0x2C/0x8C)、0x3DE954(slot 0x6C)、0x35D5E8(slot 0x84)、0x113C0、0x31A118 等需重审语义。
+- 因此之前「属性/事件表在 global body 找不到」可能是找错文件：**propertyDefs/eventDefs/genericParameters/genericContainers 很可能在 startup-metadata 里**（标准 il2cpp 这些表本来就在 metadata；GI 把它们拆到 startup 文件并加密）。
+- 6.4 参考 dump 无 `// Image` 头部行（该 fork 未输出），images 表仅作分组辅助，低优先级。
+
+### 50.3 下一步
+
+1. 逐个解 startup 表的记录布局与字段掩码（方法：在加载器范围内每个 `startup_ptr + hdr[slot]` 使用点读循环体，提取 stride/字段变换/调用 decode 的位置）；
+2. 优先找 propertyDefs/eventDefs/genericParameters/genericContainers 表（名字列能解出属性名/泛型参数名即确认）；
+3. 若有泛型类/实例表 → 解决 gap #11。
