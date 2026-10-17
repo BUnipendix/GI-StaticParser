@@ -419,12 +419,17 @@ fn method_modifiers(f: u16) -> String {
     if f & 0x400 != 0 {
         s.push_str("abstract ");
     } else if f & 0x40 != 0 {
-        if f & 0x100 != 0 && f & 0x80 == 0 {
-            s.push_str("sealed override ");
-        } else if f & 0x80 == 0 {
-            s.push_str("virtual ");
-        } else {
-            s.push_str("override ");
+        // Reference dumps: private virtual methods (explicit interface implementations) carry
+        // only their visibility. Otherwise final -> `sealed override`, new-slot -> `virtual`,
+        // reused slot -> `override`.
+        if f & 0x7 != 1 {
+            if f & 0x20 != 0 {
+                s.push_str("sealed override ");
+            } else if f & 0x100 != 0 {
+                s.push_str("virtual ");
+            } else {
+                s.push_str("override ");
+            }
         }
     }
     if f & 0x2000 != 0 {

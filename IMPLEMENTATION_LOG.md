@@ -3881,3 +3881,41 @@ oracle 用**全限定 C# 名**（`System.Void`/`System.Int32`/`System.String`/`S
 ### 48.4 验证
 
 - 回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法 / 59,734 属性行。
+
+## 49. R11 第十六轮：方法修饰符精确对齐 + 泛型/静态偏移负结果（2026-10-17）
+
+> 不是需求，是执行记录。
+
+### 49.1 方法修饰符：72.69% → 96.75%
+
+用 oracle 反推 flags→修饰符规则（从 120 种 (flags, mods) 真实配对拟合）：
+
+- 可见性(0x7) → private/internal/protected/protected internal/public
+- static(0x10) → static；abstract(0x400) → abstract
+- 否则若 virtual(0x40)：
+  - **private 方法不输出 virtual/override/sealed**（显式接口实现，oracle 只显示 private）
+  - final(0x20) → `sealed override`；newslot(0x100) → `virtual`；否则 → `override`
+- extern(0x2000) → extern（oracle 有 1,296 处使用）
+
+旧实现用 0x80(hidebysig) 当 newslot 代理是错的。实测 sampled（2,500 共享类型、19,098 方法）：96.75% 全等。
+
+### 49.2 泛型类表输入：更多负结果
+
+- 「行 g 含 (def, arg) 表示」全表搜索（86 基址 × stride 4–32 × 每行位置）：对已知 List<GameObject>(g=3347) 的 def/arg 的 tdi 与 typearr 索引 **0 命中**；
+- 「泛型定义 tdi 列」（711 个定义、distinct 200–3000）特征扫描：0 候选；
+- 结论：泛型类表输入不是「按 g 索引、行内直接存 def/arg 索引」的简单表；仍需运行时代码路径/模拟执行。
+
+### 49.3 静态字段偏移：**定论不可静态推导**
+
+用 oracle 9,208 个含静态字段类型的「首个静态偏移 vs TypeDefIndex」检验：非递减仅 **50.2%**（恰随机）
+⇒ 静态区分配是**运行时类初始化顺序**，不是元数据顺序。109,214 个静态字段的偏移无法从 dat 静态推导（此前只有定性结论，本轮给出量化证据）。
+
+### 49.4 其它探测（未解）
+
+- 候选表 `0x48DC8D8`：12,000 行、8B `{递增 tdi(11750..88901), 0x1A9x 打包值}`；
+  与 oracle 属性类型集合相关性仅 0.075% ⇒ 非特性表；`0x1A9xFEEy` 按字符串打包索引解码为乱码（非主串堆 cipher）⇒ 身份未知。
+- images/assemblies 表：按「列解码出 *.dll」扫描 86 基址 × stride 8–64 → 0 命中（表基址不在已解锚点内或列变换未知）。
+
+### 49.5 验证
+
+回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法。

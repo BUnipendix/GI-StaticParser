@@ -46,12 +46,13 @@ Token 前 3 个 = 0x06000001/2/3 与 oracle 完全一致。回归 17 passed / 0 
 | 4 | 接口列表精确化 | **已关闭（2026-10-17）** | **own-count 列解出**：`interfacesCount = (u8@0x42 + 0xA2) & 0xFF`（86,587/88,902 类型 count==run 长度，sum 108,758 ≈ 109,607；Selectable 8 个接口与 oracle 完全一致）。dump 不再用 run-length 近似。剩余：泛型接口（GENERICINST，24,529 条）因 gap #11 跳过并计数 |
 | 5 | 方法 Slot 精确值 | REF 211,652 非零 | **已结论（2026-10-17）**：反汇编 0x1405155FC 构建器确认 slot=(i16)((u16@0x0C^0x1E2A)−mask2)，与引擎逐句一致；GI 7.1 元数据本身几乎全 -1。oracle 6.4 的非零 Slot 属 oracle 侧语义，不再视为缺陷 |
 | 5b | 类型名格式 | — | **已对齐（2026-10-17）**：全部原始类型/类名改全限定（`System.Void`/`System.Int32`/`System.String`/`System.Object`），数组 `System.Int32[]`、byref `&`；与 oracle 逐字一致（参数类型精确率 88.54%，余差泛型/混淆改名/重载配对）|
+| 5c | 方法修饰符 | — | **已对齐（2026-10-17）**：按 oracle 120 种 (flags, mods) 配对反推规则——private virtual 只输出可见性；final→`sealed override`、newslot→`virtual`、reuse→`override`；实测 sampled 一致率 **96.75%**（旧规则 72.69%，根因是把 0x80 hidebysig 当 newslot 代理）|
 | 6 | 属性 [Attribute] | 11,525 | **判读修正（2026-10-17）**：hdr[0x1D0] 的表是 **ParameterDefaultValue**（按类型解码默认值），不是特性表；参数默认值侧已定位（25,374 条）。字段默认值（枚举字面值）应有同构表待找 |
 | 7 | 枚举字面值 | **已解（2026-10-17）** | **已关闭**：字段默认值表 base = `hdr[0x164]^0x03893506`，12B 行 `{valueOff, fieldIndex, typeIdx}`，行数 `(hdr[0x144]+0xD1F800F2)/12`（75,548 行）；值区 `body+(hdr[0x128]^0x371354A2)+valueOff`，按 kind 解码；字符串 = `{u32 len, UTF-8}`。dump 已渲染 74,614 个 const 值；vs 6.4 oracle 枚举值 99.83%、全 const 99.26% |
 | 8 | stringLiterals.json | 689,799 串 | 字符串字面量表（独立于用户串堆）|
 | 9 | script.json ScriptString/Addresses/Signature | 689,799 / 239,153 | 依赖 #8 + 方法特征定位 |
 | 10 | il2cpp.h / DummyDll | 整套 | 依赖以上全部 |
-| 11 | **泛型类型渲染**（新发现，2026-10-17）| 42,313 字段 | 我们渲染裸 `object`，oracle 显示 `List<…>`/`Nullable<…>` 等。GENERICINST.data = 32B Il2CppGenericClass 表索引（entry {type*, class_inst*, method_inst*, klass*}），表基址 [G+8]，G=0x145AD5E98 为 BSS 运行时初始化 ⇒ 需追加载器构建输入表（候选 0x118 大表）；0x188 表非泛型表（实测语义待定）|
+| 11 | **泛型类型渲染**（新发现，2026-10-17）| 42,313 字段 | 我们渲染裸 `object`，oracle 显示 `List<…>`/`Nullable<…>` 等。GENERICINST.data = 32B Il2CppGenericClass 表索引（entry {type*, class_inst*, method_inst*, klass*}），表基址 [G+8]，G=0x145AD5E98 为 BSS 运行时初始化 ⇒ **需模拟执行**。已排除：0x188 表、`{i32,i32,-1}` 区、「行 g 含 def/arg 索引」全表搜索（0 命中）、「泛型定义 tdi 列」特征扫描（0 候选）。 |
 
 ## 三、script.json 现状
 
