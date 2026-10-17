@@ -243,6 +243,17 @@ pub struct Profile {
     /// canonical Il2CppDumper). 7.1.0: raw@0x32 ^ 0x8BA4.
     #[serde(default)]
     pub td_bitfield: Option<Column>,
+    /// Nested-type links: typeDef row `nestedTypesStart`/`nestedTypesCount` index the
+    /// nested-types table (u32 typeDef indexes). 7.1: start u16@0x36 ^ 0xC87C, count u8@0x45 ^ 0xAB,
+    /// table base = hdr[0x1B8] ^ 0x586ABAF1 (validated: Selectable -> [Transition, SelectionState]).
+    #[serde(default)]
+    pub td_nested_start: Option<Column>,
+    #[serde(default)]
+    pub td_nested_count: Option<Column>,
+    #[serde(default)]
+    pub nested_types: Option<TableBase>,
+    #[serde(default)]
+    pub nested_stride: u32,
 
     /// The full field table (all images): stride 8, `{name_raw@0, type_raw@4}` per row.
     pub field_names: TableBase,

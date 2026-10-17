@@ -33,6 +33,8 @@ pub struct Meta<'a> {
     pub iface_base: usize,
     /// Parameter-definition table base (8B rows; name@+4, typearr index@+0).
     pub param_def_base: usize,
+    /// Nested-types table base (u32 typeDef indexes per row).
+    pub nested_base: usize,
     /// Field default values: field-table index -> (value byte offset in the shared blob, value Il2CppType index).
     pub field_defaults: std::collections::HashMap<u32, (i32, u32)>,
     /// Body offset of the shared default-value data blob.
@@ -116,6 +118,7 @@ impl<'a> Meta<'a> {
             field_base: profile.field_names.resolve(&header_bytes),
             iface_base: profile.iface_table.resolve(&header_bytes),
             param_def_base: profile.param_defs.as_ref().map(|t| t.resolve(&header_bytes)).unwrap_or(0),
+            nested_base: profile.nested_types.as_ref().map(|t| t.resolve(&header_bytes)).unwrap_or(0),
             field_defaults,
             default_values,
             profile,
@@ -341,6 +344,39 @@ impl<'a> Meta<'a> {
         let raw = self.body.read_u32(row);
         let v = (raw ^ self.profile.param_def_type_xor).wrapping_sub(mask);
         Some(if v == u32::MAX { None } else { Some(v) })
+    }
+
+    /// typeDef nestedTypesStart (u16 column; 0xFFFF = none).
+    pub fn td_nested_start(&self, i: usize) -> Option<u32> {
+        let col = self.profile.td_nested_start.as_ref()?;
+        let rec = self.td_base + self.profile.td_stride as usize * i;
+        let raw = u16::from_le_bytes(
+            self.body.read_slice(rec + col.offset as usize, 2)?.try_into().ok()?,
+        ) as u32;
+        Some(match col.kind {
+            ColKind::XorC => raw ^ col.c,
+            _ => raw.wrapping_add(col.c),
+        })
+    }
+
+    /// typeDef nestedTypesCount (u8 column).
+    pub fn td_nested_count(&self, i: usize) -> Option<u32> {
+        let col = self.profile.td_nested_count.as_ref()?;
+        let rec = self.td_base + self.profile.td_stride as usize * i;
+        let raw = *self.body.read_slice(rec + col.offset as usize, 1)?.first()? as u32;
+        Some(match col.kind {
+            ColKind::XorC => (raw ^ (col.c & 0xFF)) & 0xFF,
+            _ => raw.wrapping_add(col.c) & 0xFF,
+        })
+    }
+
+    /// Row of the nested-types table (u32 typeDef index).
+    pub fn nested_types_at(&self, row: u32) -> Option<u32> {
+        self.profile.nested_types.as_ref()?;
+        let stride = self.profile.nested_stride as usize;
+        self.body
+            .read_slice(self.nested_base + stride * row as usize, stride)
+            .and_then(|b| b.get(0..4).map(|s| u32::from_le_bytes(s.try_into().unwrap())))
     }
 
     /// typeDef flags (TypeAttributes) — None when the profile lacks the column.

@@ -53,6 +53,11 @@ pub fn gen71() -> Profile {
         td_field_start: Column { offset: 0x00, kind: ColKind::XorC, c: 0x7262_8007 },
         td_fs_sentinel_raw: 0x8D9D_7FF8,
         td_field_count: Column { offset: 0x30, kind: ColKind::XorC, c: 0x9A6B },
+        // Nested-type links: start u16@0x36 ^ 0xC87C, count u8@0x45 ^ 0xAB, table hdr[0x1B8] ^ 0x586ABAF1.
+        td_nested_start: Some(Column { offset: 0x36, kind: ColKind::XorC, c: 0xC87C }),
+        td_nested_count: Some(Column { offset: 0x45, kind: ColKind::XorC, c: 0xAB }),
+        nested_types: Some(TableBase { hdr_off: 0x1B8, sub: None, xor: Some(0x586A_BAF1), add: None }),
+        nested_stride: 4,
         // flags = raw + 0xDFA09F90 (mod 2^32) — decoded from the .upx0 mutated class
         // builder 0x159F63C4D: `mov edx,0xDFA09F90; add edx,[row+0xC]; mov [klass+0xAC],edx`.
         // Validated statistically (iface 0.0181/abs 0.089/sealed 0.505/pub 0.790) and

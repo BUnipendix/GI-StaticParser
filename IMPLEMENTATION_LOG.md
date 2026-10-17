@@ -3738,3 +3738,86 @@ decoded 结构里，实测公式 B 正确）
 - 大表定位：「已知行数 × stride = 表边界差」比内容统计靠谱得多（本轮一次命中）。
 - hdr 槽位 → 常数反查：把 `raw ^ target` 作为立即数在 .text 搜索，再校验指令边界（伪命中很多）。
 - Il2CppType 的 byref/pinned 在 +0xB 的 bit6/bit7，kind 字节不含 byref。
+
+## 45. R11 第十二轮：泛型表与嵌套关系的边界确认（2026-10-17）
+
+> 不是需求，是执行记录。本轮主要是负结果 + 2 个正事实。
+
+### 45.1 泛型类表：静态数据形态已排除
+
+- 结构判据（强）：32B 行 `{type*, class_inst*, method_inst*, klass*}`，其中 class_inst = `{u32 argc∈1..8, u64 argv*→type 数组}`。
+  在 **exe 全文件**扫描 → **0 命中**；在 dat body 也 0 命中（q0 指向 0x142E1FB30 起的 type 数组）。
+- 唯一「q0→type 数组」的 32B 结构在 exe `.data` 0x54D9FC0，23,455 行，但四个 qword 全部指向 type 数组
+  （q0 diff 多为 0x200/0x270），是 **type 指针缓存**，不是泛型类表。
+- 结论：泛型类表**没有静态数据形态**（GI 反 dump 设计），必须走模拟执行/加载器深挖；
+  它不是 0x188 表（§43 已证），也不是 `{i32,i32,-1}` 区（下）。
+
+### 45.2 `{i32,i32,-1}` 密集区身份修正
+
+- 区域：body 0x122FA34（~474k 行）、0x138CC78/84（~156k）、0x13A73C0（~166k）。
+- 值空间 = **方法索引**（<733,442），对 typearr/tdi 索引空间 0 命中 ⇒ 不是泛型/接口数据。
+  语义很可能是 **vtable/虚方法对**（impl↔decl），不属于 dump.cs/script.json 数据项，优先级降低。
+
+### 45.3 嵌套类型父关系：不在 typeDef 行已测列
+
+- 用 6.4 oracle 提取 **4,778 组 (nested tdi, parent tdi)** 真值；
+- 对 typeDef 行所有未知 u32 列（0x04/0x10/0x20/0x24/0x28/0x34/0x38/0x3C/0x40/0x44）测试：
+  原值、`^tag@0x1C`、以及 4 条已知掩码链（field/pmask/mask2/param）减法后再比 → **无常数关系**；
+  对 u16 列也试过（tdi 88,902 超出 u16 范围，排除）。
+- 结论：declaringTypeIndex 要么不在 typeDef 行（另有 nestedTypes 表且带未知变换），要么掩码链未知。
+  嵌套类型全名渲染暂不可得（影响 ~1,490 处参数类型显示，仅显示差异不影响类型身份）。
+
+### 45.4 正事实
+
+1. **静态元数据注册 +0x50 = type 数组**：0x142871B68+0x50 = 0x142E1FB30，与 engine 定位的 typearr 完全一致（此前靠启发式定位，现有权威交叉验证）。
+2. **byvalTypeIndex 列重确认**：typeDef 行 `u16@0x3E − 0x1398`（反汇编 0x140512990，比较 -1；
+   实测 Selectable/Transition 均为 -1 ✓）。注：elementTypeIndex 是 0x1C 列（哨兵 0xDEBA5049，见 §7 文档）；
+   parent 公式里把它当「tag」只是公式等价，列语义以本节为准。
+
+### 45.5 方法教训
+
+- 找「每项含 2-3 个指针的结构表」时，先构造**双字段联合判据**（如 argc+argv 双条件），比单字段命中率判据强得多。
+- Il2CppDumper 的 script.json 生成代码不在 Perfare master 仓库（Program/Decompiler/Executor 均无 ScriptJson 引用，
+  仅 ScriptJson.cs 定义 schema），无法从源码核对 Signature 格式 ⇒ **不猜格式**，暂不实现。
+
+## 46. R11 第十三轮：嵌套类型全名 + dump.cs 头部格式对齐（2026-10-17）
+
+> 不是需求，是执行记录。
+
+### 46.1 嵌套类型关系（已关闭 gap 3b）
+
+- 线索来自 `docs/re/metadata-loading-flow-7.1.0.md`：`0x36 u16 ^0xC87C = nestedTypesStart`、
+  `0x45 u8 ^0xAB = nestedTypesCount`、`0x1B8 表 ^0x586ABAF1 = 嵌套类型 u32 索引表`。
+- 验证：Selectable(tdi 3533) → nested start=795 count=2 → [3534 Transition, 3535 SelectionState] ✓ 与 oracle 完全一致。
+- 实现：profile 增 `td_nested_start/td_nested_count/nested_types/nested_stride`；engine 增
+  `td_nested_start/td_nested_count/nested_types_at`；dump_gen 构建 child→parent 映射。
+
+### 46.2 dump.cs 头部格式对齐（按 Il2CppDumper 实际行为）
+
+从 6.4 oracle 反推出规则，并与 Il2CppDumper 源码（Il2CppDecompiler.cs）核对：
+
+| 元素 | 旧输出 | 新输出（对齐后）|
+|---|---|---|
+| 类型头名 | 短名（依赖 // Namespace 行）| **全限定**：`public class System.ObjectDisposedException`；嵌套类型带声明链 `UnityEngine.UI.Selectable.Transition` |
+| 基类 | 全限定 `: System.InvalidOperationException` | **短名** `: InvalidOperationException`；直接继承 Object 显示 `: Object`；enum/struct/interface 不显示基类 |
+| 接口 | `, X` 前缀拼接 | ` : a, b, c`；接口**全限定**；遇 System.Object 垃圾项即截断 |
+| 枚举 extends | 打印继承接口 | 仍打印（见下——近似限制）|
+| script.json 方法名 | namespace+name 手工拼接 | 同一 joined 全名逻辑（嵌套类型也正确）|
+
+- 实测样例：
+  `public class UnityEngine.UI.Selectable : UIBehaviour, UnityEngine.EventSystems.IMoveHandler, ...`
+  `public enum UnityEngine.UI.GraphicRaycaster.BlockingObjects : ...`
+  `public struct System.ValueTuple // TypeDefIndex: 108`
+
+### 46.3 仍未解决（本轮确认）
+
+- **接口 own-count 列**未定位：近似列表包含继承接口（enum 显示 System.Enum 的 IComparable/IFormattable/IConvertible，
+  而 6.4 oracle 的 enum 不显示），说明 iface 表里是**全量接口集**，需要 per-type count 截断；
+  且 `0x3A`（ifaceStart）列语义存疑（部分类型 span=0 导致丢接口，如 ValueTuple 无接口输出）。
+- 嵌套关系的「反向」也需注意：`declaringTypeIndex` 列未找到（§45），但嵌套表已足够渲染全名。
+- 泛型定义名仍是 `` `1 `` 形式（oracle 为 `<T1>`），需 genericParameters 表（未定位）——不猜命名。
+
+### 46.4 验证
+
+- 回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法；
+- 参数类型一致性 83.2%（嵌套类型解析后提升），参数名 91.37% 不变。

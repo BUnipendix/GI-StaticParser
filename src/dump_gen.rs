@@ -210,8 +210,8 @@ impl<'a> LayoutCalc<'a> {
 
 /// Type name for an Il2CppType index, including the `&` suffix for byref types (the
 /// byref flag lives in the typearr entry's flag byte bit6, not in the kind byte).
-pub fn type_name(m: &Meta, tds: &[Td], ti: u32, depth: u32) -> String {
-    let base = type_name_inner(m, tds, ti, depth);
+pub fn type_name(m: &Meta, tds: &[Td], parents: &[Option<u32>], ti: u32, depth: u32) -> String {
+    let base = type_name_inner(m, tds, parents, ti, depth);
     let byref = m
         .il2cpp_type_flags(ti as usize)
         .map(|f| f & 0x40 != 0)
@@ -224,7 +224,7 @@ pub fn type_name(m: &Meta, tds: &[Td], ti: u32, depth: u32) -> String {
 }
 
 /// Type name for an Il2CppType index (recursion depth-limited; class names via `tds`).
-pub fn type_name_inner(m: &Meta, tds: &[Td], ti: u32, depth: u32) -> String {
+pub fn type_name_inner(m: &Meta, tds: &[Td], parents: &[Option<u32>], ti: u32, depth: u32) -> String {
     if depth > 8 {
         return "object".into();
     }
@@ -256,15 +256,16 @@ pub fn type_name_inner(m: &Meta, tds: &[Td], ti: u32, depth: u32) -> String {
             // CLASS/VALUETYPE/OBJECT: data = typeDefIndex (mhy packs the tdi here)
             let tdi = data as usize;
             match tds.get(tdi) {
-                Some(t) => match (t.namespace.as_str(), t.name.as_str()) {
-                    // Only System.Object / System.String take the C# keyword form; other
-                    // assemblies have their own `Object` / `String` types (UnityEngine.Object
-                    // etc.) that must keep their qualified name.
-                    ("System", "Object") => "object".into(),
-                    ("System", "String") => "string".into(),
-                    ("", n) => n.to_string(),
-                    (ns, n) => format!("{}.{}", ns, n),
-                },
+                Some(t) => {
+                    let nested = parents.get(tdi).map(|p| p.is_some()).unwrap_or(false);
+                    if !nested && t.namespace == "System" && t.name == "Object" {
+                        "object".into()
+                    } else if !nested && t.namespace == "System" && t.name == "String" {
+                        "string".into()
+                    } else {
+                        joined_type_name(tds, parents, data, depth + 1)
+                    }
+                }
                 None => "object".into(),
             }
         }
@@ -277,21 +278,21 @@ pub fn type_name_inner(m: &Meta, tds: &[Td], ti: u32, depth: u32) -> String {
             // SZARRAY: data = Il2CppType* (VA into .rdata)
             let et = ptr_type_index(m, data);
             match et {
-                Some(t) => format!("{}[]", type_name(m, tds, t, depth + 1)),
+                Some(t) => format!("{}[]", type_name(m, tds, parents, t, depth + 1)),
                 None => "object[]".into(),
             }
         }
         0x14 => {
             let et = ptr_type_index(m, data);
             match et {
-                Some(t) => format!("{}[,]", type_name(m, tds, t, depth + 1)),
+                Some(t) => format!("{}[,]", type_name(m, tds, parents, t, depth + 1)),
                 None => "Array".into(),
             }
         }
         0x0F => {
             let et = ptr_type_index(m, data);
             match et {
-                Some(t) => format!("{}*", type_name(m, tds, t, depth + 1)),
+                Some(t) => format!("{}*", type_name(m, tds, parents, t, depth + 1)),
                 None => "object*".into(),
             }
         }
@@ -300,7 +301,7 @@ pub fn type_name_inner(m: &Meta, tds: &[Td], ti: u32, depth: u32) -> String {
             // cannot tell `ref` from `out`; render the byref type form only).
             let et = ptr_type_index(m, data);
             match et {
-                Some(t) => format!("{}&", type_name(m, tds, t, depth + 1)),
+                Some(t) => format!("{}&", type_name(m, tds, parents, t, depth + 1)),
                 None => "object&".into(),
             }
         }
@@ -386,10 +387,26 @@ fn base_name(m: &Meta, tds: &[Td], parent_tarr: u32) -> Option<String> {
         return None;
     }
     let t = tds.get(data as usize)?;
-    match (t.namespace.as_str(), t.name.as_str()) {
-        ("System", "Object") => None,
-        (_, n) if t.namespace.is_empty() => Some(n.to_string()),
-        (_, n) => Some(format!("{}.{}", t.namespace, n)),
+    // Reference dumps print the base type UNQUALIFIED (e.g. `: Object`, `: InvalidOperationException`).
+    Some(t.name.clone())
+}
+
+/// Fully-qualified display name, Il2CppDumper style: nested types carry their declaring
+/// type chain (`UnityEngine.UI.Selectable.Transition`), top-level types are namespace-qualified.
+fn joined_type_name(tds: &[Td], parents: &[Option<u32>], tdi: u32, depth: u32) -> String {
+    if depth > 16 {
+        return String::new();
+    }
+    let Some(t) = tds.get(tdi as usize) else {
+        return String::new();
+    };
+    if let Some(Some(p)) = parents.get(tdi as usize) {
+        return format!("{}.{}", joined_type_name(tds, parents, *p, depth + 1), t.name);
+    }
+    if t.namespace.is_empty() {
+        t.name.clone()
+    } else {
+        format!("{}.{}", t.namespace, t.name)
     }
 }
 
@@ -595,6 +612,25 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
     iface_starts.sort_unstable();
     iface_starts.dedup();
 
+    // Nested-type parent map (child typeDef index -> declaring typeDef index), built from the
+    // typeDef nestedTypesStart/Count columns and the nested-types table (u32 typeDef indexes).
+    let mut parents: Vec<Option<u32>> = vec![None; tds.len()];
+    for i in 0..tds.len() {
+        let (Some(start), Some(count)) = (m.td_nested_start(i), m.td_nested_count(i)) else {
+            continue;
+        };
+        if start == 0xFFFF || count == 0 {
+            continue;
+        }
+        for k in 0..count {
+            if let Some(child) = m.nested_types_at(start + k) {
+                if (child as usize) < parents.len() {
+                    parents[child as usize] = Some(i as u32);
+                }
+            }
+        }
+    }
+
     // script.json first (streamed); fill ScriptMethod from all methods
     let mut script_methods: Vec<(u64, String)> = Vec::with_capacity(mds.len());
     // File-scope sequential token for non-constructor methods (reference dumps number
@@ -610,12 +646,15 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
         // the all-sentinel padding tail.
         ntypes += 1;
         writeln!(w, "\n// Namespace: {}", td.namespace)?;
-        // kind + extends clause; interface count = next distinct iface start (offsets
-        // list includes interfaces inherited from bases)
+        // kind + extends clause (Il2CppDumper rules: value types/enums/interfaces print no
+        // base; base is unqualified; interfaces are qualified; every list is ` : a, b, c`).
         let kind = type_kind(m, &tds, td);
-        let mut extends = String::new();
-        if let Some(base) = base_name(m, &tds, td.parent_tarr) {
-            extends.push_str(&format!(" : {base}"));
+        let mut extends: Vec<String> = Vec::new();
+        let is_value_like = td.bitfield & 3 != 0; // bit0 IsValueType, bit1 IsEnum
+        if kind == "class" && !is_value_like {
+            if let Some(base) = base_name(m, &tds, td.parent_tarr) {
+                extends.push(base);
+            }
         }
         if let Some(iface_start) = td.iface_start {
             // NOTE(known limitation): the per-type interface *count* column has not been
@@ -639,7 +678,20 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
                     Some((k, _, _)) if matches!(k, 0x11 | 0x12 | 0x15) => {}
                     _ => break,
                 }
-                extends.push_str(&format!(", {}", type_name(m, &tds, t as u32, 0)));
+                // Approximation guard: a System.Object entry means we walked past this type's
+                // own run (Object is never an interface).
+                if matches!(m.il2cpp_type(t as usize), Some((0x12, d, _)) if tds
+                    .get(d as usize)
+                    .map(|x| x.namespace == "System" && x.name == "Object")
+                    .unwrap_or(false))
+                {
+                    break;
+                }
+                let iname = type_name(m, &tds, &parents, t as u32, 0);
+                if iname == "object" {
+                    break;
+                }
+                extends.push(iname);
                 emitted += 1;
             }
             if emitted > 0 {
@@ -649,7 +701,18 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
                 unresolved_iface_runs += 1;
             }
         }
-        writeln!(w, "{}{kind} {}{extends} // TypeDefIndex: {i}", type_modifiers(td), td.name)?;
+        let extends_str = if extends.is_empty() {
+            String::new()
+        } else {
+            format!(" : {}", extends.join(", "))
+        };
+        let display = joined_type_name(&tds, &parents, i as u32, 0);
+        writeln!(
+            w,
+            "{}{kind} {}{extends_str} // TypeDefIndex: {i}",
+            type_modifiers(td),
+            display
+        )?;
         writeln!(w, "{{")?;
         // fields, natively from the full field table (per-row masked name + type)
         write!(w, "\t// Fields\n")?;
@@ -663,7 +726,7 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
                 let fti = m.field_type_idx(row);
                 let (kind, _data, attrs) = m.il2cpp_type(fti as usize).unwrap_or((0, 0, 0));
                 let _ = kind;
-                let tn = type_name(m, &tds, fti, 0);
+                let tn = type_name(m, &tds, &parents, fti, 0);
                 let static_ = attrs & 0x10 != 0;
                 let offset = if static_ {
                     None
@@ -734,8 +797,8 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
             if md.name != ".ctor" && md.name != ".cctor" {
                 continue;
             }
-            let ret = type_name(m, &tds, md.ret_type, 0);
-            let (params, n_unresolved) = self_params(m, &tds, md);
+            let ret = type_name(m, &tds, &parents, md.ret_type, 0);
+            let (params, n_unresolved) = self_params(m, &tds, &parents, md);
             unresolved_params += n_unresolved;
             // Constructors carry Token 0 in the reference dumps (tokens number the
             // non-constructor methods sequentially from 0x06000001 in file order).
@@ -753,11 +816,7 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
             nmethods += 1;
             script_methods.push((
                 m.image_base + md.rva as u64,
-                if td.namespace.is_empty() {
-                    format!("{}.{}", td.name, md.name)
-                } else {
-                    format!("{}.{}.{}", td.namespace, td.name, md.name)
-                },
+                format!("{}.{}", joined_type_name(&tds, &parents, i as u32, 0), md.name),
             ));
         }
         writeln!(w, "\n\t// Methods")?;
@@ -766,8 +825,8 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
             if md.name == ".ctor" || md.name == ".cctor" {
                 continue;
             }
-            let ret = type_name(m, &tds, md.ret_type, 0);
-            let (params, n_unresolved) = self_params(m, &tds, md);
+            let ret = type_name(m, &tds, &parents, md.ret_type, 0);
+            let (params, n_unresolved) = self_params(m, &tds, &parents, md);
             unresolved_params += n_unresolved;
             method_token = method_token.wrapping_add(1);
             let token = 0x0600_0000u32 | method_token;
@@ -788,11 +847,7 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
                 // Fully-qualified: the namespace is what disambiguates the 689 duplicated
                 // simple class names in this build (an earlier version emitted the bare
                 // class name, so a Ghidra import collided across namespaces).
-                if td.namespace.is_empty() {
-                    format!("{}.{}", td.name, md.name)
-                } else {
-                    format!("{}.{}.{}", td.namespace, td.name, md.name)
-                },
+                format!("{}.{}", joined_type_name(&tds, &parents, i as u32, 0), md.name),
             ));
         }
         writeln!(w, "}}")?;
@@ -830,7 +885,7 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
 }
 
 /// Returns the rendered parameter list plus how many entries are still placeholders.
-fn self_params(m: &Meta, tds: &[Td], md: &Md) -> (Vec<String>, usize) {
+fn self_params(m: &Meta, tds: &[Td], parents: &[Option<u32>], md: &Md) -> (Vec<String>, usize) {
     // Parameter definitions: 8-byte rows indexed by the method's global paramStart
     // (disassembled runtime accessor 0x1405297EE). Type index -> Il2CppType, name via the
     // shared string cipher.
@@ -842,7 +897,7 @@ fn self_params(m: &Meta, tds: &[Td], md: &Md) -> (Vec<String>, usize) {
     for k in 0..md.param_count as u32 {
         let idx = md.param_start.wrapping_add(k);
         let tn = match m.param_type(idx) {
-            Some(Some(ti)) => type_name(m, tds, ti, 0),
+            Some(Some(ti)) => type_name(m, tds, parents, ti, 0),
             Some(None) => "object".to_string(),
             None => {
                 unresolved += 1;
