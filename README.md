@@ -11,7 +11,8 @@ with **no live process** — and emits an [Il2CppDumper](https://github.com/Perf
 decryption statically: the metadata body is the raw `.dat` from offset `0x210`, the header is an
 embedded blob in the main module's `.rdata` (located by a self-validating scan), and all tables are
 decoded with constant-keyed recipes recovered by reverse-engineering. Full details in
-[`RECIPE.md`](RECIPE.md).
+[`RECIPE.md`](RECIPE.md). Tool inventory, cross-version workflows and pitfalls:
+[`docs/TOOLS.md`](docs/TOOLS.md).
 
 ## Build
 
