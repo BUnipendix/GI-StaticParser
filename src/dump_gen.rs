@@ -208,8 +208,23 @@ impl<'a> LayoutCalc<'a> {
     }
 }
 
-/// Type name for an Il2CppType index (recursion depth-limited; class names via `tds`).
+/// Type name for an Il2CppType index, including the `&` suffix for byref types (the
+/// byref flag lives in the typearr entry's flag byte bit6, not in the kind byte).
 pub fn type_name(m: &Meta, tds: &[Td], ti: u32, depth: u32) -> String {
+    let base = type_name_inner(m, tds, ti, depth);
+    let byref = m
+        .il2cpp_type_flags(ti as usize)
+        .map(|f| f & 0x40 != 0)
+        .unwrap_or(false);
+    if byref {
+        format!("{}&", base)
+    } else {
+        base
+    }
+}
+
+/// Type name for an Il2CppType index (recursion depth-limited; class names via `tds`).
+pub fn type_name_inner(m: &Meta, tds: &[Td], ti: u32, depth: u32) -> String {
     if depth > 8 {
         return "object".into();
     }
@@ -241,11 +256,14 @@ pub fn type_name(m: &Meta, tds: &[Td], ti: u32, depth: u32) -> String {
             // CLASS/VALUETYPE/OBJECT: data = typeDefIndex (mhy packs the tdi here)
             let tdi = data as usize;
             match tds.get(tdi) {
-                Some(t) => match t.name.as_str() {
-                    "Object" => "object".into(),
-                    "String" => "string".into(),
-                    n if t.namespace.is_empty() => n.to_string(),
-                    n => format!("{}.{}", t.namespace, n),
+                Some(t) => match (t.namespace.as_str(), t.name.as_str()) {
+                    // Only System.Object / System.String take the C# keyword form; other
+                    // assemblies have their own `Object` / `String` types (UnityEngine.Object
+                    // etc.) that must keep their qualified name.
+                    ("System", "Object") => "object".into(),
+                    ("System", "String") => "string".into(),
+                    ("", n) => n.to_string(),
+                    (ns, n) => format!("{}.{}", ns, n),
                 },
                 None => "object".into(),
             }
@@ -275,6 +293,15 @@ pub fn type_name(m: &Meta, tds: &[Td], ti: u32, depth: u32) -> String {
             match et {
                 Some(t) => format!("{}*", type_name(m, tds, t, depth + 1)),
                 None => "object*".into(),
+            }
+        }
+        0x10 => {
+            // BYREF: `T&` (the runtime parameter table has no per-param flags column, so we
+            // cannot tell `ref` from `out`; render the byref type form only).
+            let et = ptr_type_index(m, data);
+            match et {
+                Some(t) => format!("{}&", type_name(m, tds, t, depth + 1)),
+                None => "object&".into(),
             }
         }
         _ => format!("object/*k{kind:#x}*/"),
@@ -804,29 +831,26 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
 
 /// Returns the rendered parameter list plus how many entries are still placeholders.
 fn self_params(m: &Meta, tds: &[Td], md: &Md) -> (Vec<String>, usize) {
-    // params table: entries {key@0, type@4, ?@8}, key = paramStart search (stride 12).
-    // The extra additive term of paramStart is resolved by anchoring: the first method
-    // with N>0 params must find its key in the table; we search a small correction set.
+    // Parameter definitions: 8-byte rows indexed by the method's global paramStart
+    // (disassembled runtime accessor 0x1405297EE). Type index -> Il2CppType, name via the
+    // shared string cipher.
     let mut out = Vec::new();
     if md.param_count == 0 {
         return (out, 0);
     }
-    let _ = &md.param_start;
     let mut unresolved = 0usize;
-    for _k in 0..md.param_count {
-        // locate entry: linear scan over the table comparing column0 to the key
-        // (the runtime does exactly this; the table is small per key region)
-        let found: Option<(usize, u32, u32)> = None;
-        // TODO(derive): the params table rows are shuffled; the runtime windowed-searches
-        // an encoded key (decompiled at 0x140528890). Param NAMES are not runtime-readable
-        // (metadata paramDef name table not yet located), so types alone cannot complete
-        // the dump.cs signature — parked until both are solved (see IMPLEMENTATION_LOG).
-        if let Some((_, ti, _)) = found {
-            out.push(type_name(m, tds, ti, 0));
-        } else {
-            out.push("object /*unresolved*/".into());
-            unresolved += 1;
-        }
+    for k in 0..md.param_count as u32 {
+        let idx = md.param_start.wrapping_add(k);
+        let tn = match m.param_type(idx) {
+            Some(Some(ti)) => type_name(m, tds, ti, 0),
+            Some(None) => "object".to_string(),
+            None => {
+                unresolved += 1;
+                "object /*unresolved*/".to_string()
+            }
+        };
+        let name = m.param_name(idx).unwrap_or_else(|| format!("arg{k}"));
+        out.push(format!("{} {}", tn, name));
     }
     (out, unresolved)
 }

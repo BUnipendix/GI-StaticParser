@@ -46,6 +46,31 @@ impl FieldMaskChain {
     }
 }
 
+/// Parameter-table row mask (disassembled from 0x140529819):
+/// `v = ((i*mul1) ^ xor1) * mul2 >> shift`, truncated to u32, then
+/// `((v ^ xor2) + add).wrapping_add(xor3)` — both columns subtract the same mask.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ParamMaskChain {
+    pub mul1: u32,
+    pub xor1: u32,
+    pub mul2: u32,
+    pub shift: u32,
+    pub xor2: u32,
+    pub add: u32,
+    pub xor3: u32,
+}
+
+impl ParamMaskChain {
+    #[inline]
+    pub fn eval(&self, i: u32) -> u32 {
+        let mut v = ((i as u64) * self.mul1 as u64) ^ self.xor1 as u64;
+        v = v.wrapping_mul(self.mul2 as u64);
+        let v = (v >> self.shift) as u32;
+        let v = (v ^ self.xor2).wrapping_add(self.add);
+        v ^ self.xor3
+    }
+}
+
 impl MaskChain {
     #[inline]
     pub fn eval(&self, i: u32) -> u32 {
@@ -271,10 +296,24 @@ pub struct Profile {
     pub fd_attrs: Column,
     pub fd_pmask: MaskChain,
 
-    /// 7.1 params table: entries {key@0, type@4, ?@8}, key searched linearly.
+    /// 7.1 params table: entries {key@0, type@4, ?@8}, key searched linearly. (parameter DEFAULT values)
     pub param_stride: u32,
     pub param_key_c: u32,
     pub param_extra_is_slot: bool,
+
+    /// PARAMETER definition table (8-byte rows): name at +4, typearr index at +0 (-1 = none).
+    /// Disassembled at 0x1405297EE: base = hdr[0x68] ^ 0x146BE503; both columns decode as
+    /// `(raw ^ col_xor).wrapping_sub(mask(index))`, where the mask is the same chain for both.
+    #[serde(default)]
+    pub param_defs: Option<TableBase>,
+    #[serde(default)]
+    pub param_def_stride: u32,
+    #[serde(default)]
+    pub param_def_name_xor: u32,
+    #[serde(default)]
+    pub param_def_type_xor: u32,
+    #[serde(default)]
+    pub param_def_mask: Option<ParamMaskChain>,
 }
 
 #[cfg(test)]

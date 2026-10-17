@@ -31,6 +31,8 @@ pub struct Meta<'a> {
     pub slot_base: usize,
     pub field_base: usize,
     pub iface_base: usize,
+    /// Parameter-definition table base (8B rows; name@+4, typearr index@+0).
+    pub param_def_base: usize,
     /// Field default values: field-table index -> (value byte offset in the shared blob, value Il2CppType index).
     pub field_defaults: std::collections::HashMap<u32, (i32, u32)>,
     /// Body offset of the shared default-value data blob.
@@ -113,6 +115,7 @@ impl<'a> Meta<'a> {
             slot_base: profile.slot_table.resolve(&header_bytes),
             field_base: profile.field_names.resolve(&header_bytes),
             iface_base: profile.iface_table.resolve(&header_bytes),
+            param_def_base: profile.param_defs.as_ref().map(|t| t.resolve(&header_bytes)).unwrap_or(0),
             field_defaults,
             default_values,
             profile,
@@ -311,6 +314,35 @@ impl<'a> Meta<'a> {
         self.body.read_slice(self.default_values + off as usize, len)
     }
 
+    /// Parameter-definition row mask (parameter index space).
+    #[inline]
+    pub fn param_def_mask(&self, i: u32) -> Option<u32> {
+        Some(self.profile.param_def_mask.as_ref()?.eval(i))
+    }
+
+    /// Parameter NAME for global parameter index `i` (disassembled accessor 0x1405297EE).
+    pub fn param_name(&self, i: u32) -> Option<String> {
+        let stride = self.profile.param_def_stride as usize;
+        self.profile.param_defs.as_ref()?;
+        let mask = self.param_def_mask(i)?;
+        let row = self.param_def_base + stride * i as usize;
+        let raw = self.body.read_u32(row + 4);
+        let idx = (raw ^ self.profile.param_def_name_xor).wrapping_sub(mask);
+        Some(self.decode_str(idx))
+    }
+
+    /// Parameter TYPE for global parameter index `i`: `Some(None)` = declared `null` type,
+    /// `None` = table unavailable.
+    pub fn param_type(&self, i: u32) -> Option<Option<u32>> {
+        let stride = self.profile.param_def_stride as usize;
+        self.profile.param_defs.as_ref()?;
+        let mask = self.param_def_mask(i)?;
+        let row = self.param_def_base + stride * i as usize;
+        let raw = self.body.read_u32(row);
+        let v = (raw ^ self.profile.param_def_type_xor).wrapping_sub(mask);
+        Some(if v == u32::MAX { None } else { Some(v) })
+    }
+
     /// typeDef flags (TypeAttributes) — None when the profile lacks the column.
     pub fn td_flags(&self, i: usize) -> Option<u32> {
         let p = &self.profile;
@@ -381,6 +413,16 @@ impl<'a> Meta<'a> {
             u32::from_le_bytes(d[0..4].try_into().unwrap()),
             u16::from_le_bytes(d[8..10].try_into().unwrap()),
         ))
+    }
+
+    /// Il2CppType flag byte (typearr entry +0xB): bit6 = byref, bit7 = pinned.
+    #[inline]
+    pub fn il2cpp_type_flags(&self, idx: usize) -> Option<u8> {
+        let o = self.typearr + idx * 16;
+        if o + 16 > self.image.len() {
+            return None;
+        }
+        Some(self.image[o + 0xB])
     }
 
     pub fn method_rva(&self, gmi: usize) -> u32 {

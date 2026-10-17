@@ -6,7 +6,7 @@
 //! `discover` (constant-pool re-derivation); a layout change surfaces as a
 //! validator failure naming the broken step.
 
-use super::profile::{ColKind, Column, FieldMaskChain, MaskChain, Profile, TableBase};
+use super::profile::{ColKind, Column, FieldMaskChain, MaskChain, ParamMaskChain, Profile, TableBase};
 
 /// The 7.1 layout with its measured constants.
 pub fn gen71() -> Profile {
@@ -72,6 +72,21 @@ pub fn gen71() -> Profile {
         field_defaults: Some(TableBase { hdr_off: 0x164, sub: None, xor: Some(0x0389_3506), add: None }),
         field_defaults_size: Some(TableBase { hdr_off: 0x144, sub: None, xor: None, add: Some(0xD1F8_00F2) }),
         default_value_data: Some(TableBase { hdr_off: 0x128, sub: None, xor: Some(0x3713_54A2), add: None }),
+        // Parameter definition table (8B rows): base = hdr[0x68] ^ 0x146BE503 (accessor 0x1405297EE).
+        // name = (raw@+4 ^ 0x6B95F108) - mask(i); type = (raw@+0 ^ 0x76621606) - mask(i), -1 = none.
+        param_defs: Some(TableBase { hdr_off: 0x68, sub: None, xor: Some(0x146B_E503), add: None }),
+        param_def_stride: 8,
+        param_def_name_xor: 0x6B95_F108,
+        param_def_type_xor: 0x7662_1606,
+        param_def_mask: Some(ParamMaskChain {
+            mul1: 0x4A23,
+            xor1: 0x5F26_8FCF,
+            mul2: 0x2B03_52A0,
+            shift: 9,
+            xor2: 0x1028_EA75,
+            add: 0x68B3_76F1,
+            xor3: 0x4F86_A723,
+        }),
         field_mask: FieldMaskChain {
             mul1: 0x23CF,
             xor1: 0x3D27_C42E,

@@ -3701,3 +3701,40 @@ FUN_1405359e0（§2 的启动序列）。其模式（0x140535E9B..0x140535FA6 �
   但对我们已知的 typearr 索引 0 命中 ⇒ **它们的索引空间与我们的 typearr 不同**。
 - 定位大表应优先用「代码访问路径 + 槽位」；内容统计只作佐证。
 
+
+## 44. R11 第十一轮：参数名/类型解出（gap #2 关闭）（2026-10-17）
+
+### 44.1 定位方法（关键：边界约束 + 常数反查）
+
+1. 把参数总数 548,400 当作行数约束，在「相邻已解表锚点差值」里找 `diff = 548,400 × stride`：
+   命中 `0x1F6A08C → 0x239920C`，diff = `0x42F180` = **548,400 × 8** ⇒ 参数表（8B 行）。
+2. 表基址常数：对全部 hdr 槽试 `raw ^ base / raw - base / base - raw`，得到槽 `0x68`、常数 `0x146BE503`；
+   立即数在 .text 的命中点 `0x14052980E` 反汇编出访问器。
+3. 访问器 0x1405297EE（运行时为每个方法构造参数信息）：
+   - `mov eax,[rdi+8]; xor eax,0x20d55d01` → paramStart（rdi = 方法元数据行；后接 mask2 已在
+decoded 结构里，实测公式 B 正确）
+   - `esi = paramStart + k`；`r13 = body + (hdr[0x68]^0x146BE503)`；行 = `r13 + esi*8`
+   - **mask(esi)** = `((((i*0x4A23)^0x5F268FCF)*0x2B0352A0)>>9 ^0x1028EA75 +0x68B376F1) ^0x4F86A723`
+   - **name**：`(raw@+4 ^ 0x6B95F108) - mask` → 主串堆解码（cipher）
+   - **type**：`(raw@+0 ^ 0x76621606) - mask`；`-1` = 无类型；否则 typearr 索引
+4. 副产物修复：**byref 标志不在 kind 字节**，而在 Il2CppType flags 字节（+0xB）bit6；
+   旧 type_name 把 `UnityEngine.Object` 也映射成 `object`（应按 (namespace,name) 精确匹配 System）。
+
+### 44.2 接线与验证
+
+- profile 新增 `param_defs(param_def_stride/name_xor/type_xor/param_def_mask)`；engine 新增
+  `param_name(i)` / `param_type(i)` / `il2cpp_type_flags`；dump_gen `self_params` 改为
+  `Type name` 形式，BYREF 渲染 `T&`（无 param flags 列，无法区分 ref/out，诚实省略前缀）。
+- 7.1.0 实测：**全部方法签名带参数名+类型**（如 `GetText(string fmt, object[] args)`、
+  `GetCurrentTextElementLen(string str, int index, int len, UnicodeCategory& ucCurrent, int& currentCharCount)`），
+  不再有 "parameter names/types unresolved" 警告。
+- vs 6.4 oracle（共享类型 14,445 / 方法 126,546）：**参数名 91.37%**（失配全是混淆名跨版本改名）；
+  类型一致性 81.7%，失配构成：泛型 object 2,792（gap #11）、嵌套类型短名 1,490、混淆类型改名 1,857、
+  比较器按 arity 配错重载 ≈5,377。
+- 回归 17 passed / 0 failed。
+
+### 44.3 经验
+
+- 大表定位：「已知行数 × stride = 表边界差」比内容统计靠谱得多（本轮一次命中）。
+- hdr 槽位 → 常数反查：把 `raw ^ target` 作为立即数在 .text 搜索，再校验指令边界（伪命中很多）。
+- Il2CppType 的 byref/pinned 在 +0xB 的 bit6/bit7，kind 字节不含 byref。
