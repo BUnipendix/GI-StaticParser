@@ -4225,3 +4225,35 @@ oracle 规则实测：所有 `[DllImport]` 行都在 extern(PInvokeImpl 0x2000) 
 - 特性行合计 **12,160** 条 = CompilerGenerated 9,980 + NonSerialized 829 + DllImport 1,351（oracle 6.4 = 11,525，量级吻合）
 - 方法修饰符 99.29%；extern 1,351；sealed override 121
 - 回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法
+
+## 58. R11 第二十五轮：`[FixedAddressValueType]` 特性行（2026-10-17）
+
+> 不是需求，是执行记录。
+
+### 58.1 规则（对 oracle 逐类型核对）
+
+6.4 oracle 中 `[FixedAddressValueType]` 共 893 条，按类型统计后**严格 1:1**：
+
+| 类型 | 特性行 | 字段数 |
+|---|---|---|
+| `<PrivateImplementationDetails>` | 583 | 583 |
+| `<PrivateImplementationDetails>{C85D4D1A-…}` | 310 | 310 |
+
+⇒ 规则：**编译器生成的 `<PrivateImplementationDetails>` 类型下所有字段**都带该特性（且只有这些类型）。
+（1,088 个 `__StaticArrayInitTypeSize=` 命中里 213 个是 struct 定义行，875 个是字段；另 18 个是 Int64 静态数据字段，合计 893 ✓）
+
+### 58.2 实现与效果
+
+- dump_gen：字段所在类型名以 `<PrivateImplementationDetails>` 开头 → 输出 `\t[FixedAddressValueType]`；
+- 7.1 输出 **934 条**（oracle 6.4 = 893，版本增长）；
+- 特性行合计 **13,094**（CompilerGenerated 9,980 + NonSerialized 829 + DllImport 1,351 + FixedAddressValueType 934）；
+- 共享类型字段特性对命中率 **75.70% → 78.30%**（2,075/2,650）；
+- 剩余 oracle-only：CompilerGenerated 469（字段跨版本改名/删除）、MarshalAs 45（需 marshal 信息）、FixedAddressValueType 31、NonSerialized 30。
+
+### 58.3 附带：本轮负结果已汇总到 gap-inventory「四、已排除的搜索路径」
+
+泛型参数名（4 种扫法）、属性 ranges（4 种）、属性表本体（2 种）、stringLiterals（2 种）均实测排除，避免后续重复研究。
+
+### 58.4 验证
+
+回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法。

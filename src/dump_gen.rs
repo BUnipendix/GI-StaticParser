@@ -873,6 +873,12 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
                 if fname.contains("k__BackingField") {
                     writeln!(w, "\t[CompilerGenerated]")?;
                 }
+                // [FixedAddressValueType]: the reference dump prints it before EVERY field of
+                // the compiler-generated `<PrivateImplementationDetails>` types (and nowhere
+                // else) — verified 1:1 per type in 6.4 (583/583 and 310/310 fields).
+                if td.name.starts_with("<PrivateImplementationDetails>") {
+                    writeln!(w, "\t[FixedAddressValueType]")?;
+                }
                 writeln!(w, "\t{}{} {}{};{}", field_modifiers(attrs), tn, fname, value, tail)?;
                 match offset {
                     Some(_) => computed_offsets += 1,

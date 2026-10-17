@@ -54,7 +54,7 @@ Token 前 3 个 = 0x06000001/2/3 与 oracle 完全一致。回归 17 passed / 0 
 | 5e | typeDef parent / 头部规则 | — | **已修正（2026-10-17，§54）**：parent 列是**固定掩码** `raw@0x2C ^ 0x5FCD8771`（旧公式多 xor 了 +0x1C tag，25,981 行越界、基类丢失）；有效解码 87,244/88,902（98.1%）。另：enum **不打印接口列表**（oracle 实测 0 行）；Object 父类 kind=0x1C 需接受。vs oracle：类基类 **97.13%**、接口列表 **84.52%**、头部全等 **83.76%**。 |
 | 5d | 方法 Token | 733,442 | **已修正（2026-10-17，§53）**：旧实现把 ctor Token 硬编码为 0（未验证假设，导致 82,004 个 Token 0）。修正为 `0x06000001 + 方法表行号`（构造器同样有 token）；vs 6.4 oracle 结构验证：同类型相邻方法 delta 100% 恒定（65,422/65,422），85.77% 共享类型 delta 全程恒定，差异来自版本插入。 |
 | 5c | 方法修饰符 | — | **已对齐（2026-10-17，§57 再修）**：规则 = private virtual 仅可见性；virtual+newslot 时 final→仅可见性、否则 virtual；virtual+非 newslot 时 final→sealed override、否则 override。另修复 flags 哨兵 0xFF86（18,135 个 `__Gen_Wrap_*` 方法：旧解码输出非法 `abstract extern`，现映射为 public）。sampled 一致率 **99.29%**（旧 72.69%→96.75%→99.29%）|
-| 6 | 属性 [Attribute] | 11,525 | **大部分关闭（2026-10-17，§56/§57）**：已实现 `[CompilerGenerated]`（k__BackingField 字段，oracle 严格 1:1）、`[NonSerialized]`（FieldAttributes 0x80）、`[DllImport]`（PInvokeImpl 0x2000，oracle 0 例外）——7.1 共输出 **12,160** 条（oracle 6.4 为 11,525，量级吻合）。未实现：`[FixedAddressValueType]`（893/1,088 需逐字段属性数据）、`[MarshalAs]`（48）。attributeTypes 数组已定位 = body 0x9BACA4 起 74,864 项明文 typearr 索引；成员→range 表仍未定位 |
+| 6 | 属性 [Attribute] | 11,525 | **大部分关闭（2026-10-17，§56/§57/§58）**：已实现 4 种可精确推导的特性行——`[CompilerGenerated]`（k__BackingField 字段，oracle 严格 1:1）、`[NonSerialized]`（FieldAttributes 0x80）、`[DllImport]`（PInvokeImpl 0x2000，oracle 0 例外）、`[FixedAddressValueType]`（`<PrivateImplementationDetails>` 类型下所有字段，oracle 逐类型 1:1）——7.1 共输出 **13,094** 条（oracle 6.4 为 11,525）。仅 `[MarshalAs]`（48）未实现（需 marshal 信息）。attributeTypes 数组已定位 = body 0x9BACA4 起 74,864 项明文 typearr 索引；成员→range 表仍未定位（已排除路径见第四节）|
 | 7 | 枚举字面值 | **已解（2026-10-17）** | **已关闭**：字段默认值表 base = `hdr[0x164]^0x03893506`，12B 行 `{valueOff, fieldIndex, typeIdx}`，行数 `(hdr[0x144]+0xD1F800F2)/12`（75,548 行）；值区 `body+(hdr[0x128]^0x371354A2)+valueOff`，按 kind 解码；字符串 = `{u32 len, UTF-8}`。dump 已渲染 74,614 个 const 值；vs 6.4 oracle 枚举值 99.83%、全 const 99.26% |
 | 8 | stringLiterals.json | 689,799 串 | 字符串字面量表（独立于用户串堆）|
 | 9 | script.json ScriptString/Addresses/Signature | 689,799 / 239,153 | 依赖 #8 + 方法特征定位 |
@@ -69,3 +69,18 @@ ScriptMethod 733,442 已有（含全限定名，2026-10-17 方法数修复后）
 
 flags/bitfield 常数是 7.1.0 专属（在 .upx0 变异函数逐版读取，0x159F63C4D 模式）；
 其它版本接线前需先跑 version-triage + 该版 .upx0 常数读取（SOP 见 version-matrix.md §4）。
+
+## 四、已排除的搜索路径（勿重复研究）
+
+> 2026-10-17 汇总。以下路径均已实测排除，**不要重复**；除非有新信息（例如拿到运行时 dump 或新版本样本）。
+
+| 目标 | 已排除的尝试 | 结论 |
+|---|---|---|
+| 泛型参数名（kind 0x13/0x1E） | ① 全程序 29 处字符串解码调用点逐一分析（0x1404D965A / 0x1405159BE / 0x14051DA23 等）= 方法名/字段名/类型名，无 genericParameters；② startup 44B 行表（0x3DE954）= assembly 名表；③ 8B 行 `{nameIdx packed, owner<30k}` 特征扫 startup+body = 0；④ 明文 packed 名字索引（含可打印度/大写过滤）扫全 body = 仅字符串数据假阳性 | 仍需 loader 访问点 RE |
+| 属性 ranges（成员→{start,count}） | ① 明文 token 列（高字节 0x02/0x04/0x06/0x08/0x14/0x17）扫 12B 行 = 0；② 「start 列 0→74,864 单调」列扫 stride 2–12 = 0；③ 「首列=0、次列递增」8B 扫 = 0；④ `add reg, 0x11D8D` 类立即数反解 = 命中落在指令中部（假阳性） | 数组前为加密行表，需 loader 访问点 RE |
+| 属性表本体（propertyDefs） | ① 20B 行「两列均<733,442（get/set 方法索引）」扫全 body = 0；② 泛型参数同名扫描同法 = 0 | 列加密，需 loader 访问点 RE |
+| stringLiterals | ① 明文 8B `{length, dataIndex}` 表（dataIndex 指向 0x8E0000–0x930000 / 0x4600000+ 区域）扫全 body = 0；② startup 内 token 形态 8B 对扫 = 0 | 字面量数据区有明文 `{u32 len, UTF-8}` 记录（0x8FF000+ 等），但索引表未定位 |
+| 静态字段偏移 | oracle 首静态偏移 vs TypeDefIndex 单调性仅 50.2% | **运行时类初始化顺序，静态不可推导**（参考 dump 含运行时信息）|
+| interface 的基接口 | 7.1 元数据中 interface 的 iface_start/count 均为哨兵（全 0xFFFF/0） | 元数据无存储；oracle 的 270 行来自运行时 |
+| 方法 Slot 非零 | GI 7.1 元数据自身几乎全 -1（构建器反汇编逐句一致） | 参考侧语义，不视为缺陷 |
+| oracle 的 5 种特性之外的特性 | oracle 11,525 行仅 5 种 corelib 特性 | 参考工具只解析子集；我们的可推导子集已实现（§56/§57）|
