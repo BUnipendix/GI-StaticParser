@@ -539,6 +539,50 @@ fn field_modifiers(attrs: u16) -> String {
     s
 }
 
+/// C# legacy "R" formatting for `System.Single` (what the reference dump prints):
+/// up to 9 significant digits, trailing zeros trimmed (at least one fractional digit in
+/// fixed form), fixed notation for exponents in [-4, 9), scientific otherwise with a
+/// lower-case 'e' and a two-digit exponent, plus the `f` suffix.
+fn format_csharp_single(v: f32) -> String {
+    if v == 0.0 {
+        return if v.is_sign_negative() { "-0.0f".into() } else { "0.0f".into() };
+    }
+    // 9 significant digits, scientific form: d.dddddddde±E
+    let sci = format!("{:.8e}", v as f64);
+    let (mant, exp) = sci.split_once('e').unwrap();
+    let exp: i32 = exp.parse().unwrap();
+    let sign = if v < 0.0 { "-" } else { "" };
+    let mant = mant.trim_start_matches('-');
+    let digits: String = mant.chars().filter(|c| *c != '.').collect();
+    let frac = mant.split_once('.').map(|(_, f)| f).unwrap_or("");
+    let trimmed = frac.trim_end_matches('0');
+    if exp >= -4 && exp < 9 {
+        // fixed notation
+        let mut int_part = String::new();
+        let mut fr_part = String::new();
+        if exp >= 0 {
+            let ip = (exp + 1) as usize;
+            if ip <= digits.len() {
+                int_part.push_str(&digits[..ip]);
+                fr_part.push_str(&digits[ip..]);
+            } else {
+                int_part.push_str(&digits);
+                int_part.push_str(&"0".repeat(ip - digits.len()));
+            }
+        } else {
+            int_part.push('0');
+            fr_part.push_str(&"0".repeat((-exp - 1) as usize));
+            fr_part.push_str(&digits);
+        }
+        let fr_trim = fr_part.trim_end_matches('0');
+        let fr_final = if fr_trim.is_empty() { "0" } else { fr_trim };
+        format!("{}{}.{}f", sign, int_part, fr_final)
+    } else {
+        let e_sign = if exp < 0 { '-' } else { '+' };
+        format!("{}{}.{}e{}{:02}f", sign, &digits[..1], if trimmed.is_empty() { "0" } else { trimmed }, e_sign, exp.abs())
+    }
+}
+
 /// C# literal for a field default value (enum members, const fields).
 /// Values live in the shared blob, decoded according to the value's Il2CppType kind —
 /// the same dispatch the runtime uses at 0x1404C7D6B (kind in 2..=0xc -> primitive).
@@ -597,8 +641,7 @@ fn default_literal(m: &Meta, tix: u32, dataoff: i32, unsigned: bool) -> Result<S
             let v = f32::from_le_bytes(b.try_into().unwrap());
             Ok(if v.is_nan() { "float.NaN".into() }
                else if v.is_infinite() { if v > 0.0 { "float.PositiveInfinity".into() } else { "float.NegativeInfinity".into() } }
-               else if v.fract() == 0.0 { format!("{:.1}f", v) }
-               else { format!("{}f", v) })
+               else { format_csharp_single(v) })
         }
         0x0D => {
             let b = m.default_value_bytes(dataoff, 8).ok_or(0)?;
@@ -832,7 +875,7 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
                     " // 0x0".to_string()
                 } else {
                     match offset {
-                        Some(o) => format!(" // 0x{:X}", o),
+                        Some(o) => format!(" // 0x{:x}", o),
                         None if td.name.starts_with("<PrivateImplementationDetails>") => {
                             " // 0x0".to_string()
                         }
@@ -1038,7 +1081,7 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
             let token = 0x0600_0001u32.wrapping_add(gmi as u32);
             writeln!(
                 w,
-                "\t{}{} {}({}) {{ }} // RVA: 0x{:X} Token: 0x{:08X} Slot: {}",
+                "\t{}{} {}({}) {{ }} // RVA: 0x{:x} Token: 0x{:x} Slot: {}",
                 method_modifiers(md.flags),
                 ret,
                 md.name,
@@ -1070,7 +1113,7 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
             let token = 0x0600_0001u32.wrapping_add(gmi as u32);
             writeln!(
                 w,
-                "\t{}{} {}({}) {{ }} // RVA: 0x{:X} Token: 0x{:08X} Slot: {}",
+                "\t{}{} {}({}) {{ }} // RVA: 0x{:x} Token: 0x{:x} Slot: {}",
                 method_modifiers(md.flags),
                 ret,
                 md.name,
