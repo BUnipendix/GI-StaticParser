@@ -68,7 +68,15 @@ pub fn collect<'a>(m: &'a Meta) -> (Vec<Td>, Vec<Md>) {
         let name = m.decode_str(m.md_col(&p.md_name, i));
         let decl = m.md_col(&p.md_decl, i);
         let slot = m.md_col(&p.md_slot, i) as u16 as i16;
-        let flags = (m.md_col(&p.md_flags, i) & 0xFFFF) as u16;
+        let mut flags = (m.md_col(&p.md_flags, i) & 0xFFFF) as u16;
+        // Sentinel 0xFF86: GI writes this for the Mono AOT marshalling wrappers
+        // (`__Gen_Wrap_*`, 18,135 rows). Decoded verbatim it would render as
+        // `abstract extern`, which is not valid C# and does not match the reference dump
+        // (which prints them as plain `public`); the sentinel therefore maps to
+        // MethodAttributes.Public (0x0006). Verified: all 18,135 rows sample as `__Gen_Wrap_*`.
+        if flags == 0xFF86 {
+            flags = 0x0006;
+        }
         let ps = m.md_col(&p.md_param_start, i);
         let pc = (m.md_col(&p.md_param_count, i) & 0xFF) as u8;
         let rva = m.method_rva(i as usize);
@@ -479,14 +487,20 @@ fn method_modifiers(f: u16) -> String {
     if f & 0x400 != 0 {
         s.push_str("abstract ");
     } else if f & 0x40 != 0 {
-        // Reference dumps: private virtual methods (explicit interface implementations) carry
-        // only their visibility. Otherwise final -> `sealed override`, new-slot -> `virtual`,
-        // reused slot -> `override`.
+        // Reference dumps (empirically fitted against 120 (flags, mods) pairs):
+        //  - private virtual  -> visibility only (explicit interface implementation)
+        //  - final + new-slot -> visibility only (interface implementation: C# cannot write
+        //    `sealed override` on a new-slot impl, and the reference dump prints just `public`)
+        //  - final, reused slot -> `sealed override`
+        //  - new-slot           -> `virtual`
+        //  - reused slot        -> `override`
         if f & 0x7 != 1 {
-            if f & 0x20 != 0 {
+            if f & 0x100 != 0 {
+                if f & 0x20 == 0 {
+                    s.push_str("virtual ");
+                }
+            } else if f & 0x20 != 0 {
                 s.push_str("sealed override ");
-            } else if f & 0x100 != 0 {
-                s.push_str("virtual ");
             } else {
                 s.push_str("override ");
             }
@@ -988,6 +1002,11 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
             unresolved_params += n_unresolved;
             // Real metadata token: tokens are assigned in method-table order starting at
             // 0x06000001, constructors included (verified against the 6.4 reference dump).
+            // [DllImport]: reference dumps put this line before every P/Invoke method
+            // (MethodAttributes.PinvokeImpl, 0x2000) and nowhere else — verified 0 exceptions.
+            if md.flags & 0x2000 != 0 {
+                writeln!(w, "\t[DllImport]")?;
+            }
             let token = 0x0600_0001u32.wrapping_add(gmi as u32);
             writeln!(
                 w,
@@ -1015,6 +1034,11 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
             let ret = type_name(m, &tds, &parents, md.ret_type, 0);
             let (params, n_unresolved) = self_params(m, &tds, &parents, md);
             unresolved_params += n_unresolved;
+            // [DllImport]: reference dumps put this line before every P/Invoke method
+            // (MethodAttributes.PinvokeImpl, 0x2000) and nowhere else — verified 0 exceptions.
+            if md.flags & 0x2000 != 0 {
+                writeln!(w, "\t[DllImport]")?;
+            }
             let token = 0x0600_0001u32.wrapping_add(gmi as u32);
             writeln!(
                 w,

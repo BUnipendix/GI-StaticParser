@@ -4185,3 +4185,43 @@ FixedAddressValueType 893 / NonSerialized 750 / MarshalAs 48。逐条核对放�
 ### 56.4 验证
 
 回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法。
+
+## 57. R11 第二十四轮：方法 flags 哨兵 + 修饰符规则修正 + [DllImport]（2026-10-17）
+
+> 不是需求，是执行记录。
+
+### 57.1 发现：18,135 个方法的 flags 是哨兵 0xFF86
+
+反查所有 733,442 个方法的 flags 解码值：**18,135 行恰好解出 0xFF86**，抽样 12/12 全部是 Mono AOT 编组包装器
+`__Gen_Wrap_*`。逐字解码会输出 `abstract extern`（C# 非法组合），而 oracle 对同名方法输出**纯 public**：
+
+```
+ours(旧): public abstract extern System.Int32 __Gen_Wrap_0(...)   // 错
+oracle  : public System.Int32 __Gen_Wrap_0(...)                  // 对
+ours(新): public System.Int32 __Gen_Wrap_0(...)                  // 逐字一致（仅 RVA/Token 版本不同）
+```
+
+修复：flags == 0xFF86 → MethodAttributes.Public (0x0006)。效果：extern 数 **19,486 → 1,351**（oracle 6.4 = 1,296），
+abstract extern 18,151 → 16。
+
+### 57.2 修饰符规则修正：final+newslot 不输出 sealed override
+
+oracle 中接口实现方法（如 `SemaphoreSlim.Dispose`）输出纯 `public`；旧规则把 final+newslot 渲染成 `sealed override`。
+新规则（120 组 (flags,mods) 拟合 + 本轮验证）：
+
+- private virtual → 仅可见性；
+- virtual 且 newslot：final → 仅可见性；否则 `virtual`；
+- virtual 且非 newslot：final → `sealed override`；否则 `override`。
+
+sampled 一致率 **96.65% → 99.29%**（19,369/19,507）。`sealed override` 出现 121 次（oracle 108，版本差异）。
+
+### 57.3 新增 [DllImport] 特性行
+
+oracle 规则实测：所有 `[DllImport]` 行都在 extern(PInvokeImpl 0x2000) 方法前、0 例外。
+实现后 7.1 输出 **1,351 条**（oracle 1,296），全部后接 extern 方法（0 例外）。
+
+### 57.4 汇总（7.1 dump）
+
+- 特性行合计 **12,160** 条 = CompilerGenerated 9,980 + NonSerialized 829 + DllImport 1,351（oracle 6.4 = 11,525，量级吻合）
+- 方法修饰符 99.29%；extern 1,351；sealed override 121
+- 回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法

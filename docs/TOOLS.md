@@ -36,7 +36,7 @@
 | `strings --exe --metadata [--out] [--head]` | 解密整个字符串堆并枚举 | ✓ |
 | `tables --exe --metadata [--base] [--json]` | 纯结构定位元数据行表（无列名） | ✓ |
 | `types-dump --exe --metadata --out` | 类型表四元组导出 | 26 版中 24 版可用 |
-| `dump-gen --exe --metadata [--out] [--profile-in p.json] [--profile-out] [--no-cipher-check]` | **世代通用 dump 管线**（profile 驱动；内置 7.1 实测 profile） | 7.1.0 端到端 ✓（88,872 类型，锚点行与 oracle 逐字一致）；别名 `dump71` 过渡 |
+| `dump-gen --exe --metadata [--out] [--profile-in p.json] [--profile-out] [--no-cipher-check]` | **世代通用 dump 管线**（profile 驱动；内置 7.1 实测 profile） | 7.1.0 端到端 ✓ **88,902 类型 / 440,172 字段 / 733,442 方法**；**需与 global-metadata.dat 同目录的 `startup-metadata.dat`**（缺失则泛型回退为 System.Object 并 warn）。已对齐 oracle：类型名全限定、参数类型 88.54%、泛型渲染（`List<System.String>`）、方法修饰符 96.75%、字段修饰符 99.91%、字段类型 98.33%、基类 97.13%、接口 84.52%、`[CompilerGenerated]`/`[NonSerialized]` 特性行；Properties 为访问器合成（属性表未定位）。别名 `dump71` 过渡 |
 | `dump` | 7.1 专用旧管线（里程碑 e/f） | ✓ |
 | `pe-validate` / `decode-one` / `header-dump` / `il2cpp-fns` | PE 检查 / 单串解码 / 表基址打印 / il2cpp API 定位 | ✓ |
 
