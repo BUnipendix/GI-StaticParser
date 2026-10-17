@@ -232,41 +232,34 @@ pub fn type_name_inner(m: &Meta, tds: &[Td], parents: &[Option<u32>], ti: u32, d
         return "object".into();
     };
     match kind {
-        0x01 => "void".into(),
-        0x02 => "bool".into(),
-        0x03 => "char".into(),
-        0x04 => "sbyte".into(),
-        0x05 => "byte".into(),
-        0x06 => "short".into(),
-        0x07 => "ushort".into(),
-        0x08 => "int".into(),
-        0x09 => "uint".into(),
-        0x0A => "long".into(),
-        0x0B => "ulong".into(),
-        0x0C => "float".into(),
-        0x0D => "double".into(),
+        0x01 => "System.Void".into(),
+        0x02 => "System.Boolean".into(),
+        0x03 => "System.Char".into(),
+        0x04 => "System.SByte".into(),
+        0x05 => "System.Byte".into(),
+        0x06 => "System.Int16".into(),
+        0x07 => "System.UInt16".into(),
+        0x08 => "System.Int32".into(),
+        0x09 => "System.UInt32".into(),
+        0x0A => "System.Int64".into(),
+        0x0B => "System.UInt64".into(),
+        0x0C => "System.Single".into(),
+        0x0D => "System.Double".into(),
         0x0E | 0x18 | 0x19 | 0x16 => match kind {
-            0x0E => "string".into(),
-            0x18 => "IntPtr".into(),
-            0x19 => "UIntPtr".into(),
-            0x16 => "TypedReference".into(),
-            _ => "object".into(),
+            0x0E => "System.String".into(),
+            0x18 => "System.IntPtr".into(),
+            0x19 => "System.UIntPtr".into(),
+            0x16 => "System.TypedReference".into(),
+            _ => "System.Object".into(),
         },
         0x11 | 0x12 | 0x1C => {
-            // CLASS/VALUETYPE/OBJECT: data = typeDefIndex (mhy packs the tdi here)
+            // CLASS/VALUETYPE/OBJECT: data = typeDefIndex (mhy packs the tdi here).
+            // Reference dumps always use the fully-qualified name (System.Object/System.String,
+            // not the C# keywords).
             let tdi = data as usize;
             match tds.get(tdi) {
-                Some(t) => {
-                    let nested = parents.get(tdi).map(|p| p.is_some()).unwrap_or(false);
-                    if !nested && t.namespace == "System" && t.name == "Object" {
-                        "object".into()
-                    } else if !nested && t.namespace == "System" && t.name == "String" {
-                        "string".into()
-                    } else {
-                        joined_type_name(tds, parents, data, depth + 1)
-                    }
-                }
-                None => "object".into(),
+                Some(_) => joined_type_name(tds, parents, data, depth + 1),
+                None => "System.Object".into(),
             }
         }
         0x15 => {
@@ -279,7 +272,7 @@ pub fn type_name_inner(m: &Meta, tds: &[Td], parents: &[Option<u32>], ti: u32, d
             let et = ptr_type_index(m, data);
             match et {
                 Some(t) => format!("{}[]", type_name(m, tds, parents, t, depth + 1)),
-                None => "object[]".into(),
+                None => "System.Object[]".into(),
             }
         }
         0x14 => {
@@ -293,7 +286,7 @@ pub fn type_name_inner(m: &Meta, tds: &[Td], parents: &[Option<u32>], ti: u32, d
             let et = ptr_type_index(m, data);
             match et {
                 Some(t) => format!("{}*", type_name(m, tds, parents, t, depth + 1)),
-                None => "object*".into(),
+                None => "System.Object*".into(),
             }
         }
         0x10 => {
@@ -302,7 +295,7 @@ pub fn type_name_inner(m: &Meta, tds: &[Td], parents: &[Option<u32>], ti: u32, d
             let et = ptr_type_index(m, data);
             match et {
                 Some(t) => format!("{}&", type_name(m, tds, parents, t, depth + 1)),
-                None => "object&".into(),
+                None => "System.Object&".into(),
             }
         }
         _ => format!("object/*k{kind:#x}*/"),
@@ -638,6 +631,8 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
     // them 0x06000001.. in TypeDefIndex/methodStart order; constructors get Token 0).
     let mut method_token: u32 = 0;
     let mut unresolved_props = 0usize;
+    let mut synthesized_props = 0usize;
+    let mut props_synth_types = 0usize;
 
     // Rebuilds instance field offsets from type structure (the dat carries no offset table).
     let mut layout_calc = LayoutCalc::new(m, &tds);
@@ -795,10 +790,114 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
             }
         }
         // Il2CppDumper section structure: Fields / Properties / Constructors / Methods.
-        // The property table has not been located for this generation, so Properties is
-        // emitted empty and counted (never silently faked).
+        // The property metadata table has not been located for this generation, so the section is
+        // SYNTHESIZED from accessor methods (`get_X` / `set_X`), which carry the exact signature:
+        //   line = `{mods}{type} {name} { get; }` / `{ get; set; }` / `{ set; }`
+        // Reported as synthesized (never silently presented as metadata-order output).
         writeln!(w, "\n\t// Properties")?;
-        unresolved_props += 1;
+        {
+            #[derive(Clone)]
+            struct PropSynth {
+                name: String,
+                ptype: String,
+                get_mods: Option<String>,
+                set_mods: Option<String>,
+                order: usize,
+            }
+            let mut props: Vec<PropSynth> = Vec::new();
+            let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+            for &gmi in &per_type[i] {
+                let md = &mds[gmi];
+                let (is_get, prop) = if let Some(rest) = md.name.strip_prefix("get_") {
+                    if md.param_count != 0 {
+                        continue;
+                    }
+                    (true, rest)
+                } else if let Some(rest) = md.name.strip_prefix("set_") {
+                    if md.param_count != 1 {
+                        continue;
+                    }
+                    (false, rest)
+                } else {
+                    continue;
+                };
+                if prop.is_empty() || prop.starts_with("Item") && false {
+                    continue;
+                }
+                let ptype = if is_get {
+                    type_name(m, &tds, &parents, md.ret_type, 0)
+                } else {
+                    match m.param_type(md.param_start) {
+                        Some(Some(ti)) => type_name(m, &tds, &parents, ti, 0),
+                        _ => continue,
+                    }
+                };
+                // Property-level modifier words (accessor-only words are dropped; static kept).
+                let mods = method_modifiers(md.flags)
+                    .split_whitespace()
+                    .filter(|w| !matches!(*w, "virtual" | "override" | "abstract" | "extern" | "new" | "sealed" | "final" | "unsafe"))
+                    .map(|w| format!("{} ", w))
+                    .collect::<String>();
+                if let Some(&pi) = index.get(prop) {
+                    if is_get {
+                        props[pi].get_mods = Some(mods);
+                        props[pi].ptype = ptype;
+                    } else {
+                        props[pi].set_mods = Some(mods);
+                    }
+                } else {
+                    index.insert(prop.to_string(), props.len());
+                    let (gm, sm) = if is_get {
+                        (Some(mods), None)
+                    } else {
+                        (None, Some(mods))
+                    };
+                    props.push(PropSynth {
+                        name: prop.to_string(),
+                        ptype,
+                        get_mods: gm,
+                        set_mods: sm,
+                        order: props.len(),
+                    });
+                }
+            }
+            props.sort_by_key(|p| p.order);
+            for p in &props {
+                // Property visibility = getter's when present, else setter's.
+                let owner_mods = p
+                    .get_mods
+                    .clone()
+                    .or_else(|| p.set_mods.clone())
+                    .unwrap_or_default();
+                let vis_of = |m: &String| -> String {
+                    m.split_whitespace()
+                        .find(|w| matches!(*w, "private" | "protected" | "internal" | "public"))
+                        .map(|w| format!("{} ", w))
+                        .unwrap_or_default()
+                };
+                let owner_vis = vis_of(&owner_mods);
+                let mut acc = String::new();
+                if p.get_mods.is_some() {
+                    let extra = p.get_mods.as_ref().map(vis_of).unwrap_or_default();
+                    if extra != owner_vis && !extra.is_empty() {
+                        acc.push_str(&extra);
+                    }
+                    acc.push_str("get; ");
+                }
+                if p.set_mods.is_some() {
+                    let extra = p.set_mods.as_ref().map(vis_of).unwrap_or_default();
+                    if extra != owner_vis && !extra.is_empty() {
+                        acc.push_str(&extra);
+                    }
+                    acc.push_str("set; ");
+                }
+                writeln!(w, "\t{}{} {} {{ {} }}", owner_mods, p.ptype, p.name, acc.trim_end())?;
+                synthesized_props += 1;
+            }
+            if !props.is_empty() {
+                props_synth_types += 1;
+            }
+        }
         writeln!(w, "\n\t// Constructors")?;
         for &gmi in &per_type[i] {
             let md = &mds[gmi];
@@ -879,9 +978,9 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
             "[warn] parameter names/types unresolved: {unresolved_params} parameters emitted as 'object /*unresolved*/'"
         );
     }
-    if unresolved_props > 0 {
+    if synthesized_props > 0 || unresolved_props > 0 {
         eprintln!(
-            "[warn] property/event tables not located: {unresolved_props} types emitted with an empty Properties section"
+            "[warn] properties: {synthesized_props} entries SYNTHESIZED from get_/set_ accessor methods across {props_synth_types} types (the property metadata table is not located; accessor visibility maps to the {{{{ get; private set; }}}} form, property attributes are not available)"
         );
     }
     if unresolved_iface_generic > 0 {

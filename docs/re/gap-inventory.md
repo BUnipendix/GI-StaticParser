@@ -41,10 +41,11 @@ Token 前 3 个 = 0x06000001/2/3 与 oracle 完全一致。回归 17 passed / 0 
 |---|---|---|---|
 | 1 | 字段偏移注释 | 440,061 | **已接线（2026-10-17）**：磁盘无偏移表 ⇒ dump_gen 新增顺序布局复算（97.9% 核心规则验证），显式布局（flags&0x18==0x10）排除。7.1 实测：**321,796 字段已计算**（73%）/ 9,162 未解 / 109,214 静态字段（模块静态区不可推）。交叉验证 92.71%。待：精度提升（失配簇分析）+ 静态字段偏移来源 |
 | 2 | 参数名/类型 | 361,974 | **已关闭（2026-10-17）**：参数定义表 = `hdr[0x68]^0x146BE503`，**8B 行**：`name=(raw@+4 ^ 0x6B95F108) − mask(i)`、`type=(raw@+0 ^ 0x76621606) − mask(i)`（−1=无类型），mask 为参数索引链 `((((i*0x4A23)^0x5F268FCF)*0x2B0352A0)>>9 ^0x1028EA75 +0x68B376F1) ^0x4F86A723`（反汇编 0x1405297EE）。全 548,400 参数可解；vs 6.4 oracle：**参数名 91.37%**（失配为混淆名跨版本改名）、类型 81.7%（余差=泛型 object 2,792 + 嵌套类型短名 1,490 + 混淆改名 + 比较器重载配对） |
-| 3 | Properties/Events 行 | 77,260 段 | 属性表槽位未定位（slot 清单单点槽待核）|
+| 3 | Properties/Events 行 | 77,260 段 | 属性表仍未定位（本轮验证候选行结构均不符）。**临时方案已实现**：从 `get_`/`set_` 访问器方法**合成** Properties（62,879 条/10,102 类型，warn 明示 SYNTHESIZED；类型签名真实，setter 可见性对齐 `{ get; private set; }` 形式）。局限：GI 属性名与访问器方法名独立混淆 ⇒ 覆盖主要是未混淆库；属性表本体需运行时路径。Events：6.4 参考 dump 无 Events 段（Il2CppDumper 该配置未开），暂不产出 |
 | 3b | 嵌套类型全名 | **已关闭（2026-10-17）** | typeDef `nestedTypesStart`=u16@0x36^0xC87C、`nestedTypesCount`=u8@0x45^0xAB，表 base=hdr[0x1B8]^0x586ABAF1（u32 child tdi）；验证 Selectable→[Transition, SelectionState]。dump.cs 头部现为全限定名、基类短名、接口全限定、嵌套链（对齐 Il2CppDumper）|
 | 4 | 接口列表精确化 | **已关闭（2026-10-17）** | **own-count 列解出**：`interfacesCount = (u8@0x42 + 0xA2) & 0xFF`（86,587/88,902 类型 count==run 长度，sum 108,758 ≈ 109,607；Selectable 8 个接口与 oracle 完全一致）。dump 不再用 run-length 近似。剩余：泛型接口（GENERICINST，24,529 条）因 gap #11 跳过并计数 |
 | 5 | 方法 Slot 精确值 | REF 211,652 非零 | **已结论（2026-10-17）**：反汇编 0x1405155FC 构建器确认 slot=(i16)((u16@0x0C^0x1E2A)−mask2)，与引擎逐句一致；GI 7.1 元数据本身几乎全 -1。oracle 6.4 的非零 Slot 属 oracle 侧语义，不再视为缺陷 |
+| 5b | 类型名格式 | — | **已对齐（2026-10-17）**：全部原始类型/类名改全限定（`System.Void`/`System.Int32`/`System.String`/`System.Object`），数组 `System.Int32[]`、byref `&`；与 oracle 逐字一致（参数类型精确率 88.54%，余差泛型/混淆改名/重载配对）|
 | 6 | 属性 [Attribute] | 11,525 | **判读修正（2026-10-17）**：hdr[0x1D0] 的表是 **ParameterDefaultValue**（按类型解码默认值），不是特性表；参数默认值侧已定位（25,374 条）。字段默认值（枚举字面值）应有同构表待找 |
 | 7 | 枚举字面值 | **已解（2026-10-17）** | **已关闭**：字段默认值表 base = `hdr[0x164]^0x03893506`，12B 行 `{valueOff, fieldIndex, typeIdx}`，行数 `(hdr[0x144]+0xD1F800F2)/12`（75,548 行）；值区 `body+(hdr[0x128]^0x371354A2)+valueOff`，按 kind 解码；字符串 = `{u32 len, UTF-8}`。dump 已渲染 74,614 个 const 值；vs 6.4 oracle 枚举值 99.83%、全 const 99.26% |
 | 8 | stringLiterals.json | 689,799 串 | 字符串字面量表（独立于用户串堆）|

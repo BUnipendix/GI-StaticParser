@@ -3849,3 +3849,35 @@ decoded 结构里，实测公式 B 正确）
   以及泛型接口被跳过。Selectable/ValueTuple/String 等关键类型与 oracle 一致。
 - 接口近似警告从「41,793 类型近似」降为 0（全部走 count 列）。
 - 回归 17 passed / 0 failed。
+
+## 48. R11 第十五轮：全限定类型名 + Properties 合成（2026-10-17）
+
+> 不是需求，是执行记录。
+
+### 48.1 发现：我们的类型名格式与 Il2CppDumper 系统性不同
+
+oracle 用**全限定 C# 名**（`System.Void`/`System.Int32`/`System.String`/`System.Object`），我们用关键字（`void`/`int`/`string`/`object`）。
+对比 oracle/Il2CppDecompiler 源码后统一为：原始类型 → `System.*`，类/值类型 → 全限定（含嵌套链），数组 `System.Int32[]`，byref `System.Int32&`。
+样例（与 oracle 逐字一致，仅 RVA 版本不同）：
+`internal static System.String Format(System.String resourceFormat, System.Object p1)`
+
+- 效果：参数类型 **精确一致率 88.54%**（此前 81.7% 含别名归一化）；剩余差异 = 泛型 3,488 + 混淆类型跨版本改名 + 比较器重载配对。
+
+### 48.2 Properties：从访问器方法合成（元数据表仍未定位）
+
+- 现象（oracle）：property 行 = `\t{mods}{type} {name} { get; private set; }`；我们此前输出空段 + 警告。
+- 本轮实现**合成**：扫描类型方法 `get_X`/`set_X`（get: 0 参、set: 1 参），类型取真实签名（getter 返回/ setter 参数），
+  setter 可见性与 getter 不同时输出 `{ get; private set; }` 形式；跳过 add_/remove_（事件）。
+- 7.1 实测：**62,879 个属性 / 10,102 类型**（warn 明示 SYNTHESIZED）。
+- 局限（已记录）：GI 的属性名与访问器方法名**独立混淆**（oracle 里大量属性没有同名 get_ 方法，如 `OOBFJPMGFKC { get; }`），
+  所以合成只能覆盖未混淆库（~60k/96k，6.4 参考）；属性表本体仍未定位。
+
+### 48.3 其它确认
+
+- 类构建器反射信息填充函数 0x14010F560 读 typeDef row 的 +0x28/+0x3C/+0x24（写入结构 +0x1C/+0x20/+0x24）；
+  raw@0x24 是「常量 0x31DEBE33 + 行号小扰动」的 tag 形态、raw@0x28 = 0x1B7226xx 形态 —— 均为掩码材料而非直接列值。
+- 属性表候选按尺寸匹配（93,130×20 等）检查内容后均非 20B 属性行结构；属性表定位仍需运行时路径。
+
+### 48.4 验证
+
+- 回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法 / 59,734 属性行。
