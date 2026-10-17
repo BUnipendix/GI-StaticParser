@@ -66,7 +66,14 @@ Token 前 3 个 = 0x06000001/2/3 与 oracle 完全一致。回归 17 passed / 0 
 | 10 | il2cpp.h / DummyDll | 整套 | 依赖以上全部 |
 | 11 | **泛型类型渲染**（新发现，2026-10-17）| 42,313 字段 | **已关闭（2026-10-17，§52）**：`GENERICINST.data`=g → startup-metadata 8B 行表（`hdr[0x120]^0x1C3F68EA`，行=`{defTdi, genericInstIdx}`）→ `Il2CppMetadataRegistration+0x28` 的 16B `Il2CppGenericInst{argc,pad,argv}` → argv 的 `Il2CppType*`。实测 `List`1<GameObject>`/`IComparer`1<Level2Map>`/`ReadOnlyCollection`1<MoleMole…>` 全对；字段类型 vs 6.4 oracle **98.33%**（泛型字段 95.23%）。遗留：kind 0x13/0x1E 泛型参数引用仍是占位（需 genericParameters 表） |
 
-## 三、script.json 现状
+## 三、script.json 现状（2026-10-17 升级）
+
+**已实现 Il2CppDumper 兼容格式**（复刻 StructGenerator.cs）：`ScriptMethod` **679,867** 条
+（Address=RVA、Name=`Type$$Method`、Signature=C 原型、TypeSignature 字母序列，自洽校验 100%）；
+`Addresses` **460,313** 条（排序去重方法指针 RVA）。实现见 `src/script_json.rs`、日志 §70。
+
+仍缺（需运行时/元数据不可得）：`ScriptString`/`ScriptMetadata`/`ScriptMetadataMethod`（metadataUsage 在 BSS，§69）、
+methodSpec 泛型实例方法条目（需 methodSpecs）、Addresses 中的 generic/invoker 指针。
 
 ScriptMethod 733,442 已有（含全限定名，2026-10-17 方法数修复后）；ScriptString=0、Addresses=3、Signature 空 —— 待 #8/#9。
 

@@ -4565,3 +4565,48 @@ flags/klass 解析器内部读 `hdr[0x198]^0x5303F399` = body **0x10500E0**，88
 
 结论：`.upx0` 里只有 3/206 入口与 metadata 相关（flags/klass 解析器已解），
 故「模拟解 .upx0」对补齐剩余表**帮助有限**；剩余表更可能是 GI 未保留。
+
+## 70. R11 第三十七轮：script.json 升级为 Il2CppDumper 兼容格式（2026-10-17）
+
+> 不是需求，是执行记录。参考实现：`Il2CppDumper/Outputs/StructGenerator.cs::WriteScript`（本轮拉取源码逐行核对）。
+
+### 70.1 生成规则（从参考源码逐行复刻）
+
+- `ScriptMethod.Address` = **RVA**（`GetRVA(ptr) = ptr - ImageBase`）；
+- `ScriptMethod.Name` = `<TypeDefName>$$<methodName>`；
+- `ScriptMethod.Signature` = C 原型 `"<retCType> <FixName(Name)> (<this>, <params>, const MethodInfo* method);"`：
+  非静态方法首参为 `{structName}_o* __this`，每参 `ParseType(paramType) name`（byref 追加 `*`），末尾固定 `const MethodInfo* method`；
+- `ScriptMethod.TypeSignature` = 类型字母序列（v/bool~int→i/i8→j/f/d），含 __this 与末尾 MethodInfo；
+- `ParseType` / `FixName` / 结构体命名（`FixName(GetTypeDefName(td,true,true))` + 去重后缀）逐条对齐；
+- `Addresses` = 排序去重后的方法指针 RVA。
+
+### 70.2 实测结果（7.1）
+
+```
+ScriptMethod: 679,867   Addresses: 460,313
+File size: 160 MB
+```
+
+样例（与参考 dump 的语义一致）：
+
+```json
+{"Address": 372950656, "Name": "System.String$$Concat",
+ "Signature": "System_String_o* System_String__Concat (Il2CppObject* arg0, const MethodInfo* method);",
+ "TypeSignature": "iii"}
+```
+
+自洽性校验：**679,867/679,867** 条满足 `len(TypeSignature) == 参数数 + 1`。
+嵌套类型命名修复：`typedef_name` 曾把 **typeDef 索引**误传给按 **typearr 索引**解析的 `type_name` ⇒ 嵌套类型前缀错乱
+（如 IAttrList 显示成 `IReadOnlyCollection<object>.IAttrList`）；改为独立的 typeDef 链命名后，
+`Mono.Xml.SecurityParser.OnStartElement(..., Mono.Xml.SmallXmlParser.IAttrList attrs)` 的 C 原型正确。
+
+### 70.3 未覆盖（已判定运行时/元数据不可得）
+
+- `ScriptString` / `ScriptMetadata` / `ScriptMetadataMethod`：需要 metadataUsage（BSS 运行时写入，§69）；
+- methodSpec 泛型实例方法条目：需要 methodSpecs 与 genericMethodPointers；
+- `md.rva == 0` 的 53,575 个方法（抽象/PInvoke 桩）按参考实现跳过；
+- `Addresses` 只含 method pointers（参考还合并 genericMethodPointers/invokerPointers/customAttributeGenerators）。
+
+### 70.4 验证
+
+`cargo test --release` 17 passed；完整 dump 88,902 类型 / 440,172 字段 / 733,442 方法；script.json 160MB 可 `json.load`。

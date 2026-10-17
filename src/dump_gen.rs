@@ -848,8 +848,21 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
         }
     }
 
-    // script.json first (streamed); fill ScriptMethod from all methods
-    let mut script_methods: Vec<(u64, String)> = Vec::with_capacity(mds.len());
+    // script.json (Il2CppDumper StructGenerator-compatible): one entry per method that has a
+    // code pointer, in method-table order. Built up-front because it needs the parent map and
+    // the struct-name dictionary (see src/script_json.rs for the reference mapping).
+    let mut script_methods: Vec<crate::script_json::ScriptMethod> = Vec::with_capacity(mds.len());
+    {
+        let namer = crate::script_json::Namer { m, tds: &tds, parents: &parents };
+        let structs = namer.struct_names();
+        for ti in 0..tds.len() {
+            for &gmi in &per_type[ti] {
+                if let Some(entry) = namer.method_entry(&structs, ti, &mds[gmi]) {
+                    script_methods.push(entry);
+                }
+            }
+        }
+    }
     let mut unresolved_props = 0usize;
     let mut synthesized_props = 0usize;
     let mut props_synth_types = 0usize;
@@ -1194,10 +1207,6 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
                 md.slot
             )?;
             nmethods += 1;
-            script_methods.push((
-                m.image_base + md.rva as u64,
-                format!("{}.{}", joined_type_name(&tds, &parents, i as u32, 0), md.name),
-            ));
         }
         writeln!(w, "\n\t// Methods")?;
         for &gmi in &per_type[i] {
@@ -1227,18 +1236,20 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
                 md.slot
             )?;
             nmethods += 1;
-            script_methods.push((
-                m.image_base + md.rva as u64,
-                // Fully-qualified: the namespace is what disambiguates the 689 duplicated
-                // simple class names in this build (an earlier version emitted the bare
-                // class name, so a Ghidra import collided across namespaces).
-                format!("{}.{}", joined_type_name(&tds, &parents, i as u32, 0), md.name),
-            ));
         }
         writeln!(w, "}}")?;
     }
 
-    write_script_json(wj, &script_methods)?;
+    // Addresses: sorted unique method-pointer RVAs (the reference additionally merges
+    // genericMethodPointers / invokerPointers / customAttributeGenerators, which 7.1 does not
+    // expose statically).
+    let mut addresses: Vec<u64> = (0..m.methodptrs_len)
+        .map(|i| m.method_rva(i) as u64)
+        .filter(|r| *r != 0)
+        .collect();
+    addresses.sort_unstable();
+    addresses.dedup();
+    crate::script_json::write_json(wj, &script_methods, &addresses)?;
     // Never emit placeholders silently (REQUIREMENTS R3/R4): every unresolved category is
     // reported here with its count so a consumer can judge the dump instead of trusting it.
     if computed_offsets > 0 || unresolved_offsets > 0 || static_offsets > 0 {
