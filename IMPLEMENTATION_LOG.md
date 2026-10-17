@@ -4853,3 +4853,31 @@ dump-gen --dummy-out 的 JSONL 新增列：
 ### 80.3 仍不可得的 DummyDll 细节
 - 75 程序集划分（image 表无 typeStart/count，§78）；方法 GenericParam（metadata 未解码出 method 泛型容器信息）；
   GenericParamConstraint（约束数据未保留）。
+
+## 82. 结合模拟执行：loader 解码块 emulation 打通（用户追加任务第 1 步）
+
+> 不是需求，是执行记录。
+
+### 82.1 思路
+不逐列转写公式，而是让 Unicorn **直接执行 loader 的真实解码基本块**：
+- 反汇编定位：image 表 loader 的直行解码块 0x140536FE6..0x1405370BB（块内无 call）；
+- 输入：rdi=行指针、r15d=共享行掩码、r14=输出结构基址、r13=i*0x58；
+- 输出：解码后的列值写入 0x58 字节结构。
+
+### 82.2 实现（tools/emu_loader_columns.py）
+- 映射整个 PE 到 preferred base；把 startup-metadata 行写入 scratch page；
+- 从 header blob（VA 0x1427D5CB0）读 hdr[0x84] 推导 image 表基址（无硬编码 slot）；
+- 每行设置寄存器、emu_start(0x140536FE6, 0x1405370BB)，读回解码列；
+- 同时用反汇编恢复的公式做参考解码，逐行逐列对比。
+
+### 82.3 结果
+- **75/75 行完全一致**（列 +0x04/+0x08/+0x18/+0x28/+0x2c/+0x30/+0x50 全部相同），
+  说明：① 反汇编出的列公式正确；② "模拟执行真实 loader 代码"这条路线可用（未来版本可省去逐列反推）。
+
+### 82.4 静态偏移可行性（第 2 步初步）
+- profile 注释指出 typeDef flags 列在 .upx0 class builder（0x159F64354）读取；实测该函数入口为 0x159F63C4D，
+  函数体内确实内联读取 [r15+0xC]（flags，+0xDFA09F90）与 [r15+0x32]（bitfield），r12=klass、r15=typeDef 行指针；
+- 但**字段布局相关常数**（td_field_start 1919057927、td_field_count 39531、fields table sub 492068044、fd_stride/name/type 常数）
+  在该函数体内 **0 命中**，且整个 .upx0 扫描 **0 命中** → 字段布局不在该变异函数内联，推测在 .text 的通用列访问/布局函数里；
+- 结论：静态偏移的模拟路线**仍开放但成本更高**（需先在 .text 中定位字段布局例程，再构造 klass/metadata 环境模拟）；
+  下一轮实验：在 .text（35MB）中扫描这些列常数与 fields 表引用，定位布局例程后再评估块级模拟。
