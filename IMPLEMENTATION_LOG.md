@@ -4750,3 +4750,25 @@ Slot 列不再标记为静态不可得；属于纯静态可恢复项（来源：
 
 ### 76.3 已保存分析脚本
 tools/analyze_static_offsets.py（第 1 轮的假设检验）；本轮的窗口/分组分析在其基础上扩展，结论记录于此。
+
+## 77. DummyDll v2：自定义特性（目标第 5 轮）
+
+> 不是需求，是执行记录。
+
+### 77.1 新增数据（Rust 导出 v2）
+dump-gen --dummy-out 的 JSONL 新增列：
+- M：rva（方法 RVA）、token（0x06000001+gmi）、slot（vtable 静态计算结果，见 §71）；
+- F：token（0x04000001+fieldRow）、off（instance 字段偏移；由 dump_gen::instance_offsets 用布局规则静态重建，explicit layout/泛型参数类型为 null）。
+实现：dump_gen 暴露 pub fn instance_offsets；dummy_export 调 vtable::compute_slots 与布局计算。
+
+### 77.2 C# 生成器 v2（tools/dummygen）
+- 在主类型之后追加 2 个特性类型（同程序集，共 88,904 TypeDef）：
+  Il2CppDummyDll.AddressAttribute { public string RVA/Offset/VA/Slot }、FieldOffsetAttribute { public string Offset }；
+- 按参考实现（DummyAssemblyGenerator.cs）的**命名参数**格式写 CustomAttribute blob：
+  prolog 0x0001 + named count + (0x53 字段, 0x0E string, SerString 名字, SerString 值)；
+- 输出：所有非抽象且 rva>0 的方法挂 AddressAttribute(RVA/VA[/Slot])；所有有静态布局偏移的 instance 字段挂 FieldOffsetAttribute(Offset)；
+- 实测：CustomAttribute 行 1,041,595；DummyDll.dll 77 MB；内置校验同时解码前 500 条 blob（prolog/命名参数/ctor 类型）全部通过。
+
+### 77.3 与参考实现的剩余差异
+- 多程序集划分（75 个 DLL，参考实现按 image 生成）：依赖类型→程序集映射；当前卡在 startup-metadata image 表列掩码（本轮已尝试列解，未成功，见 §76）。
+- GenericParam 表与 Address 的 Offset 字段（需要 exe 段表映射）未生成；v1 的已知差异仍成立。

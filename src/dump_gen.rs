@@ -1489,3 +1489,11 @@ pub fn write_script_json(w: &mut dyn Write, methods: &[(u64, String)]) -> std::i
     writeln!(w, "\"Addresses\": [0, 0, 0]")?;
     writeln!(w, "}}")
 }
+
+/// Instance-field offsets per type (declaration order), statically reconstructed with
+/// il2cpp's rules. None = the type cannot be laid out statically (explicit layout or
+/// generic-parameter fields).
+pub fn instance_offsets(m: &Meta, tds: &[Td]) -> Vec<Option<Vec<u32>>> {
+    let mut lc = LayoutCalc::new(m, tds);
+    (0..tds.len()).map(|i| lc.type_layout(i).map(|l| l.offsets)).collect()
+}

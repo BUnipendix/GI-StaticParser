@@ -77,6 +77,7 @@ fn split_name(td: &Td, joined: &str) -> (String, String) {
 
 pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize)> {
     let (tds, mds) = collect(m);
+    let inst_offsets = super::dump_gen::instance_offsets(m, &tds);
     let mut per_type: Vec<Vec<usize>> = vec![Vec::new(); tds.len()];
     for (gmi, md) in mds.iter().enumerate() {
         let decl = md.decl as usize;
@@ -101,6 +102,7 @@ pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize
         }
     }
 
+    let vtable_slots = crate::vtable::compute_slots(m, &tds, &per_type, &mds);
     let f = std::fs::File::create(path)?;
     let mut w = std::io::BufWriter::new(f);
     let mut n_types = 0usize;
@@ -151,19 +153,32 @@ pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize
         }
 
         if td.fields_start != u32::MAX {
+            let mut inst_idx = 0usize;
             for k in 0..td.fields_count {
                 let row = td.fields_start + k;
                 let fname = m.field_name(row);
                 let fti = m.field_type_idx(row);
                 let attrs = m.il2cpp_type(fti as usize).map(|(_, _, a)| a).unwrap_or(0);
                 let enc = enc_type(m, fti, 0);
+                let is_static = attrs & 0x10 != 0;
+                let off = if is_static {
+                    None
+                } else {
+                    let v = inst_offsets.get(i).and_then(|o| o.as_ref());
+                    let idx = inst_idx;
+                    inst_idx += 1;
+                    v.and_then(|o| o.get(idx).copied())
+                };
                 writeln!(
                     w,
-                    "{{\"k\":\"F\",\"id\":{},\"name\":{},\"type\":{},\"flags\":{}}}",
+                    "{{\"k\":\"F\",\"id\":{},\"row\":{},\"name\":{},\"type\":{},\"flags\":{},\"token\":{},\"off\":{}}}",
                     i,
+                    row,
                     serde_json::to_string(&fname)?,
                     serde_json::to_string(&enc)?,
-                    attrs
+                    attrs,
+                    0x0400_0001u32.wrapping_add(row),
+                    serde_json::to_string(&off)?
                 )?;
                 n_fields += 1;
             }
@@ -197,11 +212,14 @@ pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize
             }
             writeln!(
                 w,
-                "{{\"k\":\"M\",\"id\":{},\"name\":{},\"ret\":{},\"flags\":{},\"params\":{}}}",
+                "{{\"k\":\"M\",\"id\":{},\"name\":{},\"ret\":{},\"flags\":{},\"rva\":{},\"token\":{},\"slot\":{},\"params\":{}}}",
                 i,
                 serde_json::to_string(&md.name)?,
                 serde_json::to_string(&ret)?,
                 md.flags,
+                md.rva,
+                0x0600_0001u32.wrapping_add(gmi as u32),
+                serde_json::to_string(&vtable_slots[gmi])?,
                 params
             )?;
             n_methods += 1;

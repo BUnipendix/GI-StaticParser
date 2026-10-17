@@ -11,6 +11,8 @@ public sealed class FieldRec
     public string Name = "";
     public string Type = "obj";
     public uint Flags;
+    public uint Token;
+    public long? Offset;
 }
 
 public sealed class ParamRec
@@ -24,6 +26,9 @@ public sealed class MethodRec
     public string Name = "";
     public string Ret = "v";
     public uint Flags;
+    public uint Rva;
+    public uint Token;
+    public int? Slot;
     public List<ParamRec> Params = new();
 }
 
@@ -85,12 +90,16 @@ public static class Program
                     types.Add(cur);
                     break;
                 case "F":
-                    cur!.Fields.Add(new FieldRec
+                    var fr = new FieldRec
                     {
                         Name = r.GetProperty("name").GetString() ?? "",
                         Type = r.GetProperty("type").GetString() ?? "obj",
                         Flags = r.GetProperty("flags").GetUInt32(),
-                    });
+                    };
+                    if (r.TryGetProperty("token", out var ftok)) fr.Token = ftok.GetUInt32();
+                    if (r.TryGetProperty("off", out var foff) && foff.ValueKind == JsonValueKind.Number)
+                        fr.Offset = foff.GetInt64();
+                    cur!.Fields.Add(fr);
                     break;
                 case "M":
                     var m = new MethodRec
@@ -99,6 +108,10 @@ public static class Program
                         Ret = r.GetProperty("ret").GetString() ?? "v",
                         Flags = r.GetProperty("flags").GetUInt32(),
                     };
+                    if (r.TryGetProperty("rva", out var mrva)) m.Rva = mrva.GetUInt32();
+                    if (r.TryGetProperty("token", out var mtok)) m.Token = mtok.GetUInt32();
+                    if (r.TryGetProperty("slot", out var mslot) && mslot.ValueKind == JsonValueKind.Number)
+                        m.Slot = mslot.GetInt32();
                     foreach (var p in r.GetProperty("params").EnumerateArray())
                         m.Params.Add(new ParamRec
                         {
@@ -295,6 +308,93 @@ public static class Program
             }
         }
 
+        // ---- Il2CppDummyDll-style custom attributes (Address / FieldOffset) ----
+        int attrBaseId = FindType("System", "Attribute");
+        EntityHandle attrBaseHandle = attrBaseId >= 0
+            ? MetadataTokens.TypeDefinitionHandle(attrBaseId + 1) : objHandle;
+        var attrCtors = new List<MethodDefinitionHandle>();
+        var attrFieldNames = new[] { new[] { "RVA", "Offset", "VA", "Slot" }, new[] { "Offset" } };
+        var attrTypeNames = new[] { "AddressAttribute", "FieldOffsetAttribute" };
+        for (int ai = 0; ai < attrTypeNames.Length; ai++)
+        {
+            int firstField = fieldRows;
+            int firstMethod = methodRows;
+            mb.AddTypeDefinition(TypeAttributes.Public | TypeAttributes.Sealed,
+                mb.GetOrAddString("Il2CppDummyDll"), mb.GetOrAddString(attrTypeNames[ai]), attrBaseHandle,
+                MetadataTokens.FieldDefinitionHandle(firstField),
+                MetadataTokens.MethodDefinitionHandle(firstMethod));
+            foreach (var fn in attrFieldNames[ai])
+            {
+                var fbb = new BlobBuilder();
+                new BlobEncoder(fbb).FieldSignature().String();
+                mb.AddFieldDefinition(FieldAttributes.Public, mb.GetOrAddString(fn), mb.GetOrAddBlob(fbb));
+                fieldRows++;
+            }
+            var sbb = new BlobBuilder();
+            new BlobEncoder(sbb).MethodSignature(isInstanceMethod: true).Parameters(0, out var retEb, out _);
+            retEb.Void();
+            var bodyEnc = new InstructionEncoder(new BlobBuilder());
+            bodyEnc.OpCode(ILOpCode.Ret);
+            var ctor = mb.AddMethodDefinition(
+                MethodAttributes.Public | MethodAttributes.HideBySig | MethodAttributes.SpecialName | MethodAttributes.RTSpecialName,
+                MethodImplAttributes.IL, mb.GetOrAddString(".ctor"), mb.GetOrAddBlob(sbb),
+                bodyStream.AddMethodBody(bodyEnc, maxStack: 0), MetadataTokens.ParameterHandle(paramRows));
+            methodRows++;
+            attrCtors.Add(ctor);
+        }
+        var addressCtor = attrCtors[0];
+        var fieldOffsetCtor = attrCtors[1];
+        static void WriteSerString(BlobBuilder bb, string value)
+        {
+            var bytes = System.Text.Encoding.UTF8.GetBytes(value);
+            if (bytes.Length < 0x80)
+            {
+                bb.WriteByte((byte)bytes.Length);
+            }
+            else
+            {
+                int len = bytes.Length;
+                bb.WriteByte((byte)(0x80 | (len & 0x3F)));
+                bb.WriteByte((byte)(len >> 6));
+            }
+            bb.WriteBytes(bytes);
+        }
+        BlobHandle NamedArgsBlob((string Name, string Value)[] args)
+        {
+            var bb = new BlobBuilder();
+            bb.WriteUInt16(0x0001);
+            bb.WriteUInt16((ushort)args.Length);
+            foreach (var (name, value) in args)
+            {
+                bb.WriteByte(0x53); // named argument: field
+                bb.WriteByte(0x0E); // field type: string
+                WriteSerString(bb, name);
+                WriteSerString(bb, value);
+            }
+            return mb.GetOrAddBlob(bb);
+        }
+        foreach (var t in types)
+        {
+            foreach (var f in t.Fields)
+            {
+                if (f.Token == 0 || f.Offset is null) continue;
+                var fh = MetadataTokens.FieldDefinitionHandle((int)(f.Token - 0x04000000));
+                mb.AddCustomAttribute(fh, fieldOffsetCtor,
+                    NamedArgsBlob(new[] { ("Offset", "0x" + f.Offset.Value.ToString("X")) }));
+            }
+            foreach (var me in t.Methods)
+            {
+                if (me.Token == 0 || me.Rva == 0) continue;
+                var mh = MetadataTokens.MethodDefinitionHandle((int)(me.Token - 0x06000000));
+                var args = new List<(string, string)>
+                {
+                    ("RVA", "0x" + me.Rva.ToString("X")),
+                    ("VA", "0x" + (0x140000000UL + me.Rva).ToString("X")),
+                };
+                if (me.Slot is int sl && sl >= 0) args.Add(("Slot", sl.ToString()));
+                mb.AddCustomAttribute(mh, addressCtor, NamedArgsBlob(args.ToArray()));
+            }
+        }
         // ---- PE image ----
         var peHeader = new PEHeaderBuilder(
             machine: Machine.I386,
@@ -364,15 +464,49 @@ public static class Program
             }
             foreach (var ih in td.GetInterfaceImplementations()) ifaceCount++;
         }
+        int attrRowCount = md.CustomAttributes.Count;
         Console.WriteLine($"verify: types={typeCount} fields={fieldCount} methods={methodCount} " +
-                          $"params={paramCount} ifaces={ifaceCount} bodies={bodyCount}");
-        if (typeCount != expected.Count) throw new Exception("type count mismatch");
-        int expFields = expected.Sum(t => t.Fields.Count);
-        int expMethods = expected.Sum(t => t.Methods.Count);
+                          $"params={paramCount} ifaces={ifaceCount} bodies={bodyCount} customAttrs={attrRowCount}");
+        // +2 attribute types (AddressAttribute, FieldOffsetAttribute) with 5 fields and 2 ctors
+        if (typeCount != expected.Count + 2) throw new Exception($"type count mismatch {typeCount} vs {expected.Count + 2}");
+        int expFields = expected.Sum(t => t.Fields.Count) + 5;
+        int expMethods = expected.Sum(t => t.Methods.Count) + 2;
         int expParams = expected.Sum(t => t.Methods.Sum(m => m.Params.Count));
         if (fieldCount != expFields) throw new Exception($"field count mismatch {fieldCount} vs {expFields}");
         if (methodCount != expMethods) throw new Exception($"method count mismatch {methodCount} vs {expMethods}");
         if (paramCount != expParams) throw new Exception($"param count mismatch {paramCount} vs {expParams}");
-        Console.WriteLine("verify: OK (counts match the JSONL export)");
+        if (attrRowCount == 0) throw new Exception("no custom attributes emitted");
+        // targeted custom-attribute validation: decode a sample of blobs and resolve their ctor type
+        var ctorNames = new System.Collections.Generic.Dictionary<EntityHandle, string>();
+        int checkedAttrs = 0; int sampleShown = 0;
+        foreach (var ch in md.CustomAttributes)
+        {
+            var ca = md.GetCustomAttribute(ch);
+            if (!ctorNames.TryGetValue(ca.Constructor, out var ctorName))
+            {
+                var mh2 = (MethodDefinitionHandle)ca.Constructor;
+                var mdef2 = md.GetMethodDefinition(mh2);
+                var td2 = md.GetTypeDefinition(mdef2.GetDeclaringType());
+                ctorName = md.GetString(td2.Name);
+                ctorNames[ca.Constructor] = ctorName;
+            }
+            var blob = md.GetBlobBytes(ca.Value);
+            if (blob.Length < 4 || blob[0] != 1 || blob[1] != 0)
+                throw new Exception($"custom attribute blob with bad prolog ({blob.Length} bytes, ctor {ctorName})");
+            int named = blob[2] | (blob[3] << 8);
+            if (named == 0) throw new Exception($"custom attribute {ctorName} has no named arguments");
+            if (ctorName != "AddressAttribute" && ctorName != "FieldOffsetAttribute")
+                throw new Exception($"unexpected custom attribute type {ctorName}");
+            checkedAttrs++;
+            if (sampleShown < 3)
+            {
+                string text = System.Text.Encoding.UTF8.GetString(blob, 0, Math.Min(blob.Length, 60));
+                Console.WriteLine($"  attr sample: ctor={ctorName} named={named} bytes={blob.Length} ascii={text}");
+                sampleShown++;
+            }
+            if (checkedAttrs >= 500) break;
+        }
+        Console.WriteLine($"verify: custom attributes decoded OK (sample {checkedAttrs}, table rows {attrRowCount})");
+        Console.WriteLine("verify: OK (counts match the JSONL export; attribute rows present)");
     }
 }
