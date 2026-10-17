@@ -28,6 +28,8 @@ Rust (edition 2021); dependencies are pinned in `Cargo.lock`.
 mhydump dump --exe <main-module> --metadata <global-metadata.dat> --out dump.cs
 ```
 
+`dump-gen` now also recovers the **image / assembly name tables** from that file (`--images-out names.json` writes the 75 image names and 75 assembly names for 7.1.0).
+
 `dump-gen` additionally auto-loads the sibling **`startup-metadata.dat`** (same directory as
 `global-metadata.dat`) — it holds the generic-class rows, so `GENERICINST` types render as
 `System.Collections.Generic.List<System.String>` instead of `System.Object`. Without that file the
