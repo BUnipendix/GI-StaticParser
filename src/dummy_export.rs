@@ -75,6 +75,20 @@ fn split_name(td: &Td, joined: &str) -> (String, String) {
     (ns, joined.to_string())
 }
 
+/// Map an image RVA to its file offset using the PE section table (None if not backed).
+fn rva_to_file(m: &Meta, rva: u32) -> Option<u32> {
+    for &(sva, vsz, ro, rsz) in &m.sections {
+        let end = sva.saturating_add(vsz.max(rsz));
+        if rva >= sva && rva < end {
+            let delta = rva - sva;
+            if delta < rsz {
+                return Some(ro + delta);
+            }
+        }
+    }
+    None
+}
+
 pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize)> {
     let (tds, mds) = collect(m);
     let inst_offsets = super::dump_gen::instance_offsets(m, &tds);
@@ -212,7 +226,7 @@ pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize
             }
             writeln!(
                 w,
-                "{{\"k\":\"M\",\"id\":{},\"name\":{},\"ret\":{},\"flags\":{},\"rva\":{},\"token\":{},\"slot\":{},\"params\":{}}}",
+                "{{\"k\":\"M\",\"id\":{},\"name\":{},\"ret\":{},\"flags\":{},\"rva\":{},\"token\":{},\"slot\":{},\"foff\":{},\"params\":{}}}",
                 i,
                 serde_json::to_string(&md.name)?,
                 serde_json::to_string(&ret)?,
@@ -220,6 +234,7 @@ pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize
                 md.rva,
                 0x0600_0001u32.wrapping_add(gmi as u32),
                 serde_json::to_string(&vtable_slots[gmi])?,
+                serde_json::to_string(&rva_to_file(m, md.rva))?,
                 params
             )?;
             n_methods += 1;

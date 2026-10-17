@@ -29,6 +29,7 @@ public sealed class MethodRec
     public uint Rva;
     public uint Token;
     public int? Slot;
+    public long? FileOffset;
     public List<ParamRec> Params = new();
 }
 
@@ -112,6 +113,8 @@ public static class Program
                     if (r.TryGetProperty("token", out var mtok)) m.Token = mtok.GetUInt32();
                     if (r.TryGetProperty("slot", out var mslot) && mslot.ValueKind == JsonValueKind.Number)
                         m.Slot = mslot.GetInt32();
+                    if (r.TryGetProperty("foff", out var mfoff) && mfoff.ValueKind == JsonValueKind.Number)
+                        m.FileOffset = mfoff.GetInt64();
                     foreach (var p in r.GetProperty("params").EnumerateArray())
                         m.Params.Add(new ParamRec
                         {
@@ -207,6 +210,21 @@ public static class Program
                 baseType,
                 MetadataTokens.FieldDefinitionHandle(fieldStart[i]),
                 MetadataTokens.MethodDefinitionHandle(methodStart[i]));
+        }
+
+        // ---- GenericParam rows (arity from the metadata type name suffix) ----
+        int genericParamRows = 0;
+        foreach (var t in types)
+        {
+            int arity = ArityOf(t.Name);
+            if (arity == 0) continue;
+            var ownerTd = MetadataTokens.TypeDefinitionHandle(t.Id + 1);
+            for (int k = 0; k < arity; k++)
+            {
+                mb.AddGenericParameter(ownerTd, GenericParameterAttributes.None,
+                    mb.GetOrAddString("T" + (k + 1)), k);
+                genericParamRows++;
+            }
         }
 
         // ---- InterfaceImpl rows ----
@@ -389,8 +407,9 @@ public static class Program
                 var args = new List<(string, string)>
                 {
                     ("RVA", "0x" + me.Rva.ToString("X")),
-                    ("VA", "0x" + (0x140000000UL + me.Rva).ToString("X")),
                 };
+                if (me.FileOffset is long fo) args.Add(("Offset", "0x" + fo.ToString("X")));
+                args.Add(("VA", "0x" + (0x140000000UL + me.Rva).ToString("X")));
                 if (me.Slot is int sl && sl >= 0) args.Add(("Slot", sl.ToString()));
                 mb.AddCustomAttribute(mh, addressCtor, NamedArgsBlob(args.ToArray()));
             }
@@ -404,6 +423,16 @@ public static class Program
         peBuilder.Serialize(blobOut);
         File.WriteAllBytes(output, blobOut.ToArray());
         Console.WriteLine($"wrote {output} ({new FileInfo(output).Length / 1024} KB)");
+    }
+
+    static int ArityOf(string name)
+    {
+        int dot = name.LastIndexOf('.');
+        string seg = dot >= 0 ? name.Substring(dot + 1) : name;
+        int bt = seg.LastIndexOf('`');
+        if (bt < 0) return 0;
+        if (int.TryParse(seg.Substring(bt + 1), out int n) && n > 0 && n < 64) return n;
+        return 0;
     }
 
     static void WriteSigType(SignatureTypeEncoder enc, string s, List<TypeRec> types)
@@ -465,8 +494,11 @@ public static class Program
             foreach (var ih in td.GetInterfaceImplementations()) ifaceCount++;
         }
         int attrRowCount = md.CustomAttributes.Count;
+        int genericParamRows = md.GetTableRowCount(TableIndex.GenericParam);
+        int expGenericParams = expected.Sum(t => ArityOf(t.Name));
         Console.WriteLine($"verify: types={typeCount} fields={fieldCount} methods={methodCount} " +
-                          $"params={paramCount} ifaces={ifaceCount} bodies={bodyCount} customAttrs={attrRowCount}");
+                          $"params={paramCount} ifaces={ifaceCount} bodies={bodyCount} customAttrs={attrRowCount} genericParams={genericParamRows}");
+        if (genericParamRows != expGenericParams) throw new Exception($"generic param count mismatch {genericParamRows} vs {expGenericParams}");
         // +2 attribute types (AddressAttribute, FieldOffsetAttribute) with 5 fields and 2 ctors
         if (typeCount != expected.Count + 2) throw new Exception($"type count mismatch {typeCount} vs {expected.Count + 2}");
         int expFields = expected.Sum(t => t.Fields.Count) + 5;

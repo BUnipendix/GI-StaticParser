@@ -119,3 +119,5 @@
 - [2026-10-17] 字符串字面量：tools/recover-literals.sh 包装外部工具 gi-stringliteral（版本无关，从 exe 抽常数+定位表）。7.1 实测 86,108 条字面量（table 0x1ebb8ec / data 0x1c6c828），产物 ~/gire/out/71/literals.json；前序 meta_string_literals.txt 覆盖 99.54%。6.4 样本因混淆代次不同失败（工具作者仅验证特定版本）。
 
 - [2026-10-17] DummyDll v2：JSONL 新增 rva/token/slot/instance-offset；生成器追加 AddressAttribute/FieldOffsetAttribute 与 1,041,595 条 CustomAttribute（命名参数格式，内置解码校验通过），DummyDll.dll 77MB。剩余差异：75 程序集划分（依赖 image 映射）、GenericParam 表。
+
+- [2026-10-17] DummyDll v3：+ GenericParam 表（1,195 行，按类型名 arity）与 AddressAttribute 的 RVA/Offset/VA；DummyDll.dll 89MB（88,904 TypeDef / 733,444 Method / 1,041,595 CustomAttribute）。方法泛型参数、泛型约束、75 程序集划分仍不可得（metadata/image 表已剥离）。

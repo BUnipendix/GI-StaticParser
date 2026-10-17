@@ -4831,3 +4831,25 @@ dump-gen --dummy-out 的 JSONL 新增列：
 - 「静态偏移规则」项：规则本身（每程序集 arena、非GC 区/GC 区、类型内声明序）已确认，但 7.1 缺数据载体，
   只能作为"已知但本版本无法落地"记录；不再计入未完成任务。
 - DummyDll 的 FieldOffsetAttribute 只覆盖可重建的 instance 偏移（v2 已如此），静态字段不写假 offset。
+
+## 80. DummyDll v3：GenericParam 表 + AddressAttribute.Offset（目标第 8 轮）
+
+> 不是需求，是执行记录。
+
+### 80.1 新增
+- Rust 导出：M 记录新增 foff（方法 RVA → exe 文件偏移，基于 PE 段表映射；不可映射为 null）；
+- C# 生成器：
+  - GenericParam 表：按类型名尾部 arity（如 List 加反引号 1 → 1）为 2,455 个泛型类型写入 1,195 个 GenericParam 行
+    （名字 T1..Tn，无约束——GI metadata 未保留泛型参数名与约束）；
+  - AddressAttribute 命名参数改为 RVA / Offset / VA（Offset=文件偏移，与参考实现字段名一致；Slot 有值时追加）。
+
+### 80.2 产物与校验
+- DummyDll.dll 89 MB：88,904 TypeDef / 440,177 Field / 733,444 Method / 548,400 Param /
+  84,377 InterfaceImpl / 1,041,595 CustomAttribute / 1,195 GenericParam；
+- 内置校验：CustomAttribute 采样解码 500 条（含 Address 的 RVA/Offset/VA 与 FieldOffset 的 Offset）全部通过；
+  GenericParam 行数 = 按类型名 arity 的期望值。
+- 差异更新：单程序集；RVA/Offset/VA 已对齐参考格式。
+
+### 80.3 仍不可得的 DummyDll 细节
+- 75 程序集划分（image 表无 typeStart/count，§78）；方法 GenericParam（metadata 未解码出 method 泛型容器信息）；
+  GenericParamConstraint（约束数据未保留）。
