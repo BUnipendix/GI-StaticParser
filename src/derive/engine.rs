@@ -13,6 +13,8 @@ pub struct Meta<'a> {
     pub body: Buffer<'a>,
     pub image: &'a [u8],
     pub image_base: u64,
+    /// The embedded MHY header (0x210 bytes) that every table anchor is resolved against.
+    pub header: Vec<u8>,
     /// PE sections as `(rva, virtual_size, raw_pointer, raw_size)` (for VA -> file offset).
     pub sections: Vec<(u32, u32, u32, u32)>,
     /// Sibling `startup-metadata.dat` bytes (4 MB), when present. It holds the generic-class
@@ -163,6 +165,7 @@ impl<'a> Meta<'a> {
             body,
             image: exe,
             image_base,
+            header: header_bytes,
             sections,
             startup,
             gc_rows,
@@ -312,6 +315,67 @@ impl<'a> Meta<'a> {
     /// Upper bound for the field table rows (table size / stride).
     fn field_rows_cap(&self) -> usize {
         (self.body.size().saturating_sub(self.field_base)) / self.profile.field_stride as usize
+    }
+
+    /// Read a little-endian u32 out of the sibling `startup-metadata.dat`.
+    #[inline]
+    fn startup_u32(&self, at: usize) -> Option<u32> {
+        let s = self.startup?;
+        let b = s.get(at..at + 4)?;
+        Some(u32::from_le_bytes(b.try_into().ok()?))
+    }
+
+    /// Names from one startup-metadata name table (images / assemblies).
+    ///
+    /// Self-validating: rows are walked until the masked packed index no longer decodes to a
+    /// plausible assembly/image file name, so a wrong table anchor yields an empty vector
+    /// instead of garbage.
+    fn startup_name_table_names(&self, t: &crate::derive::profile::StartupNameTable) -> Vec<String> {
+        let Some(_) = self.startup else { return Vec::new() };
+        let base = t.table.resolve(&self.header);
+        let mut out = Vec::new();
+        for i in 0..4096u32 {
+            let Some(row) = base.checked_add((i as usize).wrapping_mul(t.stride as usize)) else { break };
+            let Some(at) = row.checked_add(t.name_off as usize) else { break };
+            let Some(raw) = self.startup_u32(at) else { break };
+            let packed = t.packed_index(raw, i);
+            let name = self.decode_str(packed);
+            // Assembly names may start with `_` (e.g. `__Generated`) and need not end in
+            // `.dll`; the stop condition is simply the first row that fails to decode to a
+            // plausible identifier-ish name.
+            let first_ok = name
+                .chars()
+                .next()
+                .map(|c| c.is_ascii_alphanumeric() || c == '_')
+                .unwrap_or(false);
+            let ok = !name.is_empty()
+                && name.len() <= 200
+                && first_ok
+                && name
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-' | b'+' | b'`'));
+            if !ok {
+                break;
+            }
+            out.push(name);
+        }
+        out
+    }
+
+    /// Image names from the startup-metadata images table (7.1.0: 75 entries, `mscorlib.dll` first).
+    pub fn startup_image_names(&self) -> Vec<String> {
+        match self.profile.startup_images.as_ref() {
+            Some(t) => self.startup_name_table_names(t),
+            None => Vec::new(),
+        }
+    }
+
+    /// Assembly names from the startup-metadata assemblies table (7.1.0: 75 entries).
+    pub fn startup_assembly_names(&self) -> Vec<String> {
+        match self.profile.startup_assemblies.as_ref() {
+            Some(t) => self.startup_name_table_names(t),
+            None => Vec::new(),
+        }
     }
 
     /// Per-row field-table mask.

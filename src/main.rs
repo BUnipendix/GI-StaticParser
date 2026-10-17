@@ -141,6 +141,9 @@ enum Cmd {
         /// Skip the constant-free cipher cross-check against the binary.
         #[arg(long)]
         no_cipher_check: bool,
+        /// Write the recovered image / assembly name tables (from startup-metadata) as JSON.
+        #[arg(long)]
+        images_out: Option<String>,
     },
     /// Milestones (e)/(f): emit dump.cs. With --only, restrict to given TypeDefIndices.
     Dump {
@@ -183,8 +186,16 @@ fn main() -> Result<()> {
         Cmd::TypesDump { exe, metadata, out } => types_dump(&exe, &metadata, &out),
         Cmd::Derive { exe, metadata, out } => derive_cmd(&exe, &metadata, out.as_deref()),
         Cmd::Il2CppFns { exe } => il2cpp_fns(&exe),
-        Cmd::DumpGen { exe, metadata, out, profile_in, profile_out, no_cipher_check } =>
-            dump_gen_cmd(&exe, &metadata, &out, profile_in.as_deref(), profile_out.as_deref(), no_cipher_check),
+        Cmd::DumpGen { exe, metadata, out, profile_in, profile_out, no_cipher_check, images_out } =>
+            dump_gen_cmd(
+                &exe,
+                &metadata,
+                &out,
+                profile_in.as_deref(),
+                profile_out.as_deref(),
+                no_cipher_check,
+                images_out.as_deref(),
+            ),
         Cmd::Dump { exe, metadata, out, only } => dump_cmd(&exe, &metadata, &out, only.as_deref()),
     }
 }
@@ -645,6 +656,7 @@ fn dump_gen_cmd(
     profile_in: Option<&str>,
     profile_out: Option<&str>,
     no_cipher_check: bool,
+    images_out: Option<&str>,
 ) -> Result<()> {
     use static_mhy_dumper::derive::profile::Profile;
     let ga = std::fs::read(exe)?;
@@ -718,6 +730,28 @@ fn dump_gen_cmd(
     if let Some(p) = profile_out {
         std::fs::write(p, serde_json::to_string_pretty(&m.profile)?)?;
         println!("wrote profile {p}");
+    }
+    if let Some(p) = images_out {
+        let images = m.startup_image_names();
+        let assemblies = m.startup_assembly_names();
+        if images.is_empty() || assemblies.is_empty() {
+            tracing::warn!(
+                "image/assembly name tables not resolved ({} images, {} assemblies); 
+                 the profile needs startup_images / startup_assemblies",
+                images.len(),
+                assemblies.len()
+            );
+        }
+        let doc = serde_json::json!({
+            "Images": images,
+            "Assemblies": assemblies,
+        });
+        std::fs::write(p, serde_json::to_string_pretty(&doc)?)?;
+        println!(
+            "wrote {p}: {} images, {} assemblies",
+            doc["Images"].as_array().map(|a| a.len()).unwrap_or(0),
+            doc["Assemblies"].as_array().map(|a| a.len()).unwrap_or(0)
+        );
     }
     let json_path = match out.rfind('/') {
         Some(p) => format!("{}script.json", &out[..=p]),

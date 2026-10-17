@@ -4377,3 +4377,34 @@ oracle 把 indexer 当普通属性打印（`public System.Char Chars { get; }`�
 ### 62.5 验证
 
 回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法。
+
+## 63. R11 第三十轮：images / assemblies 名字表（startup-metadata）（2026-10-17）
+
+> 不是需求，是执行记录。
+
+### 63.1 修正一个旧错误：image 记录是 40 字节，不是 28
+
+历史笔记把 startup 的 image 表记成「28B 行」——实际 stride 是 **0x28 = 40 字节**（7 个 u32 之后 name@+0x18 仍有值）。
+按 40B 走：**75 条 image 名**正确解出（mscorlib.dll / Mono.Security.dll / System.dll / … / Assembly-CSharp.dll），与 75 个 assembly 一一对应。
+
+### 63.2 两条表的解码链（已验证）
+
+| 表 | 头部锚点 | stride | 名字列 | 名字变换 | 行掩码 |
+|---|---|---|---|---|---|
+| images | `hdr[0x84] ^ 0x582F3633` → startup 0x35D5E8 | 40 | +0x18 | `(raw ^ 0x5E8998A9) − mask(i)` | `((i*0xBD1E70EB664)>>16) + 0x724F4CCB ^ 0x2BE02F3D` |
+| assemblies | `hdr[0x6C] + 0xE028E1F0` → startup 0x3DE954 | 44 | +0x1C | `((raw + 0xFE3F0D29) & 0xFFFFFFFF) ^ mask(i)` | `((i*0x42DCDAFE4FA8)>>20) * 0x1E70F997 + 0x50F12A02` |
+
+名字值 = packed 字符串索引（`len<<24 | off`）→ 共享字符串密码解密，与其他表同一密码体系。
+自校验：逐行解到第一个不是合法名字（字符集/首字符）的行即停止 ⇒ 锚点错时输出空表而不是垃圾。
+
+### 63.3 实现（profile 驱动，非硬编码）
+
+- `Profile::startup_images` / `Profile::startup_assemblies`: `StartupNameTable { table, stride, name_off, name_op, name_c, mask_mul/shift/mul2/add2/add/xor }`
+- `Meta::startup_image_names()` / `startup_assembly_names()`
+- CLI: `dump-gen --images-out <path>` → JSON `{ "Images": [...75], "Assemblies": [...75] }`
+- 7.1 实测：Images 75（首 mscorlib.dll、末 Assembly-CSharp.dll）、Assemblies 75（首 mscorlib、末 Assembly-CSharp），与独立 Python 解码逐项一致。
+
+### 63.4 验证
+
+`cargo test --release` 17 passed；`--profile-out` 往返正常（新字段序列化）；
+完整 dump 仍 88,902 类型 / 440,172 字段 / 733,442 方法。

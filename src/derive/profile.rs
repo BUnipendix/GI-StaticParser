@@ -88,7 +88,7 @@ impl MaskChain {
 }
 
 /// A table located relative to the metadata body, keyed by an obfuscated header slot.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableBase {
     /// Header field offset (into the embedded MHY header).
     pub hdr_off: u32,
@@ -185,6 +185,65 @@ pub enum ColKind {
 }
 
 /// The full per-build profile (generation 7.x layout).
+/// One name-bearing table stored in the sibling `startup-metadata.dat` (images /
+/// assemblies). Rows are fixed-stride; the name column is masked per row with a chain that
+/// depends only on the row index, and the mapped value is a packed string index
+/// (`len<<24 | offset`) that feeds the shared string cipher.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct StartupNameTable {
+    /// Header transform for the table base (`hdr[hdr_off] op imm`).
+    pub table: TableBase,
+    pub stride: u32,
+    /// Offset of the name column inside the row.
+    pub name_off: u32,
+    /// `"xor-sub"`: `packed = ((raw ^ name_c) - mask) & 0xFFFFFFFF`;
+    /// `"add-xor"`: `packed = ((raw + name_c) & 0xFFFFFFFF) ^ mask`.
+    pub name_op: String,
+    pub name_c: u32,
+    /// Row mask: `mask = (((i * mul) >> shift) as u32)`; optional second stage
+    /// `mask = mask * mul2 + add2`; then optional `+ add` and `^ xor`.
+    pub mask_mul: u64,
+    pub mask_shift: u32,
+    #[serde(default)]
+    pub mask_mul2: Option<u32>,
+    #[serde(default)]
+    pub mask_add2: Option<u32>,
+    #[serde(default)]
+    pub mask_add: Option<u32>,
+    #[serde(default)]
+    pub mask_xor: Option<u32>,
+}
+
+impl StartupNameTable {
+    #[inline]
+    pub fn row_mask(&self, i: u32) -> u32 {
+        let mut m = ((i as u64).wrapping_mul(self.mask_mul) >> self.mask_shift) as u32;
+        if let Some(mul2) = self.mask_mul2 {
+            m = m.wrapping_mul(mul2);
+            if let Some(a) = self.mask_add2 {
+                m = m.wrapping_add(a);
+            }
+        }
+        if let Some(a) = self.mask_add {
+            m = m.wrapping_add(a);
+        }
+        if let Some(x) = self.mask_xor {
+            m ^= x;
+        }
+        m
+    }
+
+    #[inline]
+    pub fn packed_index(&self, raw: u32, i: u32) -> u32 {
+        let mask = self.row_mask(i);
+        match self.name_op.as_str() {
+            "add-xor" => raw.wrapping_add(self.name_c) ^ mask,
+            // default: xor-sub
+            _ => (raw ^ self.name_c).wrapping_sub(mask),
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Profile {
     /// String-key schedule, **as data**. When present it supersedes the legacy
@@ -257,6 +316,16 @@ pub struct Profile {
     /// The table lives in the sibling **`startup-metadata.dat`** (loaded at the same time as
     /// global-metadata), not in the metadata body; the offset is `hdr[slot] op imm`.
     /// 7.1.0: slot 0x120 ^ 0x1C3F68EA (loader 0x1405365C5).
+    /// `startup-metadata` images table (7.1.0: 75 records, 40-byte rows, name at +0x18).
+    /// header slot 0x84 ^ 0x582F3633; per-row name mask: ((i * 0xBD1E70EB664) >> 16)
+    /// + 0x724F4CCB then ^ 0x2BE02F3D; packed = (raw ^ 0x5E8998A9) - mask.
+    #[serde(default)]
+    pub startup_images: Option<StartupNameTable>,
+    /// `startup-metadata` assemblies table (7.1.0: 75 records, 44-byte rows, name at +0x1C).
+    /// header slot 0x6C + 0xE028E1F0; per-row name mask: ((i * 0x42DCDAFE4FA8) >> 20)
+    /// * 0x1E70F997 + 0x50F12A02; packed = (raw + 0xFE3F0D29) ^ mask.
+    #[serde(default)]
+    pub startup_assemblies: Option<StartupNameTable>,
     #[serde(default)]
     pub generic_class_rows: Option<TableBase>,
 

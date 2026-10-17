@@ -60,6 +60,32 @@ pub fn gen71() -> Profile {
         // Generic-class rows live in startup-metadata.dat (loader 0x1405365BE..0x140536660):
         //   base = startup + (i32(hdr[0x120]) ^ 0x1C3F68EA); rows = {defTdi u32, genericInstIndex i32}
         // GenericInst structs: registration+0x28 -> 16B {argc, pad, Il2CppType** argv}.
+        startup_images: Some(crate::derive::profile::StartupNameTable {
+            table: TableBase { hdr_off: 0x84, sub: None, xor: Some(0x582F_3633), add: None },
+            stride: 0x28,
+            name_off: 0x18,
+            name_op: "xor-sub".to_string(),
+            name_c: 0x5E89_98A9,
+            mask_mul: 0xBD1E_70EB_664,
+            mask_shift: 16,
+            mask_mul2: None,
+            mask_add2: None,
+            mask_add: Some(0x724F_4CCB),
+            mask_xor: Some(0x2BE0_2F3D),
+        }),
+        startup_assemblies: Some(crate::derive::profile::StartupNameTable {
+            table: TableBase { hdr_off: 0x6C, sub: None, xor: None, add: Some(0xE028_E1F0) },
+            stride: 44,
+            name_off: 0x1C,
+            name_op: "add-xor".to_string(),
+            name_c: 0xFE3F_0D29,
+            mask_mul: 0x42DC_DAFE_4FA8,
+            mask_shift: 20,
+            mask_mul2: Some(0x1E70_F997),
+            mask_add2: Some(0x50F1_2A02),
+            mask_add: None,
+            mask_xor: None,
+        }),
         generic_class_rows: Some(TableBase { hdr_off: 0x120, sub: None, xor: Some(0x1C3F_68EA), add: None }),
         generic_insts_va: Some(0x1_4234_4A40),
         nested_stride: 4,
