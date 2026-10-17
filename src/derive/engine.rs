@@ -450,11 +450,14 @@ impl<'a> Meta<'a> {
         Some(raw ^ (col.c as u16))
     }
 
+    /// typeDef parent (typearr index; u32::MAX = no base — interfaces / System.Object).
+    /// Fixed-mask column: parent = raw@0x2C ^ profile.td_parent_xor. (An earlier version also
+    /// xored the +0x1C tag; that only coincided with this mask on rows whose element-type
+    /// column holds its sentinel, corrupting 25,981 rows.)
     pub fn td_parent(&self, i: usize) -> u32 {
         let p = &self.profile;
         let rec = self.td_base + p.td_stride as usize * i;
-        let tag = self.body.read_u32(rec + 0x1C);
-        self.body.read_u32(rec + p.td_parent_off as usize) ^ tag ^ p.td_parent_xor
+        self.body.read_u32(rec + p.td_parent_off as usize) ^ p.td_parent_xor
     }
 
     /// Interface-offsets start for typeDef `i`.

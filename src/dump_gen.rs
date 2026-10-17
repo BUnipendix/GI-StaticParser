@@ -433,7 +433,10 @@ fn base_name(m: &Meta, tds: &[Td], parent_tarr: u32) -> Option<String> {
         return None;
     }
     let (kind, data, _) = m.il2cpp_type(parent_tarr as usize)?;
-    if !matches!(kind, 0x11 | 0x12) {
+    // CLASS (0x12) / VALUETYPE (0x11) / OBJECT (0x1C): the parent of a direct System.Object
+    // subclass is stored as an OBJECT-kind Il2CppType, so 0x1C must be accepted here
+    // (otherwise thousands of classes lose their `: Object` base in the header).
+    if !matches!(kind, 0x11 | 0x12 | 0x1C) {
         return None;
     }
     let t = tds.get(data as usize)?;
@@ -711,7 +714,11 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
                 extends.push(base);
             }
         }
-        if let Some(iface_start) = td.iface_start {
+        // Il2CppDumper prints NO interface list for enums (verified: 0 enum lines with ` : `
+        // in the 6.4 reference dump, while 669 structs do print interfaces). Enums implicitly
+        // implement IComparable/IFormattable/IConvertible in the metadata, and echoing those
+        // would add ~8k spurious interface lists.
+        if let Some(iface_start) = td.iface_start.filter(|_| kind != "enum") {
             // Exact per-type interface count when the profile has the column (7.1: u8@0x42+0xA2);
             // otherwise fall back to the next-distinct-start run length (over-reports).
             let span = match m.td_iface_count(i) {

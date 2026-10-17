@@ -4075,3 +4075,39 @@ Token = `0x06000001 + 方法表行号`（与方法表顺序一致，构造器同
 ### 53.4 验证
 
 回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法。
+
+## 54. R11 第二十一轮：typeDef parent 公式纠错 + 头部规则对齐（2026-10-17）
+
+> 不是需求，是执行记录。
+
+### 54.1 parent 列公式错误（25,981 行受影响）
+
+旧公式：`parent_tarr = raw@0x2C ^ tag@0x1C ^ 0x8177D738`。
+实测**应为固定掩码**：`parent_tarr = raw@0x2C ^ 0x5FCD8771`（= 0xDEBA5049 ^ 0x8177D738）。
+
+- 旧公式仅在「element-type 列 == 0xDEBA5049 哨兵」的行上与正确值一致；
+- **25,981 行**（所有带真实 element-type tag 的类型）解码成越界值 ⇒ 基类静默丢失；
+- 证据：tdi=11289 (LuaCache) 与 tdi=10139 (MTRMsgLooper.<>c) raw parent 相同（0x5FCD8770），
+  旧公式后者得 0xFFF8D2D5，新公式两者都得 1（System.Object），与 oracle 一致。
+- 新公式全表：**87,244/88,902 (98.1%)** 解码为合法 typearr 索引（旧 61,671）。
+
+### 54.2 头部规则对齐（Il2CppDumper 行为实测）
+
+1. **enum 不打印接口列表**：6.4 oracle 中 `enum ... : ` 行 = **0**（struct 有 669 行）⇒ 我们对 8,127 个 enum 输出的
+   IComparable/IFormattable/IConvertible 是多余；已跳过（`kind != "enum"`）。
+2. **System.Object 基类**：直接继承 Object 的类的 parent_tarr kind = **0x1C (OBJECT)**，旧 base_name 只接受 0x11/0x12
+   导致大量类丢失 `: Object`；接受 0x1C 后修复。
+
+### 54.3 效果（vs 6.4 oracle，共享类型 15,183–20,189）
+
+| 指标 | 修复前 | 修复后 |
+|---|---|---|
+| 类基类精确 | 87.08% | **97.13%**（15,991/16,464）|
+| 接口列表精确 | 49.75% | **84.52%**（17,064/20,189）|
+| 头部（kind+base+ifaces）全等 | — | **83.76%**（16,911/20,189）|
+
+剩余差异：混淆类型跨版本改名、版本新增接口/基类变化。
+
+### 54.4 验证
+
+回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法。

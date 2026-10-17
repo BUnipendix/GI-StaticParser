@@ -109,11 +109,14 @@ pub fn gen71() -> Profile {
         field_type_add: 0xB36B_852D,
         field_type_xor: 0x4F6E_2A1D,
 
-        // typeDef parent: parent_tarr = raw@0x2C ^ tag@0x1C ^ 0x8177D738 (validated:
-        // Enum->ValueType->Object chain, MonoBehaviour/MonoUIProxy clusters; confirmed in
-        // the class-setup decompilation). 0xFFFFFFFF = no base (interfaces, System.Object).
+        // typeDef parent: parent_tarr = raw@0x2C ^ 0x5FCD8771 (a FIXED mask; verified on all
+        // 88,902 rows: 87,244 decode to a valid typearr index). The earlier formula
+        // `raw ^ tag@0x1C ^ 0x8177D738` only coincided with this on rows whose element-type
+        // column holds the 0xDEBA5049 sentinel — 25,981 rows (= every type with a real
+        // element-type tag) decoded to garbage and silently lost their base class.
+        // 0xFFFFFFFF = no base (interfaces, System.Object).
         td_parent_off: 0x2C,
-        td_parent_xor: 0x8177_D738,
+        td_parent_xor: 0x5FCD_8771,
         // Interface-offsets table hdr[0x70] - 0x6EA5B3FD, stride 6 {typeIdx i32, off i16};
         // per-type start = u16@0x3A ^ 0x4BCE (0xFFFF = none); count = next distinct start
         // (offsets list includes interfaces inherited from bases).
