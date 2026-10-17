@@ -3957,3 +3957,49 @@ oracle 用**全限定 C# 名**（`System.Void`/`System.Int32`/`System.String`/`S
 1. 逐个解 startup 表的记录布局与字段掩码（方法：在加载器范围内每个 `startup_ptr + hdr[slot]` 使用点读循环体，提取 stride/字段变换/调用 decode 的位置）；
 2. 优先找 propertyDefs/eventDefs/genericParameters/genericContainers 表（名字列能解出属性名/泛型参数名即确认）；
 3. 若有泛型类/实例表 → 解决 gap #11。
+
+## 51. R11 第十八轮：startup/global 表基址分辨 + 泛型实例数据链（2026-10-17）
+
+> 不是需求，是执行记录。
+
+### 51.1 重要纠正：同一个函数里混用两种基址
+
+0x140538DB2 处的泛型构建循环里，**6 个槽分属两种基址**（之前笼统当成 startup 偏移是错的）：
+
+| 槽 | 变换 | 基址 | 偏移 | 表 |
+|---|---|---|---|---|
+| 0x15C | `^0xA282EB` | **startup(B)** | 0x380DFC | 68,616 个 u32 = **kind 0x15 的 typearr 索引**（升序子集，实测 68,615 distinct）|
+| 0x78 | `^0x70C36CAC` | **startup(B)** | 0x0 | 68,616 u32 索引（周期 7 模式，见 51.3）|
+| 0x8C | `+0xD7BBE415` >>2 | — | — | 循环次数 = **68,616** |
+| 0x1A4 | `^0xD8C5D0A` | **global body(A=0x145AD62C0)** | 0xCD026C | **12B 行** `{u32, u32 packed, u32}` |
+| 0x10 | `^0xBBFCA3A` | **global body** | 0x1F0F850 | u16 数组（值域 0..4,678，540 distinct）|
+| 0x1C | `^0x49CCBAD1` | **global body** | 0x1F5E9C4 | **10B 行** `{u32 value, u32 index, u16}` |
+
+基址判定证据：`mov rcx,[rip+0x559d4fa]` → 0x145AD62C8（startup 指针 B）；
+第二条 `mov rcx,[rip+0x559d4aa]` → 0x145AD62C0（global body 指针 A）。A/B 由加载器 0x1405361B0/0x1405361B7 分别 STORE。
+
+### 51.2 本循环语义（已确认部分）
+
+对 i < 68,616：
+- `tarr = startup[B + 0x380DFC + 4i]`（实测全部 kind 0x15）；
+- 32B 泛型类条目指针 = `[G+8] + typearr[tarr].data * 32`（G=0x145AD5E98）⇒ 每个 generic inst 在运行时表中有一项；
+- 行索引 = `startup[B + 0 + 4i]` → `12B 行 @ A+0xCD026C`；
+- `u16 = A + 0x1F0F850 + 2i` → `10B 行 @ A+0x1F5E9C4`；
+- 随后用 xxHash64 常量链（0xC2B2AE3D27D4EB4F/0x9E3779B185EBCA87…）计算哈希并为 68,616 项建映射。
+
+### 51.3 12B 行样本与待解
+
+- 行 0..: `{0, 0x8000010, 0}`、`{0,0x8000018,0}`、`{0x8,0x8000010,0x181}`、`{0,0x8010020,0x3818E}` …
+  field1 形如 `0x8000000|低字节`（低字节 0x10/0x11/0x18/0x20/0x30/0x38/0x48/0x60/0xb0），像打包类型描述；field2 有时 <683,568（可作 typearr 索引）。
+- startup[B+0] 数组实测周期 7 非零（`{23151,0,0,0,0,0,0}` 重复）⇒ 该区域实际是 **28B 记录表**，与「stride 4」读法矛盾，需回到循环确认是否有 imul 7/28（下一轮）。
+
+### 51.4 附带纠正（重要数字）
+
+- typearr 全量 kind 直方图：**0x15 = 438,390**、0x12 = 182,889、0x11 = 45,695、0x1D = 9,473、0x13 = 3,320、0x1E = 3,267 …；
+- GENERICINST 的 data(g)：min 0 / max **406,562** / distinct **406,563**，非线性 ⇒ 少数 generic class 被多个 typearr 条目共享（438,390 条目 → 406,563 个不同泛型类）。
+
+### 51.5 下轮
+
+1. 回到 0x140538F1C 附近确认 0x250/0x258 两个表的真实 stride（是否有 imul）；
+2. 若 startup[0] 是 28B 记录表，则按 28B 重解，直接得到 g → (def, args) 映射；
+3. 用已知 `List<GameObject>` 类型验证后接入 dump_gen 泛型渲染。

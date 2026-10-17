@@ -37,10 +37,10 @@ Token 前 3 个 = 0x06000001/2/3 与 oracle 完全一致。回归 17 passed / 0 
 
 ## 二、仍缺（按解锁难度排序）
 
-> **2026-10-17 重大发现（§50）**：Metadata 目录另有 **startup-metadata.dat（4.06MB）**，是 **附加表容器**。
-> main-header 槽位取值后加到 startup 指针上即为表偏移（例：槽 0x84 ^0x582F3633 → 0x35D5E8 = images/assemblies 名表，已解出 `mscorlib.dll`/`System.dll`/`UnityEngine.*`）。
-> 之前 derive 锚点中的小偏移（0x43020/0x3DE954/0x35D5E8 等）可能是 startup 偏移而非 global body 偏移；
-> **properties/events/genericParameters/genericContainers 很可能都在 startup-metadata 中**，这是剩余缺口的主攻方向。
+> **2026-10-17 重大发现（§50/§51）**：Metadata 目录另有 **startup-metadata.dat（4.06MB）**，是 **附加表容器**。
+> **§51 纠正**：同一个加载函数里混用两种基址——startup 指针 B=0x145AD62C8、global body 指针 A=0x145AD62C0。
+> 例：槽 0x15C/0x78 用 B（0x380DFC / 0x0）、槽 0x1A4/0x10/0x1C 用 A（0xCD026C 12B 行 / 0x1F0F850 u16 / 0x1F5E9C4 10B 行）= **泛型实例数据链**。
+> 泛型渲染下一步：解析 12B 行 `{u32, u32 packed, u32}` 语义（field1 形如 `0x8000000|低字节`），用已知 `List<GameObject>` 验证后接入。
 
 | # | 数据 | 参考量 | 阻塞点 / 解锁路径 |
 |---|---|---|---|
