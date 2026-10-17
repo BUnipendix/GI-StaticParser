@@ -75,6 +75,13 @@ ScriptMethod 733,442 已有（含全限定名，2026-10-17 方法数修复后）
 flags/bitfield 常数是 7.1.0 专属（在 .upx0 变异函数逐版读取，0x159F63C4D 模式）；
 其它版本接线前需先跑 version-triage + 该版 .upx0 常数读取（SOP 见 version-matrix.md §4）。
 
+## 四c、静态上限判定（2026-10-17，见 `docs/re/remaining-static-limits.md`）
+
+已证**静态不可得**（运行时/构建期丢弃）：静态字段偏移、方法 Slot 非零、interface 基接口、
+metadataUsage（script.json Addresses/ScriptMetadata）、stringLiterals、属性表本体、泛型参数名、属性参数。
+仍可能存在的：attribute 参数 blob、属性表（若存在）、`.upx0` 内更多 metadata 访问器（206 入口中仅 3 个与 metadata 相关）。
+工程类可产出：DummyDll、il2cpp.h、script.json Signature、多版本通用化。
+
 ## 四b、静态模拟路线（2026-10-17 新增，进行中）
 
 `.upx0` = VMProtect 式**逐函数变形原生代码**（熵 6.8；DIR64 指向它仅 20/1.66M；`.text→.upx0` 入口 206 个）。

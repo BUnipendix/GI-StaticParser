@@ -4536,3 +4536,32 @@ flags/klass 解析器内部读 `hdr[0x198]^0x5303F399` = body **0x10500E0**，88
 
 打通 cache-miss 构建路径（初始化 `.rdata` 槽 0x143B4B248 与 registration），再批量跑 206 个入口建「入口→表」映射，
 目标：propertyDefs / genericParameters / attribute-args 的读取器。
+
+## 69. R11 第三十六轮：静态上限判定 + 模拟器工程化（2026-10-17）
+
+> 不是需求，是执行记录。详见 `docs/re/remaining-static-limits.md`。
+
+### 69.1 把「找不到」拆成「不存在」与「未定位」
+
+本轮对剩余缺口做了系统性判定（证据见 docs/re/remaining-static-limits.md）：
+
+**A. 静态已证不可得（oracle 值来自运行时 / GI 构建期丢弃）**
+- 静态字段偏移 109,214（运行时类初始化顺序）；方法 Slot 非零（元数据全 -1）；
+- interface 基接口（元数据哨兵）；metadataUsage（BSS 运行时写入；扫 `{start,count}` 连续表 0 命中）；
+- stringLiterals（exe il2cpp 段 306MB 无 ASCII 文本池；metadata 明文字符串仅 ~45KB 默认值）；
+- 属性表本体（标准 20B `{nameIdx,get,set,attrs,token}` 扫描含名字可解码校验，0 命中）；
+- 泛型参数名（4 类扫描 0 命中）；属性参数（attributeTypes 后无对应结构）。
+
+**B. 未定位但可能存在**：attribute 参数 blob、属性表（若存在）、`.upx0` 内更多 metadata 访问器。
+
+**C. 工程类可产出**：DummyDll、il2cpp.h、script.json Signature、多版本通用化。
+
+### 69.2 模拟器工程化（tools/emu_upx.py）
+
+- 重构为库：`build_emulator(fill_cache, lenient)` + `run_once(ctx, entry, rcx, max_insns)`；
+- 新增故障记录（fault rip/addr/access）与宽容模式（未映射执行地址补 `xor eax,eax; ret` 桩）；
+- 批量跑 206 个 `.text→.upx0` 入口：11 个可完整执行，195 个卡在 VMP 运行时解析槽
+  （文件里是 RVA 形占位，如 0x3b4d7a4；宽容模式对 addr=0 无效）⇒ 要跑通需先模拟 VMP 初始化器。
+
+结论：`.upx0` 里只有 3/206 入口与 metadata 相关（flags/klass 解析器已解），
+故「模拟解 .upx0」对补齐剩余表**帮助有限**；剩余表更可能是 GI 未保留。
