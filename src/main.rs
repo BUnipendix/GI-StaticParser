@@ -106,6 +106,20 @@ enum Cmd {
         #[arg(short, long)]
         exe: String,
     },
+    /// R10 "constant/algorithm analysis-extract" module: one-shot constant-free
+    /// derivation of everything machine-derivable (string cipher, header-slot
+    /// anchors, table bases incl. strides), exported as a JSON artifact.
+    /// The unpack module (`dump-gen --profile-in`) consumes exported data;
+    /// `dump-gen --profile-out` is the same contract for a full profile.
+    Derive {
+        #[arg(short, long)]
+        exe: String,
+        #[arg(long)]
+        metadata: String,
+        /// Write the derivation artifact here (default: print JSON to stdout).
+        #[arg(short, long)]
+        out: Option<String>,
+    },
     /// Generation dump pipeline: full dump.cs + script.json via the derived profile.
     /// Version-generic: behaviour is fully profile-driven; the shipped default profile
     /// is the 7.1-measured one (layout71). `dump71` stays as a deprecated alias until
@@ -167,6 +181,7 @@ fn main() -> Result<()> {
         Cmd::DecodeOne { exe, metadata, idx } => decode_one(&exe, &metadata, idx),
         Cmd::HeaderDump { exe, metadata } => header_dump(&exe, &metadata),
         Cmd::TypesDump { exe, metadata, out } => types_dump(&exe, &metadata, &out),
+        Cmd::Derive { exe, metadata, out } => derive_cmd(&exe, &metadata, out.as_deref()),
         Cmd::Il2CppFns { exe } => il2cpp_fns(&exe),
         Cmd::DumpGen { exe, metadata, out, profile_in, profile_out, no_cipher_check } =>
             dump_gen_cmd(&exe, &metadata, &out, profile_in.as_deref(), profile_out.as_deref(), no_cipher_check),
@@ -522,6 +537,104 @@ fn il2cpp_fns(exe: &str) -> Result<()> {
     let img = static_mhy_dumper::pe::Image::parse(&ga)?;
     let report = static_mhy_dumper::il2cpp_api::analyze(&img)?;
     print!("{report}");
+    Ok(())
+}
+
+/// R10 analysis-extract module: one-shot, constant-free export of every
+/// machine-derivable fact (string cipher, header-slot anchors, table bases with
+/// strides) as a JSON artifact. The artifact is data only — the unpack module
+/// (`dump-gen --profile-in`) never re-derives and never carries these constants
+/// in code.
+fn derive_cmd(exe: &str, metadata: &str, out: Option<&str>) -> Result<()> {
+    let ga = std::fs::read(exe)?;
+    let gm = std::fs::read(metadata)?;
+    let body = gm.get(0x210..).unwrap_or(&[]);
+    let build = static_mhy_dumper::derive::cipher::derive_build(&ga, &gm)?
+        .ok_or_else(|| anyhow::anyhow!("no embedded MHY header located"))?;
+    let tdefs = static_mhy_dumper::derive::anchor::recover_tables(
+        &ga,
+        static_mhy_dumper::derive::anchor::find_hdr_global(&ga, build.blob_va)?,
+    )?;
+
+    // Dedup anchors by (hdr_off, op, imm); resolved against the embedded header.
+    let mut rows: Vec<serde_json::Value> = Vec::new();
+    for a in &build.anchors {
+        let key = serde_json::json!([a.hdr_off, format!("{:?}", a.op), a.imm]);
+        if rows.iter().any(|r| {
+            r.get("key") == Some(&key)
+        }) {
+            continue;
+        }
+        rows.push(serde_json::json!({
+            "key": key,
+            "hdr_off": a.hdr_off,
+            "op": format!("{:?}", a.op),
+            "imm": a.imm,
+            "site": format!("0x{:X}", a.site),
+            "confirmed": a.confirmed,
+            "resolved": a.resolve(&build.header),
+        }));
+    }
+    rows.retain(|r| r.get("key").is_some());
+    for r in &mut rows {
+        let obj = r.as_object_mut().unwrap();
+        obj.remove("key");
+    }
+    let trows: Vec<_> = tdefs
+        .iter()
+        .map(|t| {
+            serde_json::json!({
+                "hdr_off": t.hdr_off,
+                "op": format!("{:?}", t.op),
+                "imm": t.imm,
+                "stride": t.stride,
+                "site": format!("0x{:X}", t.site),
+            })
+        })
+        .collect();
+
+    // Sanity: the derived schedule must decode heap entry 0 to "mscorlib".
+    // A wrong schedule would emit a plausible-looking artifact with garbage keys.
+    let heap0 = build
+        .cipher
+        .as_ref()
+        .map(|c| {
+            static_mhy_dumper::decode_str::decode_str_sched(
+                &static_mhy_dumper::mem::Buffer::new(body),
+                c.strsec as usize,
+                0x0800_0000, // offset 0, length 8
+                &c.schedule,
+            )
+        })
+        .unwrap_or_default();
+    if heap0 != "mscorlib" {
+        anyhow::bail!(
+            "derived cipher failed the mscorlib sanity check (got {:?}) — refusing to export",
+            heap0
+        );
+    }
+
+    let artifact = serde_json::json!({
+        "artifact": "mhydump-derive",
+        "artifact_version": 1,
+        "module": "constant-algorithm-analysis-extract (REQUIREMENTS R10)",
+        "blob_va": format!("0x{:X}", build.blob_va),
+        "cipher": build.cipher,
+        "anchors": rows,
+        "tables": trows,
+        "sanity": {
+            "heap0": heap0,
+            "body_len": body.len(),
+        },
+    });
+    let text = serde_json::to_string_pretty(&artifact)?;
+    match out {
+        Some(p) => {
+            std::fs::write(p, &text)?;
+            println!("derivation artifact written to {p}");
+        }
+        None => println!("{text}"),
+    }
     Ok(())
 }
 

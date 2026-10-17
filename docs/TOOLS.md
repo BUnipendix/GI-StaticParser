@@ -6,11 +6,16 @@
 
 ## 0. 30 秒定位
 
+**模块架构（R10）**：`mhydump derive` = 常数算法分析提取模块（一次性导出数据）；
+`mhydump dump-gen --profile-in` = 解包模块（只读导出数据）；`dump-gen --profile-out`
+可在一次运行里同时导出+解包（一次性做完）。导出数据是唯一接口。
+
 | 你要做什么 | 用什么 |
 |---|---|
+| 一次性导出某版本的可推导数据（密码/表基址） | §1 `mhydump derive --out art.json` |
 | 新版本 metadata 快速梳理（30 分钟） | §2 triage 组 + [version-matrix.md §4 SOP](re/version-matrix.md) |
-| 相邻版本推导 profile（密码/表/列常数） | §1 mhydump（cipher/anchors）+ §2 colsolve 组 |
-| 生成 Il2CppDumper 风格 dump.cs | §1 `mhydump dump-gen` |
+| 相邻版本推导 profile（密码/表/列常数） | §1 `mhydump derive` + §2 colsolve 组 |
+| 生成 Il2CppDumper 风格 dump.cs | §1 `mhydump dump-gen`（解包模块） |
 | 查 7.1 加载流程/表结构知识 | [metadata-loading-flow-7.1.0.md](re/metadata-loading-flow-7.1.0.md) |
 | 查跨版本矩阵/已知常数轮换结论 | [version-matrix.md](re/version-matrix.md) |
 | 查与 Il2CppDumper 的差距 | [gap-inventory.md](re/gap-inventory.md) |
@@ -25,6 +30,7 @@
 
 | 命令 | 用途 | 状态 |
 |---|---|---|
+| `derive --exe --metadata [--out art.json]` | **R10 分析提取模块**：一次性导出字符串密码+表槽锚点+表基址（含 stride）为 JSON 工件；内置 mscorlib 自检，失败拒绝导出 | 6.7.0/7.1.0 实测 ✓（7.1 typeDef 槽 0xDC ^0x5278CA3B 与已知一致） |
 | `cipher --exe --metadata [--json]` | 无常数推导字符串密码（3/5 常数世代）+ strsec | 26 版验证；6.7.0 实测 ✓ |
 | `anchors --exe --metadata [--json] [--site VA]` | 恢复头槽锚点 + 已解析表基址（含 stride） | 6.7.0 实测：354 锚点，typeDef 表直接给出 |
 | `strings --exe --metadata [--out] [--head]` | 解密整个字符串堆并枚举 | ✓ |
@@ -82,16 +88,18 @@
 
 ### B. 相邻版本 profile 推导（6.7.0 实测流程）
 
-1. `mhydump cipher --exe … --metadata …` → 字符串密码 + strsec
-2. `mhydump anchors --exe … --metadata … --json` → 表槽 + typeDef base/stride
-3. `python3 tools/version-triage/colsolve4.py <dat> <td_base> <stride> <strsec> <M1> <X1> <X2> <step>` → 自动解列
-4. `colverify.py` 全表验证 → 落 `out/<ver>.columns.json`
-5. 静态形态无解的列（疑似行级掩码）→ `densescan3.py` 定位站点 → 读变异码掩码链
-6. 组 profile JSON → `mhydump dump-gen --profile-in p.json`
+1. `mhydump derive --exe … --metadata … --out derive.json` → 一次性导出（密码+锚点+表基址）
+2. `python3 tools/version-triage/colsolve4.py <dat> <td_base> <stride> <strsec> <M1> <X1> <X2> <step>` → 自动解列
+3. `colverify.py` 全表验证 → 落 `out/<ver>.columns.json`
+4. 静态形态无解的列（疑似行级掩码）→ `densescan3.py` 定位站点 → 读变异码掩码链
+5. 组 profile JSON → `mhydump dump-gen --profile-in p.json`
 
 ### C. 生成 dump
 
 `mhydump dump-gen --exe <主模块> --metadata <dat> --out dump.cs [--profile-in p.json]`
+
+一次性做完（R10.c）：`--profile-out p.json` 同场导出完整 profile（下次 `--profile-in` 免分析，
+7.1 实测往返逐字节一致）；分析数据（derive 工件）+ profile 数据是仅有的两个跨模块工件。
 
 ## 6. 资源与坑（12 核 / 15GB RAM，Ghidra 常驻）
 

@@ -3249,3 +3249,32 @@ fs/fc 链 60000/60000 零坏行；ns/methodStart/methodCount/elementType/bitfiel
 2. 解 ns/methodStart/Count/elementType/bitfield → 完整 typeDef profile。
 3. 方法表（stride 0x1A?）+ 字段表 + 参数表常数。
 4. 组 profile JSON → `mhydump dump-gen --profile-in` 端到端 6.7.0 dump。
+
+## 30. R10 模块划分落地：derive 分析提取命令（2026-10-17）
+
+> 不是需求，是执行记录。需求见 REQUIREMENTS.md R10。
+
+### 30.1 需求映射
+
+- 分析提取模块 = 新命令 `mhydump derive`（cipher + 锚点 + 表基址一次性导出 JSON 工件，内置
+  mscorlib 自检，失败拒绝导出）。
+- 解包模块 = 既有 `dump-gen --profile-in`（只读导出数据）。
+- 一次性做完 = `dump-gen --profile-out`（同场导出+解包）；7.1 实测：export → profile-in 解包
+  两次输出 `cmp` 逐字节一致（78,750,080 B dump.cs，88,872 类型）。
+- 唯一接口 = 数据文件（derive 工件 + profile JSON），代码不携带版本常数（R24）。
+
+### 30.2 实测（2026-10-17）
+
+- 6.7.0：354 锚点、cipher strsec=0x4126798 score=15119、typeDef 槽 0x1E0 ^0x4E66A4F6 stride 70、
+  heap0=mscorlib ✓（与 10-16 的 cipher/anchors 独立运行逐位一致）。
+- 7.1.0：326 锚点、strsec=0x3C58E68、typeDef 槽 0xDC ^0x5278CA3B stride 70（与 §28 已知值一致）、
+  heap0=mscorlib ✓。
+- cargo test --release：17 passed / 0 failed（基线不变）。
+
+### 30.3 缺口（到 R10 完整达成还差什么）
+
+1. derive 工件目前只含「机器层」（密码/锚点/表基址）；列常数层（name/flags/starts/counts…）
+   还在 Python 工具链（colsolve4），且 6.7.0 只解出 5/9 列（ns/starts/elementType/bitfield 疑行级掩码）。
+2. 工件格式与 Profile JSON 尚未统一（R10.3 已标注「未明确」）；列层并入后应收敛为单一格式，
+   使 `derive --out p.json && dump-gen --profile-in p.json` 对任何版本成立。
+3. 掩码链推导自动化（变异码读取）是列层补全的关键路径。
