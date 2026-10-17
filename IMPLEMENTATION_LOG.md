@@ -3536,3 +3536,35 @@ hdr[0x70] 解析出的 iface 表（profile iface_base=0x973064, stride 6）条�
 2. 递归算布局（memo + 环检测），类起点 = 父布局末尾 8 对齐；结构体 0x10 起；
 3. 输出：字段偏移注释（Il2CppDumper 风格 `// 0x10`）+ 显式布局不可靠计数 warn（诚实标注）；
 4. 抽样互证：与 6.4 oracle 的同类同名字段比对（7.1 类型多，可覆盖大量共享名）。
+
+## 39. R11 第六轮：字段偏移接线进 dump（2026-10-17）
+
+> 不是需求，是执行记录。
+
+### 39.1 实现
+
+- dump_gen.rs 新增 `LayoutCalc`：顺序布局复算（值类型 boxed 0x10 起、内嵌 unboxed 尺寸、
+  派生类起点=父末尾 8 对齐、字段按声明序自然对齐、memo+环检测）。
+- **显式布局检测**：`flags & 0x18 == 0x10`（TypeAttributes.LayoutMask=Explicit）→ 该类型字段
+  全部不输出偏移（[FieldOffset] 特性决定的偏移不可由结构推）。
+- 字段输出格式：`private static readonly UnityEngine.Vector3 foo; // 0x10`（Il2CppDumper 风格）。
+- 静态字段不输出偏移（模块级静态区偏移不可推导），计数 warn。
+- 字段修饰符源核对：与 6.4 oracle 抽样 89,287 字段 → **99.91% 一致**（差异为版本真实变化）。
+
+### 39.2 7.1.0 实测
+
+`wrote 88,902 types, 440,172 fields, 733,442 methods`：
+- 偏移已计算：**321,796** 字段（73%）
+- 未解：9,162（显式布局/尺寸不可推）
+- 静态字段无偏移：109,214（不可推导）
+
+### 39.3 交叉验证（7.1 计算值 vs 6.4 oracle）
+
+仅比「类型字段集合与字段类型均相同」的 (type, field) 对：**33,898/36,562 = 92.71%**。
+失配样例（System.Xml.Schema.XmlSchema 等）疑为父链版本差异或个别尺寸误算，待进一步分析。
+
+### 39.4 后续
+
+1. 92.71% → 目标 >97%：分析失配簇（父链/泛型/显式布局漏检）。
+2. 参数默认值接线（25,374 条已定位）。
+3. Properties/Events 槽位、stringLiterals、script.json ScriptString/Addresses/Signature。
