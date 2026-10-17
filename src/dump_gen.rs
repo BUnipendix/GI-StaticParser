@@ -1148,6 +1148,24 @@ fn self_params(m: &Meta, tds: &[Td], parents: &[Option<u32>], md: &Md) -> (Vec<S
             }
         };
         let name = m.param_name(idx).unwrap_or_else(|| format!("arg{k}"));
+        // ref/out modifiers: reference dumps prefix byref parameters with `ref` / `out`.
+        // The distinction travels in the parameter type's attrs word (ParameterAttributes):
+        // bit1 (0x0002) = Out. A byref type whose attrs say Out prints `out`, every other
+        // byref prints `ref` (C# emits no flag for plain `ref`).
+        let mut tn = tn;
+        if tn.ends_with('&') {
+            let attrs = m
+                .param_type(idx)
+                .flatten()
+                .and_then(|ti| m.il2cpp_type(ti as usize))
+                .map(|(_, _, a)| a)
+                .unwrap_or(0);
+            tn = if attrs & 0x2 != 0 {
+                format!("out {}", tn)
+            } else {
+                format!("ref {}", tn)
+            };
+        }
         out.push(format!("{} {}", tn, name));
     }
     (out, unresolved)

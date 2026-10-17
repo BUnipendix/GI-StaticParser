@@ -4286,3 +4286,32 @@ oracle 893 条此类字段全部 ` // 0x0`（fixed-address 静态区偏移 0）�
 
 回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法。
 const 行 74,614 全部带 `// 0x0`；固定地址字段 934 全部带 `// 0x0`；泛型实例字段 513 条 0x0。
+
+## 60. R11 第二十七轮：参数 ref/out 前缀 + 字段顺序分析（2026-10-17）
+
+> 不是需求，是执行记录。
+
+### 60.1 参数 ref/out（系统性缺失，影响所有 byref 参数）
+
+oracle 的所有 byref 参数都带 `ref ` / `out ` 前缀；我们此前只输出 `System.X&`。规则实测：
+**ParameterAttributes 的 attrs 字（Il2CppType.attrs）bit1 (0x0002) = Out**；byref 且 attrs&0x2 → `out`，其余 byref → `ref`
+（C# 的 ref 不落任何 flag）。实现后逐字一致示例：
+
+```
+private static System.Int32 DecodeBlobSize(System.IntPtr in_ptr, out System.IntPtr& out_ptr) { }
+private static System.Void SetCJKReferences(..., ref System.Byte*& catTable, ...) { }
+```
+
+效果：方法签名（去重后按类型对比）与 oracle 相交率 **77.34% → 79.29%**（143,577/181,071）。
+剩余 oracle-only 主要 = 泛型参数名（T1/TKey 我们仍是占位）+ 混淆名跨版本改名（不可调和）。
+
+### 60.2 字段顺序分析（解释剩余偏移失配）
+
+- oracle 的**静态字段顺序 = 运行时静态区分配顺序**（同一 UnityEngine.Vector3 的 10 个 static readonly 字段，6.3 与 6.4 oracle 顺序不同，7.1 又不同） ⇒ 静态顺序不可静态推导（与静态偏移不可推导同源）。
+- 实例字段：与 6.4 oracle 对比 9,584 个类型顺序一致、**1,962 个类型顺序不同但字段集合完全相同**（14,950 个实例字段）。
+  这些差异来自混淆器的跨版本字段重排/改名（如 `<>c__DisplayClass` 与游戏类型），属版本差异；**不是** 7.1 元数据行序被打乱的证据。
+- 结论：字段偏移失配（44,989 行）主要来自 ①静态字段运行时偏移（~30k 行，oracle 有值我们没有）②版本间字段重排（~15k 行）；静态布局复算本身在顺序一致的 9,584 类型上仍准确。
+
+### 60.3 验证
+
+回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法。

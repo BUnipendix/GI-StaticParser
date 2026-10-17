@@ -45,6 +45,7 @@ Token 前 3 个 = 0x06000001/2/3 与 oracle 完全一致。回归 17 passed / 0 
 | # | 数据 | 参考量 | 阻塞点 / 解锁路径 |
 |---|---|---|---|
 | 1 | 字段偏移注释 | 440,061 | **已接线（2026-10-17）**：磁盘无偏移表 ⇒ dump_gen 新增顺序布局复算（97.9% 核心规则验证），显式布局（flags&0x18==0x10）排除。7.1 实测：**321,796 字段已计算**（73%）/ 9,162 未解 / 109,214 静态字段（模块静态区不可推）。交叉验证 92.71%。待：精度提升（失配簇分析）+ 静态字段偏移来源 |
+| 2b | 参数 ref/out | 全 byref 参数 | **已对齐（2026-10-17，§60）**：attrs bit1 (ParameterAttributes.Out) ⇒ `out`，其余 byref ⇒ `ref`（C# 的 ref 无 flag）；oracle 逐字一致，方法签名相交率 77.34%→**79.29%** |
 | 2 | 参数名/类型 | 361,974 | **已关闭（2026-10-17）**：参数定义表 = `hdr[0x68]^0x146BE503`，**8B 行**：`name=(raw@+4 ^ 0x6B95F108) − mask(i)`、`type=(raw@+0 ^ 0x76621606) − mask(i)`（−1=无类型），mask 为参数索引链 `((((i*0x4A23)^0x5F268FCF)*0x2B0352A0)>>9 ^0x1028EA75 +0x68B376F1) ^0x4F86A723`（反汇编 0x1405297EE）。全 548,400 参数可解；vs 6.4 oracle：**参数名 91.37%**（失配为混淆名跨版本改名）、类型 81.7%（余差=泛型 object 2,792 + 嵌套类型短名 1,490 + 混淆改名 + 比较器重载配对） |
 | 3 | Properties/Events 行 | 77,260 段 | 属性表仍未定位（本轮验证候选行结构均不符）。**临时方案已实现**：从 `get_`/`set_` 访问器方法**合成** Properties（62,879 条/10,102 类型，warn 明示 SYNTHESIZED；类型签名真实，setter 可见性对齐 `{ get; private set; }` 形式）。局限：GI 属性名与访问器方法名独立混淆 ⇒ 覆盖主要是未混淆库；属性表本体需运行时路径。Events：6.4 参考 dump 无 Events 段（Il2CppDumper 该配置未开），暂不产出 |
 | 3b | 嵌套类型全名 | **已关闭（2026-10-17）** | typeDef `nestedTypesStart`=u16@0x36^0xC87C、`nestedTypesCount`=u8@0x45^0xAB，表 base=hdr[0x1B8]^0x586ABAF1（u32 child tdi）；验证 Selectable→[Transition, SelectionState]。dump.cs 头部现为全限定名、基类短名、接口全限定、嵌套链（对齐 Il2CppDumper）|
