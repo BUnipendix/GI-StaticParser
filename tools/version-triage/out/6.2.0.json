@@ -1,0 +1,238 @@
+{
+ "exe": "/home/yangsanyi/gire/sample/gi/6.2.0/YuanShen.exe",
+ "hdr_global": 5448906200,
+ "body_global": 5448906208,
+ "recs": 900,
+ "slots": {
+  "0x190|xor|0x26e9efd0": {
+   "n": 184,
+   "body": 184,
+   "strides": [],
+   "va": 5368713684
+  },
+  "0x14|xor|0x49b46e62": {
+   "n": 192,
+   "body": 5,
+   "strides": [],
+   "va": 5368713751
+  },
+  "0x1E0|xor|0x728d450d": {
+   "n": 11,
+   "body": 11,
+   "strides": [],
+   "va": 5372830065
+  },
+  "0x164|None|None": {
+   "n": 8,
+   "body": 8,
+   "strides": [],
+   "va": 5372830568
+  },
+  "0xE8|xor|0xdc15a53": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5372887511
+  },
+  "0x1F4|xor|0x143d48c": {
+   "n": 5,
+   "body": 5,
+   "strides": [],
+   "va": 5372891919
+  },
+  "0x40|None|None": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5372964258
+  },
+  "0x1CC|None|None": {
+   "n": 24,
+   "body": 24,
+   "strides": [
+    70
+   ],
+   "va": 5372990026
+  },
+  "0xF0|xor|0x70d65d90": {
+   "n": 3,
+   "body": 3,
+   "strides": [
+    70
+   ],
+   "va": 5372997186
+  },
+  "0x134|xor|0x617bb417": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5373193779
+  },
+  "0xA4|xor|0x243cc42": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5373199470
+  },
+  "0xBC|xor|0x687019a2": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5373200923
+  },
+  "0x4|None|None": {
+   "n": 3,
+   "body": 2,
+   "strides": [],
+   "va": 5373204339
+  },
+  "0x8|xor|0x6489261f": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373204894
+  },
+  "0x19C|None|None": {
+   "n": 3,
+   "body": 3,
+   "strides": [],
+   "va": 5373207228
+  },
+  "0x2C|None|None": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373207300
+  },
+  "0x0|None|None": {
+   "n": 5,
+   "body": 5,
+   "strides": [],
+   "va": 5373208288
+  },
+  "0x204|None|None": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373209334
+  },
+  "0x34|None|None": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373210461
+  },
+  "0x130|None|None": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5373211207
+  },
+  "0x154|None|None": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5373212403
+  },
+  "0x90|xor|0x26e9efd0": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373214877
+  },
+  "0x150|xor|0x6976c8d7": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373267092
+  },
+  "0xC8|add|0xa608b627": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373267311
+  },
+  "0xEC|xor|0x11fc21e8": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373274616
+  },
+  "0x198|None|None": {
+   "n": 3,
+   "body": 3,
+   "strides": [],
+   "va": 5373277063
+  },
+  "0xC0|xor|0x6ee9f20b": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373287345
+  },
+  "0x200|xor|0x3149861d": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373298748
+  },
+  "0x90|None|None": {
+   "n": 3,
+   "body": 3,
+   "strides": [],
+   "va": 5373334390
+  },
+  "0x18|None|None": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5373334397
+  },
+  "0x4|xor|0x5c270e21": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373335933
+  },
+  "0x188|xor|0x27965cca": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373349189
+  },
+  "0x84|xor|0x147939e0": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373350259
+  },
+  "0x1B4|xor|0x23e98cad": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373350331
+  },
+  "0x48|None|None": {
+   "n": 4,
+   "body": 4,
+   "strides": [],
+   "va": 5373409890
+  },
+  "0x78|None|None": {
+   "n": 3,
+   "body": 3,
+   "strides": [],
+   "va": 5373409960
+  }
+ },
+ "blob_cands": [
+  {
+   "va": 5404693288,
+   "score": [
+    16,
+    20
+   ]
+  }
+ ],
+ "typedef_tables": []
+}

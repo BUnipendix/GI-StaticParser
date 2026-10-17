@@ -1,0 +1,252 @@
+{
+ "exe": "/home/yangsanyi/gire/sample/gi/6.3.0/YuanShen.exe",
+ "hdr_global": 5450607384,
+ "body_global": 5450607432,
+ "recs": 697,
+ "slots": {
+  "0x80|xor|0x6cc36c06": {
+   "n": 196,
+   "body": 191,
+   "strides": [],
+   "va": 5368713744
+  },
+  "0xE4|xor|0x40f8965a": {
+   "n": 50,
+   "body": 0,
+   "strides": [
+    70
+   ],
+   "va": 5372925912
+  },
+  "0x6C|xor|0x2f728c90": {
+   "n": 22,
+   "body": 0,
+   "strides": [],
+   "va": 5372925954
+  },
+  "0x70|xor|0x103d1f34": {
+   "n": 10,
+   "body": 0,
+   "strides": [],
+   "va": 5372951809
+  },
+  "0x1EC|xor|0x614dd172": {
+   "n": 15,
+   "body": 0,
+   "strides": [],
+   "va": 5372951918
+  },
+  "0x28|None|None": {
+   "n": 5,
+   "body": 0,
+   "strides": [],
+   "va": 5373018114
+  },
+  "0xA8|xor|0x56dfe7fe": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373085787
+  },
+  "0x178|xor|0x7350ff74": {
+   "n": 3,
+   "body": 0,
+   "strides": [
+    70
+   ],
+   "va": 5373118571
+  },
+  "0x174|xor|0x23478d0a": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373139626
+  },
+  "0x4|None|None": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373139709
+  },
+  "0x20|None|None": {
+   "n": 2,
+   "body": 0,
+   "strides": [],
+   "va": 5373315063
+  },
+  "0x1D0|None|None": {
+   "n": 2,
+   "body": 0,
+   "strides": [],
+   "va": 5373320657
+  },
+  "0x60|xor|0x53044af4": {
+   "n": 2,
+   "body": 0,
+   "strides": [],
+   "va": 5373320954
+  },
+  "0x14C|None|None": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373321118
+  },
+  "0x58|xor|0x9be9684": {
+   "n": 2,
+   "body": 0,
+   "strides": [],
+   "va": 5373322155
+  },
+  "0x184|xor|0x1afc6aec": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373325155
+  },
+  "0x188|xor|0x107e9250": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373325495
+  },
+  "0x28|xor|0x6ea267de": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373326043
+  },
+  "0xC4|xor|0x5ea7c76a": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373326666
+  },
+  "0x1F4|None|None": {
+   "n": 3,
+   "body": 0,
+   "strides": [],
+   "va": 5373328394
+  },
+  "0x3C|xor|0x415597b8": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373330489
+  },
+  "0x120|xor|0x7c46047c": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373331582
+  },
+  "0x1C0|xor|0x34b843a7": {
+   "n": 2,
+   "body": 0,
+   "strides": [],
+   "va": 5373332281
+  },
+  "0x19C|None|None": {
+   "n": 3,
+   "body": 0,
+   "strides": [
+    70
+   ],
+   "va": 5373333075
+  },
+  "0x48|None|None": {
+   "n": 7,
+   "body": 0,
+   "strides": [],
+   "va": 5373336330
+  },
+  "0x2C|xor|0x1ee76d90": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373388340
+  },
+  "0x180|xor|0x2dd4d90": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373395879
+  },
+  "0x54|xor|0x2dc1b69e": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373395897
+  },
+  "0x148|xor|0x78dc006a": {
+   "n": 3,
+   "body": 0,
+   "strides": [],
+   "va": 5373398343
+  },
+  "0x134|xor|0x197934e6": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373406119
+  },
+  "0x30|None|None": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373409277
+  },
+  "0xA4|xor|0x541d4b33": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373410068
+  },
+  "0x0|None|None": {
+   "n": 8,
+   "body": 0,
+   "strides": [],
+   "va": 5373456674
+  },
+  "0x2C|None|None": {
+   "n": 2,
+   "body": 0,
+   "strides": [],
+   "va": 5373456773
+  },
+  "0x10|xor|0x5533d603": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373471541
+  },
+  "0xBC|xor|0x1133827f": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373472662
+  },
+  "0x160|xor|0x211f418a": {
+   "n": 4,
+   "body": 0,
+   "strides": [],
+   "va": 5373532556
+  },
+  "0x1E0|None|None": {
+   "n": 3,
+   "body": 0,
+   "strides": [],
+   "va": 5373532625
+  }
+ },
+ "blob_cands": [
+  {
+   "va": 5405029120,
+   "score": [
+    23,
+    26
+   ]
+  }
+ ],
+ "typedef_tables": []
+}

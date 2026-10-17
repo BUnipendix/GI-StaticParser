@@ -1,0 +1,258 @@
+{
+ "exe": "/home/yangsanyi/gire/sample/gi/5.1.0/YuanShen.exe",
+ "hdr_global": 5437614304,
+ "body_global": 5437614312,
+ "recs": 244,
+ "slots": {
+  "0x50|None|None": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5371779074
+  },
+  "0x1B4|xor|0x5af1c25": {
+   "n": 7,
+   "body": 6,
+   "strides": [],
+   "va": 5371793026
+  },
+  "0x130|xor|0x312a924e": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5371797697
+  },
+  "0x170|xor|0x3d54bca1": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5371797793
+  },
+  "0x164|None|None": {
+   "n": 15,
+   "body": 15,
+   "strides": [
+    70
+   ],
+   "va": 5371803782
+  },
+  "0x158|xor|0x675f6d1e": {
+   "n": 3,
+   "body": 3,
+   "strides": [
+    70
+   ],
+   "va": 5371804592
+  },
+  "0x54|xor|0x2deb4ee5": {
+   "n": 22,
+   "body": 22,
+   "strides": [],
+   "va": 5371826078
+  },
+  "0xE0|xor|0x4e0dfa08": {
+   "n": 7,
+   "body": 4,
+   "strides": [
+    70
+   ],
+   "va": 5371827974
+  },
+  "0x5C|xor|0xc6b28a3": {
+   "n": 11,
+   "body": 11,
+   "strides": [],
+   "va": 5371828094
+  },
+  "0x1A4|None|None": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5371841111
+  },
+  "0x20|None|None": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5371846721
+  },
+  "0xC|xor|0x5d2a29d0": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5371848156
+  },
+  "0x154|None|None": {
+   "n": 6,
+   "body": 6,
+   "strides": [],
+   "va": 5371848402
+  },
+  "0x3C|xor|0xbcfde67": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5371851658
+  },
+  "0x148|xor|0x6be7a68c": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5371851797
+  },
+  "0x4|None|None": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5371851880
+  },
+  "0x1C4|None|None": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5371853313
+  },
+  "0x1D0|None|None": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5371853393
+  },
+  "0x1BC|None|None": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5371855609
+  },
+  "0x138|xor|0x14a87d16": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5371856696
+  },
+  "0xFC|None|None": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5371857395
+  },
+  "0x64|xor|0x35a67f47": {
+   "n": 25,
+   "body": 25,
+   "strides": [],
+   "va": 5371866402
+  },
+  "0x1C8|xor|0x40d36677": {
+   "n": 6,
+   "body": 6,
+   "strides": [],
+   "va": 5371867060
+  },
+  "0xC4|xor|0x487960c0": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5371867351
+  },
+  "0x180|xor|0x62bcfd79": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5371884115
+  },
+  "0x0|None|None": {
+   "n": 13,
+   "body": 13,
+   "strides": [],
+   "va": 5371919040
+  },
+  "0x16C|xor|0x7a7ace49": {
+   "n": 4,
+   "body": 4,
+   "strides": [],
+   "va": 5371919131
+  },
+  "0x1E8|xor|0x3559d26d": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5371919279
+  },
+  "0x38|None|None": {
+   "n": 3,
+   "body": 3,
+   "strides": [],
+   "va": 5371920727
+  },
+  "0x30|None|None": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5371930530
+  },
+  "0x80|xor|0x40d12c2e": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5371931353
+  },
+  "0x1AC|xor|0x5dc318bb": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5371938375
+  },
+  "0x1A0|xor|0x745aed87": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5371945080
+  },
+  "0xCA|None|None": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5371949594
+  },
+  "0x70|None|None": {
+   "n": 7,
+   "body": 7,
+   "strides": [],
+   "va": 5371949609
+  },
+  "0x10|None|None": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5371983621
+  },
+  "0x36|add|0x182": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5371983750
+  },
+  "0x48|None|None": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5371983914
+  },
+  "0xBC|None|None": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5377480892
+  }
+ },
+ "blob_cands": [
+  {
+   "va": 5416806736,
+   "score": [
+    20,
+    21
+   ]
+  }
+ ],
+ "typedef_tables": []
+}

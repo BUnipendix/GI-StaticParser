@@ -1,0 +1,276 @@
+{
+ "exe": "/home/yangsanyi/gire/sample/gi/6.5.0/YuanShen.exe",
+ "hdr_global": 5453361560,
+ "body_global": 5453361608,
+ "recs": 890,
+ "slots": {
+  "0xE0|xor|0x62e1687f": {
+   "n": 202,
+   "body": 197,
+   "strides": [],
+   "va": 5368713749
+  },
+  "0xB8|xor|0x65ddff7c": {
+   "n": 50,
+   "body": 0,
+   "strides": [
+    70
+   ],
+   "va": 5373121560
+  },
+  "0xA8|xor|0x741c09bb": {
+   "n": 24,
+   "body": 0,
+   "strides": [],
+   "va": 5373121602
+  },
+  "0xDC|xor|0x66865a5d": {
+   "n": 8,
+   "body": 0,
+   "strides": [],
+   "va": 5373148561
+  },
+  "0x1B0|None|None": {
+   "n": 8,
+   "body": 0,
+   "strides": [],
+   "va": 5373149040
+  },
+  "0x16C|None|None": {
+   "n": 7,
+   "body": 0,
+   "strides": [],
+   "va": 5373214065
+  },
+  "0x1E4|None|None": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373281771
+  },
+  "0x34|xor|0x26e37a24": {
+   "n": 3,
+   "body": 0,
+   "strides": [
+    70
+   ],
+   "va": 5373314619
+  },
+  "0x1F4|xor|0x6eddc3e9": {
+   "n": 2,
+   "body": 0,
+   "strides": [],
+   "va": 5373331397
+  },
+  "0x1AC|xor|0x4a871576": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373335948
+  },
+  "0x1BC|xor|0x49244f40": {
+   "n": 2,
+   "body": 0,
+   "strides": [],
+   "va": 5373512858
+  },
+  "0x28|None|None": {
+   "n": 2,
+   "body": 0,
+   "strides": [],
+   "va": 5373518547
+  },
+  "0x1C8|None|None": {
+   "n": 2,
+   "body": 0,
+   "strides": [],
+   "va": 5373520023
+  },
+  "0xCC|xor|0x40eb0c": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373523016
+  },
+  "0x68|xor|0x4d8a3ab0": {
+   "n": 2,
+   "body": 0,
+   "strides": [],
+   "va": 5373523040
+  },
+  "0x20|xor|0x2cf1804a": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373523349
+  },
+  "0x188|xor|0x7315102d": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373523733
+  },
+  "0xC|None|None": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373523972
+  },
+  "0xAC|None|None": {
+   "n": 3,
+   "body": 0,
+   "strides": [],
+   "va": 5373526218
+  },
+  "0x198|None|None": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373526316
+  },
+  "0x0|None|None": {
+   "n": 5,
+   "body": 0,
+   "strides": [],
+   "va": 5373527277
+  },
+  "0xC8|xor|0x56b8233c": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373528329
+  },
+  "0x108|xor|0x43a7128e": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373529415
+  },
+  "0x158|xor|0x499b841e": {
+   "n": 2,
+   "body": 0,
+   "strides": [],
+   "va": 5373530120
+  },
+  "0x180|None|None": {
+   "n": 3,
+   "body": 0,
+   "strides": [
+    70
+   ],
+   "va": 5373530915
+  },
+  "0x38|None|None": {
+   "n": 5,
+   "body": 0,
+   "strides": [],
+   "va": 5373534154
+  },
+  "0x84|xor|0x7d10d6d2": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373559734
+  },
+  "0x100|None|None": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373586449
+  },
+  "0x174|xor|0x25c98aae": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373593832
+  },
+  "0x124|xor|0x1d88138b": {
+   "n": 3,
+   "body": 0,
+   "strides": [],
+   "va": 5373596279
+  },
+  "0x1A8|xor|0x45fe1e9d": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373604155
+  },
+  "0x30|None|None": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373607300
+  },
+  "0x60|xor|0x2580119a": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373608119
+  },
+  "0x80|xor|0x331302d1": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373669957
+  },
+  "0x54|xor|0x15419dd6": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373671063
+  },
+  "0x104|xor|0x4931271": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373671084
+  },
+  "0x138|xor|0xbd6dd12": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373671105
+  },
+  "0x1D0|xor|0x23be4e57": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373671136
+  },
+  "0x8|None|None": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373680365
+  },
+  "0x4|None|None": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373680379
+  },
+  "0xFC|xor|0x36027e56": {
+   "n": 4,
+   "body": 0,
+   "strides": [],
+   "va": 5373732588
+  },
+  "0x1CC|xor|0x1d7eed73": {
+   "n": 3,
+   "body": 0,
+   "strides": [],
+   "va": 5373732640
+  }
+ },
+ "blob_cands": [
+  {
+   "va": 5405676184,
+   "score": [
+    26,
+    27
+   ]
+  }
+ ],
+ "typedef_tables": []
+}

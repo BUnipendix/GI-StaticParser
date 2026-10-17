@@ -1,0 +1,35 @@
+{
+ "exe": "/home/yangsanyi/gire/sample/gi/5.0.0/YuanShen.exe",
+ "hdr_global": 5428205896,
+ "body_global": 5428205896,
+ "recs": 39,
+ "slots": {
+  "0x50|None|None": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5374554559
+  },
+  "0x10|None|None": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5374554607
+  },
+  "0x0|None|None": {
+   "n": 4,
+   "body": 4,
+   "strides": [],
+   "va": 5378508031
+  }
+ },
+ "blob_cands": [
+  {
+   "va": 5419217104,
+   "score": [
+    0,
+    0
+   ]
+  }
+ ]
+}

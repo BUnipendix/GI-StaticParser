@@ -1,0 +1,43 @@
+{
+  "version": "6.7.0",
+  "derived": "2026-10-16 session: cipher+anchors via mhydump (constant-free); typeDef columns via colsolve4 known-plaintext + chain validation (data-driven, no code RE)",
+  "inputs": {
+    "exe": "~/gire/sample/gi/6.7.0/YuanShen.exe",
+    "dat": "~/gire/sample/gi/6.7.0/YuanShen_Data/Managed/Metadata/global-metadata.dat",
+    "td_base": "0x21F77B0",
+    "td_stride": 70,
+    "td_slot": {"hdr_off": 480, "op": "xor", "imm": "0x4E66A4F6"},
+    "strsec": "0x4126798",
+    "cipher": {
+      "form": "key(off) = (((off & 0xFFFFFF) * M1) + X1) ^ X2, step per qword",
+      "M1": "0xAA160EA68AC8FA68", "X1": "0x24832E3F77AF01E6", "X2": "0x7AC9A2F2697FEB99",
+      "step": "0x3FF74ECE11DFA612",
+      "decoder_va": "0x1404BB5B2", "site_va": "0x1404BB517", "score": 15119
+    }
+  },
+  "solved_columns": {
+    "name":       {"disp": "0x18", "op": "xor", "K": "0x17FB1577", "evidence": "rows0-9 decrypt to <Module>/Locale/SR/Runtime/RuntimeClassHandle/...; 32/32 printable"},
+    "flags":      {"disp": "0x04", "op": "xor", "K": "0xFD91", "sz": 2, "evidence": "row0=0, row1=0x100(Locale sealed), row2=0x180(SR static), row4=0x108(handle sealed|vt); 60k-row visibility distribution sane"},
+    "fieldStart": {"disp": "0x14", "op": "xor", "K": "0x1D37F888", "sentinel_raw": "0xE2C80777", "evidence": "sentinel->0xFFFFFFFF; first non-sentinel row4 decodes 0"},
+    "fieldCount": {"disp": "0x38", "op": "xor", "K": "0xEB4C", "sz": 2, "evidence": "fs/fc tiling chain 60000/60000 ok, 0 bad, total_fields=290507, max_fc=396(20k rows)/859(60k rows)"},
+    "parent":     {"disp": "0x0C", "op": "xor", "K": "0x4DFA3BEC", "evidence": "sentinel 7694/60000 (12.8%), value span 232434; K=raw0^0xFFFFFFFF"}
+  },
+  "unsolved": {
+    "ns": "no static-xor/add form matches (rows0-2 empty vs row3 System); suspected per-row mask or different packing",
+    "methodStart": "no monotone static form; col 0x20 add 0xFFBD6A3B (code event) decodes ~409k values with drops; suspected per-row mask",
+    "methodCount": "not found (chain search over u16/u8 failed)",
+    "elementType": "col 0x1C decodes to small negatives with xor-sentinel K; tag appears once only - form differs from 7.1",
+    "bitfield": "no u16/u8 column with values<=7 + row4==1 + bit1~8k; may be derived or absent"
+  },
+  "layout_note": "column positions differ from 7.1 (name 0x14->0x18, fieldStart 0x00->0x14, flags 0x0C->0x04): layout reshuffles per version, constants rotate; column SEMANTICS solved independently per version via plaintext+chain",
+  "anchor_note": "6.7.0 type names are un-prefixed (Runtime, not Mono.Runtime) - row anchors differ from 7.1; heap strings unaligned, packed, no terminators",
+  "code_events": [
+    {"disp": "0x18", "op": "xor", "imm": "0x17fb1577", "va": "0x157fb9cfa", "note": "matches data-solved name column"},
+    {"disp": "0x20", "op": "add", "imm": "0xffbd6a3b", "va": "0x157fb9d4f"},
+    {"disp": "0x04", "op": "xor", "imm": "0x797cfd91", "va": "0x157fb9ed6"},
+    {"disp": "0x28", "op": "add", "imm": "0xefc28ad5", "va": "0x157fba198"},
+    {"disp": "0x2c", "op": "add", "imm": "0x6c19fd69", "va": "0x157fb9cbf"},
+    {"disp": "0x3a", "op": "add", "imm": "0xffffb631", "va": "0x157fb99be"}
+  ],
+  "code_events_note": "from densescan3 over .upx0 (bidirectional const-first/load-first, junk-tolerant); builder region ~0x157fb9000 r15-based; calibrated against 7.1 known constants (name/flags found at 0x159f64158/0x159f6435b)"
+}

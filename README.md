@@ -29,6 +29,7 @@ mhydump dump --exe <main-module> --metadata <global-metadata.dat> --out dump.cs
 
 | Command | Purpose |
 |---|---|
+| `dump-gen --exe <m> --metadata <d> [--out dump.cs] [--profile-in p.json]` | 世代通用 dump 管线（profile 驱动；默认 profile 为 7.1 实测 layout71）。`dump71` 为过渡别名，多版本 profile 推导落地后移除（R9） |
 | `pe-validate --exe <m>` | Parse the PE, print sections, flag BSS globals |
 | `decode-one --exe <m> --metadata <d> --idx <packed>` | Decode a single string by packed index |
 | `header-dump --exe <m> --metadata <d>` | Load metadata, print resolved table offsets |
@@ -56,8 +57,10 @@ RECIPE.md          the decryption recipe
 
 ## Disclaimer
 
-For educational and interoperability research on software you own or are authorized to analyze. The
-constants are specific to one build; a different version needs the recipe re-derived.
+For educational and interoperability research on software you own or are authorized to analyze. Constants for the 7.x generation are consolidated in `src/derive/layout71.rs`
+and re-derivable per build (`derive` framework); see `REQUIREMENTS.md` R2 for
+the adaptation policy and `IMPLEMENTATION_LOG.md` for what is auto-derived vs
+pending.
 
 ## License
 

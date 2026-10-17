@@ -1,0 +1,21 @@
+warning: decomp_dbg is a different build from this kuna
+  kuna:       0.1.0 (source 071ca7dce2a82be4) /home/yangsanyi/Documents/git-repo/kuna/decompiler/target/release/kuna
+  decomp_dbg: 0.1.0 (source 9b09b5e4f4af2b80) /home/yangsanyi/Documents/git-repo/kuna/decompiler/target/release/decomp_dbg
+void sub_14051e0f0(uint4 a0) // return-dupe
+{
+  int8 v1; // rax
+  char v2 [8];
+  unsigned long long v3; // stack - 0x28
+  
+  v3 = 0xfffffffffffffffe;
+  if (*(int8 *)(dat_145ad62e0 + (int4)a0 * 8LL))
+    return;
+  v1 = sub_14051db00((*(uint4 *)(((int8)*(int4 *)(dat_145ad62b8 + 0x1e0) ^ 0x2ee480fbU) + dat_145ad62c0 + 0xe + a0 * 0x1aULL) ^ 0x394729c) + ((a0 * 0x4e94 ^ 0x62d8b7b8) * 0x7572748a + 0x1f4d9eea ^ 0x6e8931d6) * -0x39036375);
+  if (((*(int2 *)(v1 + 0xc0)) || (*(uint1 *)(v1 + 200) & 0xe)) && (!*(int8 *)(v1 + 0x58))) {
+    EnterCriticalSection(dat_145ad6968);
+    sub_1405153f0(v1,v2);
+    LeaveCriticalSection(dat_145ad6968);
+  }
+  *(unsigned long long *)(dat_145ad62e0 + (int4)a0 * 8LL) = *(unsigned long long *)(*(int8 *)(v1 + 0x58) + (int4)(a0 + (*(uint4 *)(*(int8 *)(v1 + 0x60) + 8) ^ 0xfb8750a6) + 1) * 8LL);
+  return;
+}

@@ -1,0 +1,202 @@
+{
+ "exe": "/home/yangsanyi/gire/sample/gi/5.4.0/YuanShen.exe",
+ "hdr_global": 5435095296,
+ "body_global": 5435095304,
+ "recs": 175,
+ "slots": {
+  "0x84|xor|0x5d362bf2": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5369060677
+  },
+  "0x10|xor|0x1ead7600": {
+   "n": 6,
+   "body": 5,
+   "strides": [],
+   "va": 5369061063
+  },
+  "0xF0|xor|0x58f99dff": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5369061784
+  },
+  "0x1E8|None|None": {
+   "n": 15,
+   "body": 15,
+   "strides": [
+    70
+   ],
+   "va": 5369067939
+  },
+  "0x2C|None|None": {
+   "n": 3,
+   "body": 3,
+   "strides": [
+    70
+   ],
+   "va": 5369068852
+  },
+  "0x94|xor|0x4d9dd7fa": {
+   "n": 18,
+   "body": 18,
+   "strides": [],
+   "va": 5369088462
+  },
+  "0xA0|xor|0x649bfbb6": {
+   "n": 19,
+   "body": 19,
+   "strides": [],
+   "va": 5369099711
+  },
+  "0x130|xor|0x8bc54db": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5369102442
+  },
+  "0x144|xor|0x5340cbdb": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5369108209
+  },
+  "0x6C|xor|0x36a5cbd4": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5369109639
+  },
+  "0x8|None|None": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5369111595
+  },
+  "0x80|xor|0x60691c26": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5369112793
+  },
+  "0x4|None|None": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5369113293
+  },
+  "0x128|None|None": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5369114714
+  },
+  "0x188|xor|0x6e803d63": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5369117079
+  },
+  "0x98|None|None": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5369118158
+  },
+  "0x50|None|None": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5369118899
+  },
+  "0x38|None|None": {
+   "n": 10,
+   "body": 10,
+   "strides": [],
+   "va": 5369122536
+  },
+  "0x158|xor|0x5a89ad7d": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5369149811
+  },
+  "0x68|xor|0x26a85a2f": {
+   "n": 3,
+   "body": 3,
+   "strides": [],
+   "va": 5369183703
+  },
+  "0x11C|xor|0x3e007fd5": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5369191504
+  },
+  "0x30|None|None": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5369193584
+  },
+  "0x1B4|xor|0x6933d851": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5369194467
+  },
+  "0x0|None|None": {
+   "n": 9,
+   "body": 9,
+   "strides": [],
+   "va": 5369210335
+  },
+  "0xC|None|None": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5369247909
+  },
+  "0x38|add|0x1255": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5369248109
+  },
+  "0x168|xor|0x7b6115cf": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5372440602
+  },
+  "0x8|add|0xc9a3b37b": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5372511810
+  },
+  "0xC8|None|None": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5372517099
+  },
+  "0x154|xor|0x1cb88448": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5372741835
+  }
+ },
+ "blob_cands": [
+  {
+   "va": 5413703632,
+   "score": [
+    16,
+    18
+   ]
+  }
+ ],
+ "typedef_tables": []
+}

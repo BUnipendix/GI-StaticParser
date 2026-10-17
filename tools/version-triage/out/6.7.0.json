@@ -1,0 +1,250 @@
+{
+ "exe": "/home/yangsanyi/gire/sample/gi/6.7.0/YuanShen.exe",
+ "hdr_global": 5456196824,
+ "body_global": 5456196872,
+ "recs": 893,
+ "slots": {
+  "0x74|xor|0x6914e879": {
+   "n": 201,
+   "body": 196,
+   "strides": [],
+   "va": 5368713749
+  },
+  "0x1E0|xor|0x4e66a4f6": {
+   "n": 49,
+   "body": 0,
+   "strides": [
+    70
+   ],
+   "va": 5373280840
+  },
+  "0x8C|xor|0x6bf17922": {
+   "n": 21,
+   "body": 0,
+   "strides": [],
+   "va": 5373280882
+  },
+  "0x94|xor|0x73d3fc1e": {
+   "n": 9,
+   "body": 0,
+   "strides": [],
+   "va": 5373307809
+  },
+  "0x158|xor|0x15541ad0": {
+   "n": 15,
+   "body": 0,
+   "strides": [],
+   "va": 5373307907
+  },
+  "0x1D8|xor|0x2d85e5bd": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373364660
+  },
+  "0x184|xor|0x40abfa5a": {
+   "n": 5,
+   "body": 0,
+   "strides": [],
+   "va": 5373369096
+  },
+  "0xD4|None|None": {
+   "n": 7,
+   "body": 0,
+   "strides": [],
+   "va": 5373373527
+  },
+  "0x4C|xor|0x469e78e7": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373441522
+  },
+  "0x120|xor|0x554392ca": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373495626
+  },
+  "0x4|None|None": {
+   "n": 3,
+   "body": 1,
+   "strides": [],
+   "va": 5373495709
+  },
+  "0x1F0|None|None": {
+   "n": 2,
+   "body": 0,
+   "strides": [],
+   "va": 5373675353
+  },
+  "0x194|xor|0x27680ab9": {
+   "n": 2,
+   "body": 0,
+   "strides": [],
+   "va": 5373680992
+  },
+  "0x1E4|xor|0x2d46f91f": {
+   "n": 2,
+   "body": 0,
+   "strides": [],
+   "va": 5373682456
+  },
+  "0x50|xor|0x6f52fe29": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373685759
+  },
+  "0xA0|xor|0x6bfe58f8": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373686145
+  },
+  "0x50|None|None": {
+   "n": 10,
+   "body": 0,
+   "strides": [],
+   "va": 5373686379
+  },
+  "0x24|None|None": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373686390
+  },
+  "0x38|None|None": {
+   "n": 3,
+   "body": 0,
+   "strides": [],
+   "va": 5373688636
+  },
+  "0x0|None|None": {
+   "n": 12,
+   "body": 0,
+   "strides": [],
+   "va": 5373689693
+  },
+  "0x140|None|None": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373690777
+  },
+  "0x1E8|None|None": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373691888
+  },
+  "0x200|xor|0x3612f9f4": {
+   "n": 2,
+   "body": 0,
+   "strides": [],
+   "va": 5373692601
+  },
+  "0x1F4|xor|0x374e7a4b": {
+   "n": 2,
+   "body": 0,
+   "strides": [],
+   "va": 5373718949
+  },
+  "0xF8|None|None": {
+   "n": 2,
+   "body": 0,
+   "strides": [
+    70
+   ],
+   "va": 5373725767
+  },
+  "0xB8|xor|0xfdb1a47": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373756471
+  },
+  "0x1DC|xor|0x2214fee5": {
+   "n": 3,
+   "body": 0,
+   "strides": [],
+   "va": 5373758935
+  },
+  "0x30|None|None": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373769957
+  },
+  "0x14C|xor|0x12c9258b": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373770774
+  },
+  "0x64|xor|0x72664f93": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373782023
+  },
+  "0xE0|xor|0x805dfff": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373832421
+  },
+  "0xA4|xor|0xcb14e2f": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373833496
+  },
+  "0x84|xor|0xfcfef78": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373833551
+  },
+  "0x10C|xor|0x288abc3b": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373833572
+  },
+  "0x28|xor|0x9af66a1": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373833603
+  },
+  "0x8|None|None": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373842858
+  },
+  "0x138|xor|0x5c69408": {
+   "n": 4,
+   "body": 0,
+   "strides": [],
+   "va": 5373895542
+  },
+  "0x1C8|None|None": {
+   "n": 3,
+   "body": 0,
+   "strides": [],
+   "va": 5373895570
+  }
+ },
+ "blob_cands": [
+  {
+   "va": 5406559232,
+   "score": [
+    23,
+    25
+   ]
+  }
+ ],
+ "typedef_tables": []
+}

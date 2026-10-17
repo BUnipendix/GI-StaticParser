@@ -14,6 +14,59 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
+    /// Constant-free: locate the embedded MHY header and recover every header-slot
+    /// anchor from the code, then report each resolved body offset.
+    Anchors {
+        #[arg(short, long)]
+        exe: String,
+        /// Optional global-metadata.dat, used only to range-check resolved offsets.
+        #[arg(long)]
+        metadata: Option<String>,
+        /// Emit the recovered anchors as JSON.
+        #[arg(long)]
+        json: bool,
+        /// Debug: only scan the header-pointer load at this VA (hex).
+        #[arg(long, value_parser = parse_u64_hex)]
+        site: Option<u64>,
+    },
+    /// Constant-free: derive the string cipher (M1/X1/X2 + strsec) from the image.
+    Cipher {
+        #[arg(short, long)]
+        exe: String,
+        #[arg(long)]
+        metadata: String,
+        /// Emit JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Constant-free: decrypt the whole string heap and enumerate every entry.
+    Strings {
+        #[arg(short, long)]
+        exe: String,
+        #[arg(long)]
+        metadata: String,
+        /// Write every entry as `offset<TAB>text`.
+        #[arg(short, long)]
+        out: Option<String>,
+        /// How many leading entries to print.
+        #[arg(long, default_value_t = 16)]
+        head: usize,
+    },
+    /// Constant-free: locate metadata row tables from structure alone (no constant,
+    /// no address, no column name).
+    Tables {
+        #[arg(short, long)]
+        exe: String,
+        #[arg(long)]
+        metadata: String,
+        /// Restrict the scan to this body offset (hex). Default: every offset the
+        /// anchor recovery found in the code.
+        #[arg(long, value_parser = parse_u64_hex)]
+        base: Option<u64>,
+        /// Emit JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Milestone (a): parse a PE image, print its section table, ImageBase, and flag BSS globals.
     PeValidate {
         /// Path to GenshinImpact.exe (or any PE32+ image).
@@ -53,6 +106,28 @@ enum Cmd {
         #[arg(short, long)]
         exe: String,
     },
+    /// Generation dump pipeline: full dump.cs + script.json via the derived profile.
+    /// Version-generic: behaviour is fully profile-driven; the shipped default profile
+    /// is the 7.1-measured one (layout71). `dump71` stays as a deprecated alias until
+    /// the multi-version profile derivation lands (REQUIREMENTS R9).
+    #[clap(name = "dump-gen", alias = "dump71")]
+    DumpGen {
+        #[arg(long)]
+        exe: String,
+        #[arg(long)]
+        metadata: String,
+        #[arg(short, long, default_value = "dump.cs")]
+        out: String,
+        /// Load the whole profile from JSON instead of the built-in 7.1 layout.
+        #[arg(long)]
+        profile_in: Option<String>,
+        /// Write the effective profile as JSON.
+        #[arg(long)]
+        profile_out: Option<String>,
+        /// Skip the constant-free cipher cross-check against the binary.
+        #[arg(long)]
+        no_cipher_check: bool,
+    },
     /// Milestones (e)/(f): emit dump.cs. With --only, restrict to given TypeDefIndices.
     Dump {
         #[arg(long)]
@@ -84,13 +159,347 @@ fn main() -> Result<()> {
 
     let cli = Cli::parse();
     match cli.cmd {
+        Cmd::Anchors { exe, metadata, json, site } => anchors_cmd(&exe, metadata.as_deref(), json, site),
+        Cmd::Cipher { exe, metadata, json } => cipher_cmd(&exe, &metadata, json),
+        Cmd::Strings { exe, metadata, out, head } => strings_cmd(&exe, &metadata, out.as_deref(), head),
+        Cmd::Tables { exe, metadata, base, json } => tables_cmd(&exe, &metadata, base, json),
         Cmd::PeValidate { exe } => pe_validate(&exe),
         Cmd::DecodeOne { exe, metadata, idx } => decode_one(&exe, &metadata, idx),
         Cmd::HeaderDump { exe, metadata } => header_dump(&exe, &metadata),
         Cmd::TypesDump { exe, metadata, out } => types_dump(&exe, &metadata, &out),
         Cmd::Il2CppFns { exe } => il2cpp_fns(&exe),
+        Cmd::DumpGen { exe, metadata, out, profile_in, profile_out, no_cipher_check } =>
+            dump_gen_cmd(&exe, &metadata, &out, profile_in.as_deref(), profile_out.as_deref(), no_cipher_check),
         Cmd::Dump { exe, metadata, out, only } => dump_cmd(&exe, &metadata, &out, only.as_deref()),
     }
+}
+
+/// Constant-free string-cipher derivation.
+fn cipher_cmd(exe: &str, metadata: &str, json: bool) -> Result<()> {
+    let ga = std::fs::read(exe)?;
+    let gm = std::fs::read(metadata)?;
+    let body = gm.get(0x210..).unwrap_or(&[]);
+    let found = static_mhy_dumper::derive::cipher::derive(&ga, body)?;
+    let tables = static_mhy_dumper::derive::cipher::find_key_step_tables(&ga)?;
+    let build = static_mhy_dumper::derive::cipher::derive_build(&ga, &gm)?;
+    let sched = build.as_ref().and_then(|b| b.cipher.clone());
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "ciphers": found,
+                "key_step_tables": tables,
+                "schedule": sched,
+            }))?
+        );
+        return Ok(());
+    }
+    for t in &tables {
+        println!("key-step table @0x{:X}  M4=0x{:016X}", t.va, t.m4);
+    }
+    // Schedule-agnostic pass: the decoder that references a key-step table, with
+    // its key schedule traced out of the instructions and reported as data.
+    match &sched {
+        Some(c) => {
+            println!(
+                "schedule-derived cipher: decoder@0x{:X} mask@0x{:X} strsec=0x{:X} score={}",
+                c.site, c.mask_site, c.strsec, c.score
+            );
+            println!("  step-table @0x{:X}  step=0x{:016X}", c.step_table, c.schedule.step);
+            println!("  key(off) = {}", c.schedule.formula());
+        }
+        None => println!("schedule-derived cipher: none (no key-step table / no straight-line schedule)"),
+    }
+    if found.is_empty() {
+        println!("no 3-constant string cipher derived (expected on the 5-constant generations)");
+        return Ok(());
+    }
+    for c in &found {
+        println!(
+            "site=0x{:X}  M1=0x{:016X} X1=0x{:016X} X2=0x{:016X}  strsec=0x{:X}  score={}",
+            c.site, c.m1, c.x1, c.x2, c.strsec, c.score
+        );
+    }
+    Ok(())
+}
+
+/// Constant-free: decrypt the whole string heap and report what it contains.
+///
+/// This is the end-to-end check on the cipher that needs no table constants at
+/// all: entry 0 must be `mscorlib`, every entry must terminate, and the walk must
+/// reach the end of the heap. A wrong schedule stops after a handful of entries.
+fn strings_cmd(exe: &str, metadata: &str, out: Option<&str>, head: usize) -> Result<()> {
+    let ga = std::fs::read(exe)?;
+    let gm = std::fs::read(metadata)?;
+    let body = gm.get(0x210..).unwrap_or(&[]);
+    let build = static_mhy_dumper::derive::cipher::derive_build(&ga, &gm)?
+        .ok_or_else(|| anyhow::anyhow!("no embedded MHY header located"))?;
+    let c = build
+        .cipher
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("no string cipher derived from this image"))?;
+    let t0 = std::time::Instant::now();
+    let limit = body.len().saturating_sub(c.strsec as usize);
+    let heap = static_mhy_dumper::decode_str::string_starts(body, c.strsec as usize, &c.schedule, limit);
+    println!("strsec=0x{:X}  step=0x{:016X}  key(off) = {}", c.strsec, c.schedule.step, c.schedule.formula());
+    println!("scanned=0x{:X} bytes of heap, found {} offsets that start a string of length >= 8 (+ ~0.04% noise)",
+        limit, heap.len());
+    println!("in {:.2}s   (noise floor for the same predicate is 20..100 per 256 KiB)", t0.elapsed().as_secs_f64());
+    match heap.first() {
+        Some(h) if h.text.starts_with("mscorlib") => {
+            println!("first entry OK: offset 0 -> {:?}", h.text)
+        }
+        Some(h) => println!("first entry WRONG: offset 0 -> {:?} (expected \"mscorlib\")", h.text),
+        None => println!("nothing decodes at all -- schedule is wrong"),
+    }
+    for h in heap.iter().take(head) {
+        println!("  0x{:06X}  {}", h.off, h.text);
+    }
+    println!("NOTE: `text` is the exact string followed by further printable bytes, because the");
+    println!("      heap stores no terminators and no lengths. Exact strings come from decoding a");
+    println!("      real index with the metadata table that holds it.");
+    if let Some(p) = out {
+        let mut s = String::new();
+        for h in &heap {
+            s.push_str(&format!("0x{:06X}\t{}\n", h.off, h.text));
+        }
+        std::fs::write(p, s)?;
+        println!("wrote {} entries to {p}", heap.len());
+    }
+    Ok(())
+}
+/// Constant-free table location: structure only, no constant and no address.
+///
+/// Candidate bases default to every body offset the anchor recovery read out of the
+/// code, so the whole command needs nothing but the exe and the encrypted metadata.
+fn tables_cmd(exe: &str, metadata: &str, base: Option<u64>, json: bool) -> Result<()> {
+    let ga = std::fs::read(exe)?;
+    let gm = std::fs::read(metadata)?;
+    let body = gm.get(0x210..).unwrap_or(&[]);
+    let build = static_mhy_dumper::derive::cipher::derive_build(&ga, &gm)?;
+    let bases: Vec<usize> = match base {
+        Some(b) => vec![b as usize],
+        None => {
+            let b = build
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("no embedded MHY header located"))?;
+            // R8 (a): the primary candidate set is what the code itself computes.
+            // `recover_tables` returns only the sites where a header slot and a
+            // stride are combined into a row address, so the set is a handful of
+            // entries instead of every slot the game ever reads.
+            let code = static_mhy_dumper::derive::anchor::recover(&ga)
+                .ok()
+                .and_then(|r| {
+                    static_mhy_dumper::derive::anchor::recover_tables(&ga, r.hdr_global)
+                        .ok()
+                        .map(|t| {
+                            let mut v: Vec<usize> = t
+                                .iter()
+                                .filter_map(|d| d.resolve(&r.header))
+                                .filter(|o| *o > 0)
+                                .map(|o| o as usize)
+                                .collect();
+                            v.sort_unstable();
+                            v.dedup();
+                            v
+                        })
+                });
+            match code.filter(|v| !v.is_empty()) {
+                Some(v) => {
+                    tracing::info!(
+                        "{} candidate bases from the code's own base+index*stride sites",
+                        v.len()
+                    );
+                    v
+                }
+                None => {
+                    let v: Vec<usize> = b.body_offsets().into_iter().map(|o| o as usize).collect();
+                    tracing::info!(
+                        "{} candidate bases from the anchor recovery (no code-defined table site matched)",
+                        v.len()
+                    );
+                    v
+                }
+            }
+        }
+    };
+    let found = static_mhy_dumper::derive::tables::find(body, &bases);
+    // Ask EVERY candidate table which of its columns decode to string indices, not just
+    // the first. A version can describe the same physical column under two models (6.4.0
+    // does), and the description that yields a name column is the typeDef one -- so the
+    // name column doubles as the arbiter between competing descriptions.
+    let mut cols: Vec<static_mhy_dumper::derive::tables::StringColumn> = Vec::new();
+    let mut col_table: Option<usize> = None;
+    if let Some(c) = build.as_ref().and_then(|b| b.cipher.as_ref()) {
+        for (i, t) in found.iter().enumerate() {
+            let mut cand = static_mhy_dumper::derive::tables::find_additive_string_columns(
+                body, c.strsec as usize, &c.schedule, t.base, t.stride, t.rows,
+            );
+            if cand.is_empty() {
+                // The two families flip together: 7.0.0 has an ADD index column and an
+                // XOR name column, the opposite of 7.1.0. Try both before giving up.
+                cand = static_mhy_dumper::derive::tables::find_xor_string_columns(
+                    body, c.strsec as usize, &c.schedule, t.base, t.stride, t.rows,
+                );
+            }
+            if !cand.is_empty() {
+                cols = cand;
+                col_table = Some(i);
+                break;
+            }
+        }
+    }
+    if json {
+        println!("{}", serde_json::to_string_pretty(&serde_json::json!({ "tables": found, "string_columns": cols }))?);
+        return Ok(());
+    }
+    if found.is_empty() {
+        println!("no row table found by the structural predicate");
+        return Ok(());
+    }
+    println!("{:>10} {:>6} {:>4} {:>6} {:>9} {:>10} {:>4} {:>6} {:>4} {:>6} {:>6} {:>8} {:>7}",
+        "base", "stride", "op", "idx_off", "idx_c", "sentinel", "cntop", "cnt_off", "cnt_c", "rows", "real", "max_idx", "trans");
+    for t in &found {
+        let op = match t.transform {
+            static_mhy_dumper::derive::tables::IndexTransform::Xor => "xor",
+            static_mhy_dumper::derive::tables::IndexTransform::Add => "add",
+        };
+        let cop = match t.cnt_transform {
+            static_mhy_dumper::derive::tables::IndexTransform::Xor => "xor",
+            static_mhy_dumper::derive::tables::IndexTransform::Add => "add",
+        };
+        let sent = t.sentinel_raw.map(|s| format!("0x{s:08X}")).unwrap_or_else(|| "-".into());
+        println!("0x{:08X} 0x{:04X} {:>4} 0x{:04X} 0x{:08X} {:>10} {:>4} 0x{:04X} 0x{:04X} {:>6} {:>6} {:>8} {:>7}",
+            t.base, t.stride, op, t.idx_off, t.idx_c, sent, cop, t.cnt_off, t.cnt_c, t.rows, t.real_rows, t.max_index, t.transitions);
+    }
+    if !cols.is_empty() {
+        println!();
+        match col_table {
+            Some(i) => println!("string-index columns of table #{i} above:"),
+            None => println!("string-index columns:"),
+        }
+        for c in &cols {
+            println!("  col_off=0x{:02X}  +0x{:08X}  ok {}/{}", c.off, c.c, c.rows_ok, c.rows_tested);
+        }
+    }
+    Ok(())
+}
+
+/// Constant-free header location + anchor recovery.
+fn parse_u64_hex(s: &str) -> Result<u64, std::num::ParseIntError> {
+    let t = s.trim_start_matches("0x");
+    u64::from_str_radix(t, 16)
+}
+
+fn anchors_cmd(exe: &str, metadata: Option<&str>, json: bool, site: Option<u64>) -> Result<()> {
+    let ga = std::fs::read(exe)?;
+    if let Some(site) = site {
+        let img = static_mhy_dumper::pe::Image::parse(&ga)?;
+        let blobs = static_mhy_dumper::derive::anchor::find_header_blobs(&ga)?;
+        let hg = static_mhy_dumper::derive::anchor::find_hdr_global(&ga, blobs[0].va)?;
+        println!("site 0x{site:X} hdr_global 0x{hg:X}");
+        for a in static_mhy_dumper::derive::anchor::scan_site_debug(&img, &ga, site, hg, hg + 8) {
+            println!("  {a:?}");
+        }
+        return Ok(());
+    }
+    let rec = static_mhy_dumper::derive::anchor::recover(&ga)?;
+    let tdefs = static_mhy_dumper::derive::anchor::recover_tables(&ga, rec.hdr_global)?;
+    let body_len = match metadata {
+        Some(p) => std::fs::read(p)?.len().saturating_sub(0x210),
+        None => usize::MAX,
+    };
+    if json {
+        let unique = rec.unique();
+        let rows: Vec<_> = unique
+            .iter()
+            .map(|a| {
+                serde_json::json!({
+                    "hdr_off": a.hdr_off,
+                    "op": a.op,
+                    "imm": a.imm,
+                    "site": format!("0x{:X}", a.site),
+                    "confirmed": a.confirmed,
+                    "resolved": a.resolve(&rec.header),
+                })
+            })
+            .collect();
+        let trows: Vec<_> = tdefs
+            .iter()
+            .map(|t| {
+                serde_json::json!({
+                    "hdr_off": t.hdr_off,
+                    "op": t.op,
+                    "imm": t.imm,
+                    "stride": t.stride,
+                    "site": format!("0x{:X}", t.site),
+                })
+            })
+            .collect();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "blob_va": format!("0x{:X}", rec.blob.va),
+                "blob_file_off": format!("0x{:X}", rec.blob.file_off),
+                "hdr_global": format!("0x{:X}", rec.hdr_global),
+                "body_len": (body_len != usize::MAX).then(|| format!("0x{body_len:X}")),
+                "anchors": rows,
+                "tables_from_code": trows,
+            }))?
+        );
+        return Ok(());
+    }
+    println!(
+        "MHY blob at file 0x{:X} (VA 0x{:X}); header global 0x{:X}",
+        rec.blob.file_off, rec.blob.va, rec.hdr_global
+    );
+    if body_len != usize::MAX {
+        println!("body length 0x{body_len:X}");
+    }
+    println!("{:<6} {:<5} {:<12} {:<12} {:<10} {}", "slot", "op", "imm", "resolved", "confirmed", "site");
+    for a in rec.unique() {
+        let v = a.resolve(&rec.header);
+        let in_range = match v {
+            Some(v) if body_len != usize::MAX => {
+                if v > 0 && (v as usize) < body_len { "in-range" } else { "OUT-OF-RANGE" }
+            }
+            Some(_) => "?",
+            None => "truncated",
+        };
+        println!(
+            "0x{:<4X} {:<5} 0x{:<10X} {:<12} {:<10} 0x{:X}  {}",
+            a.hdr_off,
+            match a.op {
+                static_mhy_dumper::derive::anchor::AnchorOp::Add => "add",
+                static_mhy_dumper::derive::anchor::AnchorOp::Sub => "sub",
+                static_mhy_dumper::derive::anchor::AnchorOp::Xor => "xor",
+            },
+            a.imm,
+            v.map(|x| format!("0x{x:X}")).unwrap_or_default(),
+            a.confirmed,
+            a.site,
+            in_range,
+        );
+    }
+    if !tdefs.is_empty() {
+        println!();
+        println!("{:<6} {:<5} {:<12} {:>7}  {}", "slot", "op", "imm", "stride", "site  (base + index * stride)");
+        for t in &tdefs {
+            println!(
+                "0x{:<4X} {:<5} 0x{:<10X} 0x{:<5X} 0x{:X}",
+                t.hdr_off,
+                match t.op {
+                    static_mhy_dumper::derive::anchor::AnchorOp::Add => "add",
+                    static_mhy_dumper::derive::anchor::AnchorOp::Sub => "sub",
+                    static_mhy_dumper::derive::anchor::AnchorOp::Xor => "xor",
+                },
+                t.imm,
+                t.stride,
+                t.site,
+            );
+        }
+    }
+    Ok(())
 }
 
 /// Walk the TypeDefinition table (current-generation layout).
@@ -113,6 +522,81 @@ fn il2cpp_fns(exe: &str) -> Result<()> {
     let img = static_mhy_dumper::pe::Image::parse(&ga)?;
     let report = static_mhy_dumper::il2cpp_api::analyze(&img)?;
     print!("{report}");
+    Ok(())
+}
+
+fn dump_gen_cmd(
+    exe: &str,
+    metadata: &str,
+    out: &str,
+    profile_in: Option<&str>,
+    profile_out: Option<&str>,
+    no_cipher_check: bool,
+) -> Result<()> {
+    use static_mhy_dumper::derive::profile::Profile;
+    let ga = std::fs::read(exe)?;
+    let gm = std::fs::read(metadata)?;
+    let mut profile: Profile = match profile_in {
+        Some(p) => serde_json::from_str(&std::fs::read_to_string(p)?)?,
+        None => static_mhy_dumper::derive::layout71::gen71(),
+    };
+
+    // Constant-free cipher cross-check. The profile's table constants are only valid
+    // for the build they were derived from; if the binary on hand carries a different
+    // key schedule, every decoded string would be garbage, so refuse instead of
+    // emitting a plausible-looking dump (REQUIREMENTS R2.4 / R4.2).
+    let derived = static_mhy_dumper::derive::cipher::derive_build(&ga, &gm)?
+        .and_then(|b| b.cipher);
+    match (&derived, no_cipher_check) {
+        (Some(d), false) => {
+            let effective = profile.schedule();
+            let same = effective.ops == d.schedule.ops && effective.step == d.schedule.step;
+            if same {
+                tracing::info!("cipher cross-check OK: {}", d.schedule.formula());
+            } else {
+                tracing::warn!(
+                    "cipher MISMATCH: profile key(off) = {} ; binary key(off) = {} (step 0x{:X} vs 0x{:X})",
+                    effective.formula(),
+                    d.schedule.formula(),
+                    effective.step,
+                    d.schedule.step
+                );
+                anyhow::bail!(
+                    "profile does not match this binary (strings would decode to garbage); \
+                     pass --profile-in for this build, or --no-cipher-check to force"
+                );
+            }
+            // Carry the *derived* schedule as data, so `--profile-out` emits a
+            // self-describing profile instead of a constant triple.
+            profile.cipher = Some(d.schedule.clone());
+        }
+        (None, false) => tracing::warn!("no cipher derived from the binary; using the profile as-is"),
+        _ => {}
+    }
+
+    let m = static_mhy_dumper::derive::engine::Meta::load(&ga, &gm, profile)?;
+    tracing::info!(
+        "header OK: strsec=0x{:X} td=0x{:X} md=0x{:X} fd=0x{:X} params=0x{:X} typearr=0x{:X}({}) mptrs=0x{:X}({})",
+        m.strsec, m.td_base, m.md_base, m.fd_base, m.param_base,
+        m.typearr, m.typearr_len, m.methodptrs, m.methodptrs_len
+    );
+    if let Some(p) = profile_out {
+        std::fs::write(p, serde_json::to_string_pretty(&m.profile)?)?;
+        println!("wrote profile {p}");
+    }
+    let json_path = match out.rfind('/') {
+        Some(p) => format!("{}script.json", &out[..=p]),
+        None => "script.json".to_string(),
+    };
+    let f = std::fs::File::create(out)?;
+    let mut w = std::io::BufWriter::new(f);
+    let fj = std::fs::File::create(&json_path)?;
+    let mut wj = std::io::BufWriter::new(fj);
+    let (nt, nf, nm) = static_mhy_dumper::dump_gen::dump(&m, &mut w, &mut wj)?;
+    use std::io::Write;
+    w.flush()?;
+    wj.flush()?;
+    println!("wrote {out} + {json_path}: {nt} types, {nf} fields, {nm} methods");
     Ok(())
 }
 

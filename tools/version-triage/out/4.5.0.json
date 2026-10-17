@@ -1,0 +1,15 @@
+{
+ "exe": "/home/yangsanyi/gire/sample/gi/4.5.0/YuanShen.exe",
+ "hdr_global": 5368807448,
+ "body_global": 5368770200,
+ "recs": 1,
+ "slots": {
+  "0x10|None|None": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5368738935
+  }
+ },
+ "blob_cands": []
+}

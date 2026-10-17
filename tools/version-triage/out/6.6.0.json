@@ -1,0 +1,267 @@
+{
+ "exe": "/home/yangsanyi/gire/sample/gi/6.6.0/YuanShen.exe",
+ "hdr_global": 5454820376,
+ "body_global": 5454820384,
+ "recs": 873,
+ "slots": {
+  "0x128|xor|0x3ceda8ed": {
+   "n": 194,
+   "body": 194,
+   "strides": [],
+   "va": 5368713686
+  },
+  "0xE8|xor|0x786b40a8": {
+   "n": 51,
+   "body": 51,
+   "strides": [
+    70
+   ],
+   "va": 5373203320
+  },
+  "0x130|xor|0x67619387": {
+   "n": 15,
+   "body": 15,
+   "strides": [],
+   "va": 5373230363
+  },
+  "0x150|xor|0x2662e762": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373287093
+  },
+  "0x15C|None|None": {
+   "n": 9,
+   "body": 3,
+   "strides": [],
+   "va": 5373296006
+  },
+  "0x54|xor|0x61ec4a88": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373363922
+  },
+  "0x164|xor|0x6ed940ba": {
+   "n": 3,
+   "body": 3,
+   "strides": [
+    70
+   ],
+   "va": 5373396805
+  },
+  "0x18C|xor|0x73bd09c9": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5373595617
+  },
+  "0x140|xor|0x7bcee226": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5373601246
+  },
+  "0xDC|None|None": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373601678
+  },
+  "0x20|xor|0xb6e7edb": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5373602683
+  },
+  "0x178|xor|0x15f3d93b": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373606393
+  },
+  "0x98|None|None": {
+   "n": 9,
+   "body": 9,
+   "strides": [],
+   "va": 5373606635
+  },
+  "0x134|None|None": {
+   "n": 3,
+   "body": 3,
+   "strides": [],
+   "va": 5373608988
+  },
+  "0xB4|None|None": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373609056
+  },
+  "0x0|None|None": {
+   "n": 8,
+   "body": 8,
+   "strides": [],
+   "va": 5373610032
+  },
+  "0x48|xor|0x64b68172": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373611094
+  },
+  "0x1BC|None|None": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373612200
+  },
+  "0x10C|None|None": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5373612935
+  },
+  "0x120|xor|0x7a5417b": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5373639455
+  },
+  "0x84|None|None": {
+   "n": 2,
+   "body": 2,
+   "strides": [
+    70
+   ],
+   "va": 5373646247
+  },
+  "0x1E8|xor|0x373bf0b3": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373669188
+  },
+  "0xFC|xor|0x292b0847": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373669479
+  },
+  "0x1A4|xor|0x6032d28": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373676679
+  },
+  "0x204|xor|0xda3505f": {
+   "n": 3,
+   "body": 3,
+   "strides": [],
+   "va": 5373679143
+  },
+  "0x30|None|None": {
+   "n": 2,
+   "body": 0,
+   "strides": [],
+   "va": 5373689795
+  },
+  "0x1CC|xor|0x7706e77e": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373690661
+  },
+  "0x198|xor|0x7c72f6d3": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373696423
+  },
+  "0x18|None|None": {
+   "n": 2,
+   "body": 2,
+   "strides": [],
+   "va": 5373737906
+  },
+  "0xBC|xor|0x72ad6026": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373753901
+  },
+  "0x200|xor|0x22f9ef4": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373753925
+  },
+  "0x34|xor|0x2e9d5547": {
+   "n": 1,
+   "body": 1,
+   "strides": [],
+   "va": 5373753977
+  },
+  "0x4|None|None": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373763252
+  },
+  "0x8|None|None": {
+   "n": 1,
+   "body": 0,
+   "strides": [],
+   "va": 5373763266
+  },
+  "0x1FC|None|None": {
+   "n": 4,
+   "body": 4,
+   "strides": [],
+   "va": 5373816293
+  },
+  "0x1F8|xor|0x3291fb28": {
+   "n": 3,
+   "body": 3,
+   "strides": [],
+   "va": 5373816318
+  }
+ },
+ "blob_cands": [
+  {
+   "va": 5406110104,
+   "score": [
+    20,
+    22
+   ]
+  }
+ ],
+ "typedef_tables": [
+  {
+   "slot": "0xE8",
+   "op": "xor",
+   "imm": "0x786b40a8",
+   "stride": 70,
+   "base": "0x3e7ad7c",
+   "sentinel_off": 52,
+   "maj": 1597,
+   "lim": 2048,
+   "sentinel_raw": "0x2e3baa5f",
+   "sites": 51,
+   "col_profile": {
+    "0x18": [
+     0.715,
+     "0x4c74f838"
+    ],
+    "0x24": [
+     0.815,
+     "0xf637c272"
+    ],
+    "0x34": [
+     0.791,
+     "0x2e3baa5f"
+    ]
+   }
+  }
+ ]
+}
