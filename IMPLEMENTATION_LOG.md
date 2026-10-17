@@ -4257,3 +4257,32 @@ oracle 规则实测：所有 `[DllImport]` 行都在 extern(PInvokeImpl 0x2000) 
 ### 58.4 验证
 
 回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法。
+
+## 59. R11 第二十六轮：字段偏移注释规则修正（const / 泛型 / 固定地址）（2026-10-17）
+
+> 不是需求，是执行记录。
+
+### 59.1 发现：74,614 条 const 字段缺少 `// 0x0`
+
+oracle 对**所有 const 字段/枚举成员**打印 `; // 0x0`（6.4 共 66,306 行）；我们此前 74,614 条 const 行全部无偏移注释。
+修复后逐字一致：
+
+```
+public const Mono.Globalization.Unicode.SimpleCollator.ExtenderType None = 0; // 0x0
+```
+
+### 59.2 泛型类型实例字段：布局不可静态确定 → `// 0x0`
+
+证据（oracle）：`System.ValueTuple<T1>` 的 `public T1 Item1; // 0x0`（6.4 中 3,129 个泛型类型实例字段为 0x0）。
+根因：布局计算把通用参数（VAR 0x13 / MVAR 0x1E）当 8 字节引用，得到错误偏移（我们此前 `Item1 // 0x10`）。
+修复：`type_size` 对 VAR/MVAR 返回 None（大小不可知）⇒ 布局不可得 ⇒ 泛型定义类型的实例字段打印 `// 0x0`。
+效果：`System.ValueTuple`1/`2/`3` 字段与 oracle 逐字一致；7.1 输出 513 条实例字段 0x0。
+
+### 59.3 `<PrivateImplementationDetails>` 静态字段
+
+oracle 893 条此类字段全部 ` // 0x0`（fixed-address 静态区偏移 0）；我们已匹配（7.1 = 934 条，均为 `; // 0x0`）。
+
+### 59.4 验证
+
+回归 17 passed / 0 failed；dump 88,902 类型 / 440,172 字段 / 733,442 方法。
+const 行 74,614 全部带 `// 0x0`；固定地址字段 934 全部带 `// 0x0`；泛型实例字段 513 条 0x0。

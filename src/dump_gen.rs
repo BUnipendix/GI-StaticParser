@@ -148,8 +148,12 @@ impl<'a> LayoutCalc<'a> {
                 let lay = self.type_layout(data as usize)?;
                 (lay.end.checked_sub(0x10)?, lay.align)
             }
-            // CLASS: reference. GENERICINST/VAR/MVAR/FNPTR: conservative reference size.
-            0x12 | 0x15 | 0x13 | 0x1B | 0x1E => (8, 8),
+            // CLASS: reference. GENERICINST/FNPTR: conservative reference size.
+            0x12 | 0x15 | 0x1B => (8, 8),
+            // VAR / MVAR (generic parameter): size depends on the instantiation and is NOT
+            // statically knowable — the whole enclosing layout becomes unknown (the reference
+            // dump prints ` // 0x0` for the fields of such types instead of offsets).
+            0x13 | 0x1E => return None,
             _ => (8, 8),
         })
     }
@@ -818,9 +822,27 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
                     ordinal += 1;
                     o
                 };
-                let tail = match offset {
-                    Some(o) => format!(" // 0x{:X}", o),
-                    None => String::new(),
+                // Offset comment rules (verified against the 6.4 reference dump):
+                //  - literal/const fields (enum members included) always print ` // 0x0`
+                //    (they occupy no instance storage);
+                //  - `<PrivateImplementationDetails>` statics print ` // 0x0` (fixed-address);
+                //  - other statics: module static layout is runtime-assigned → no comment;
+                //  - instance fields: sequential layout offset.
+                let tail = if attrs & 0x40 != 0 {
+                    " // 0x0".to_string()
+                } else {
+                    match offset {
+                        Some(o) => format!(" // 0x{:X}", o),
+                        None if td.name.starts_with("<PrivateImplementationDetails>") => {
+                            " // 0x0".to_string()
+                        }
+                        // Instance layout of a generic definition is not statically known once a
+                        // field's type is a generic parameter (e.g. ValueTuple<T1> has
+                        // `public T1 Item1;` at 0x0 in the reference dump, not a computed
+                        // offset). Reference dumps print ` // 0x0` for those fields.
+                        None if !static_ && td.name.contains('`') => " // 0x0".to_string(),
+                        None => String::new(),
+                    }
                 };
                 // Const fields (enum members, literal constants) get their value from the
                 // field default-value table (gap #7): `= 3` before the offset comment.
