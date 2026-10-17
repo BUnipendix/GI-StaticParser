@@ -75,6 +75,14 @@ ScriptMethod 733,442 已有（含全限定名，2026-10-17 方法数修复后）
 flags/bitfield 常数是 7.1.0 专属（在 .upx0 变异函数逐版读取，0x159F63C4D 模式）；
 其它版本接线前需先跑 version-triage + 该版 .upx0 常数读取（SOP 见 version-matrix.md §4）。
 
+## 四b、静态模拟路线（2026-10-17 新增，进行中）
+
+`.upx0` = VMProtect 式**逐函数变形原生代码**（熵 6.8；DIR64 指向它仅 20/1.66M；`.text→.upx0` 入口 206 个）。
+反调试只对动态调试生效，静态反汇编 + Unicorn 模拟不运行进程 ⇒ 不触发。
+已入仓 `tools/emu_upx.py`（已验证跑通 flags/klass 解析器），详细见 `docs/re/upx-emulation.md`。
+进行中：批量跑 206 入口建「入口→表」映射，找 propertyDefs / genericParameters / attribute-args 读取器。
+新表候选：`hdr[0x198]^0x5303F399` = body 0x10500E0（88,902 条 u32，值域 0..23,150）。
+
 ## 四、已排除的搜索路径（勿重复研究）
 
 > 2026-10-17 汇总。以下路径均已实测排除，**不要重复**；除非有新信息（例如拿到运行时 dump 或新版本样本）。

@@ -4507,3 +4507,32 @@ attributeTypes 数组之后（0xA03E64）是 769 个小整数（0..176），随�
 
 `cargo test --release` 17 passed；完整 dump 88,902 类型 / 440,172 字段 / 733,442 方法（6.9 s）；
 产物写入 `~/gire/out/71/`（dump.cs 120 MB、script.json 77 MB、attributes.json 9.6 MB）——**不再写 /tmp**（ramdisk，曾写满导致工具链不可用）。
+
+## 68. R11 第三十五轮：`.upx0` 静态模拟路线打通（2026-10-17）
+
+> 不是需求，是执行记录。详见 `docs/re/upx-emulation.md`。
+
+### 68.1 `.upx0` 性质判定（此前误记为「加密/VM 字节码」）
+
+实测：熵 6.8（代码级）；`0x159F63C4D` 是合法 x86-64（push 全寄存器 + 只作用于 bp/ebp 的 junk 变形）；
+指向 `.upx0` 的 DIR64 重定位仅 **20/1,658,208** ⇒ 位置无关、无 handler 指针表；
+`.text→.upx0` 入口 **206 个**（109 call + 97 jmp），`.upx0` 内部 call/jmp 目标 27,139 个。
+⇒ **VMProtect 式逐函数变形原生代码**，不是字节码 VM，也不是加密数据。
+
+**反调试不影响本路线**：静态反汇编 + Unicorn 模拟都不运行游戏进程。
+
+### 68.2 模拟器（已入仓 `tools/emu_upx.py`）
+
+映射 PE（preferred base）、重建的 body/startup/header、loader 全局、TEB/栈；
+自建 `0x145AD62D8[typeDef]` 运行时缓存表指向真实 typeDef 行；hook 记录 metadata 读。
+实测 entry=0x14051DB00/rcx=293 完整返回（0x159F63C4D→0x159F647C7），rax=0x3048F8FF6。
+
+### 68.3 顺带确认的新表候选
+
+flags/klass 解析器内部读 `hdr[0x198]^0x5303F399` = body **0x10500E0**，88,902 条 u32，
+值稠密覆盖 0..23,150（按 typeDefIndex 索引）——候选映射表，语义待定，已记为待解项。
+
+### 68.4 下一步
+
+打通 cache-miss 构建路径（初始化 `.rdata` 槽 0x143B4B248 与 registration），再批量跑 206 个入口建「入口→表」映射，
+目标：propertyDefs / genericParameters / attribute-args 的读取器。
