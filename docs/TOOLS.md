@@ -111,3 +111,5 @@
 - 堆字符串：紧打包、无对齐、无终止符（长度在索引 byte3）。
 - 锚点逐版本不同（6.7.0 Mono 类型无 `Mono.` 前缀）——从数据现找，不硬套旧表。
 - Python `re.finditer` 不重叠 → 系统性欠计数，扫指令逐字节。
+
+- [2026-10-17] dump-gen 的 Slot 列改由 src/vtable.rs 纯静态重算（接口槽前置 + final/显式实现不占类槽），245,235 个 virtual 方法；与 6.4 oracle 严格同构类型一致率 96.03%（tools/validate_slots.py）。

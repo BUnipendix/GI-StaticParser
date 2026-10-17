@@ -389,7 +389,7 @@ fn ptr_type_index(m: &Meta, data: u32) -> Option<u32> {
 /// Declaration keyword. Preferred path: the decoded flags/bitfield columns
 /// (Il2CppDumper rule order: interface -> enum -> struct -> class). Fallback for
 /// generations without the columns: the legacy parent-chain inference.
-fn type_kind(m: &Meta, tds: &[Td], td: &Td) -> &'static str {
+pub fn type_kind(m: &Meta, tds: &[Td], td: &Td) -> &'static str {
     if td.flags != u32::MAX {
         if td.flags & 0x20 != 0 {
             return "interface";
@@ -464,7 +464,7 @@ fn base_name(m: &Meta, tds: &[Td], parent_tarr: u32) -> Option<String> {
 
 /// Fully-qualified display name, Il2CppDumper style: nested types carry their declaring
 /// type chain (`UnityEngine.UI.Selectable.Transition`), top-level types are namespace-qualified.
-fn joined_type_name(tds: &[Td], parents: &[Option<u32>], tdi: u32, depth: u32) -> String {
+pub fn joined_type_name(tds: &[Td], parents: &[Option<u32>], tdi: u32, depth: u32) -> String {
     if depth > 16 {
         return String::new();
     }
@@ -744,6 +744,9 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
             per_type[decl].push(gmi);
         }
     }
+    let vtable_slots = crate::vtable::compute_slots(m, &tds, &per_type, &mds);
+    let n_slot = vtable_slots.iter().filter(|v| v.is_some()).count();
+    eprintln!("[info] vtable slots: {} virtual methods resolved statically", n_slot);
 
 
     // ---- Custom attributes (7.1.0 data layer, docs/re/attr-decoding.md) ----
@@ -1204,7 +1207,7 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
                 params.join(", "),
                 md.rva,
                 token,
-                md.slot
+                vtable_slots[gmi].unwrap_or(md.slot as i32)
             )?;
             nmethods += 1;
         }
@@ -1233,7 +1236,7 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
                 params.join(", "),
                 md.rva,
                 token,
-                md.slot
+                vtable_slots[gmi].unwrap_or(md.slot as i32)
             )?;
             nmethods += 1;
         }

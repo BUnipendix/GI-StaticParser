@@ -4610,3 +4610,30 @@ File size: 160 MB
 ### 70.4 验证
 
 `cargo test --release` 17 passed；完整 dump 88,902 类型 / 440,172 字段 / 733,442 方法；script.json 160MB 可 `json.load`。
+
+## 71. 纯静态恢复方法 Slot（vtable 重建，2026-10-17 第 39 轮）
+
+> 不是需求，是执行记录。
+
+### 71.1 背景
+GI 把 metadata 的 method slot 字段抹成 -1；参考 dump 的 Slot 列来自 6.4 构建期数据。
+Slot 是 C# vtable 布局的确定性结果，可纯静态重算。
+
+### 71.2 规则（用 6.4 oracle 的 Stack 等类反推并验证）
+1. 从父类 vtable 开始（System.Object 顺序：Equals / Finalize / GetHashCode / ToString，与 metadata 顺序一致）；
+2. 先追加接口槽：按类型声明的接口顺序、每个接口内的方法顺序，一方法一槽；
+3. 再按 metadata 顺序追加本类型自己的 virtual newslot 方法；实现接口方法者映射到接口槽，
+   且 final(sealed) 或显式实现（名字形如 IFace.Method）不额外占类槽；非 final 隐式实现两者都占；
+4. 非 newslot 的 override 按签名匹配父类槽。
+
+### 71.3 实现与验证
+- 新模块 src/vtable.rs（签名 key 用规范类型串，兼容 GI 重复 typearr 条目；impl_key 用简单方法名匹配显式接口实现）；
+- dump-gen 输出的 Slot 列改为静态计算值，共 245,235 个 virtual 方法；
+- 验证脚本 tools/validate_slots.py：与 6.4 oracle 只比较「方法序列/修饰符/基类/接口顺序/接口内容完全一致」的类型，
+  得 8,548 / 8,901 = 96.03%（9,598 个类型）；剩余差异可归因于更深的基类链在 6.4→7.1 之间的差异
+  （过滤器未递归校验整条继承链），非算法规则问题；
+- 早期版本（本类型方法先、接口后）仅 41%；显式接口实现 + final 规则修正后 72% → 接口槽前置后 96%。
+
+### 71.4 结论
+Slot 列不再标记为静态不可得；属于纯静态可恢复项（来源：metadata 方法/接口表 + C# 布局规则）。
+

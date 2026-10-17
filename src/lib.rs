@@ -13,6 +13,8 @@ pub mod default_values;
 pub mod derive;
 pub mod dump;
 pub mod dump_gen;
+pub mod vtable;
+pub mod dummy_export;
 pub mod field_meta;
 pub mod il2cpp_api;
 pub mod mem;

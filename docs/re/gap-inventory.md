@@ -84,7 +84,7 @@ flags/bitfield 常数是 7.1.0 专属（在 .upx0 变异函数逐版读取，0x1
 
 ## 四c、静态上限判定（2026-10-17，见 `docs/re/remaining-static-limits.md`）
 
-已证**静态不可得**（运行时/构建期丢弃）：静态字段偏移、方法 Slot 非零、interface 基接口、
+已证**静态不可得**（运行时/构建期丢弃）：静态字段偏移、方法 Slot（已静态恢复：vtable 规则重算，见 §71）、interface 基接口、
 metadataUsage（script.json Addresses/ScriptMetadata）、stringLiterals、属性表本体、泛型参数名、属性参数。
 仍可能存在的：attribute 参数 blob、属性表（若存在）、`.upx0` 内更多 metadata 访问器（206 入口中仅 3 个与 metadata 相关）。
 工程类可产出：DummyDll、il2cpp.h、script.json Signature、多版本通用化。
@@ -109,7 +109,7 @@ metadataUsage（script.json Addresses/ScriptMetadata）、stringLiterals、属�
 | stringLiterals | ① 明文 8B `{length, dataIndex}` 表（dataIndex 指向 0x8E0000–0x930000 / 0x4600000+ 区域）扫全 body = 0；② startup 内 token 形态 8B 对扫 = 0 | 字面量数据区有明文 `{u32 len, UTF-8}` 记录（0x8FF000+ 等），但索引表未定位 |
 | 静态字段偏移 | oracle 首静态偏移 vs TypeDefIndex 单调性仅 50.2% | **运行时类初始化顺序，静态不可推导**（参考 dump 含运行时信息）|
 | interface 的基接口 | 7.1 元数据中 interface 的 iface_start/count 均为哨兵（全 0xFFFF/0） | 元数据无存储；oracle 的 270 行来自运行时 |
-| 方法 Slot 非零 | GI 7.1 元数据自身几乎全 -1（构建器反汇编逐句一致） | 参考侧语义，不视为缺陷 |
+| 方法 Slot（已静态恢复：vtable 规则重算，见 §71） | GI 7.1 元数据自身几乎全 -1（构建器反汇编逐句一致） | 参考侧语义，不视为缺陷 |
 | image/assembly 其余列（typeStart/typeCount） | 40B/44B 行逐列统计（小值列/单调列/零列）+ 132 槽枚举 + 344 个 header 读取点反查 | 列同样被逐行掩码；`hdr[0x108]`、`hdr[0x204]^0x4009A6BF` 两候选为随机区且无代码引用 ⇒ 非表锚点 |
 | startup 内 string-literal 索引表 | 8B `{len, dataOff∈body 串区}` 双相位稠密窗口扫 | 0 命中 |
 | oracle 的 5 种特性之外的特性 | oracle 11,525 行仅 5 种 corelib 特性 | 参考工具只解析子集；我们的可推导子集已实现（§56/§57）|
