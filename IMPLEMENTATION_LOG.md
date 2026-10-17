@@ -4683,3 +4683,31 @@ Slot 列不再标记为静态不可得；属于纯静态可恢复项（来源：
 - 参考实现按 image 生成 **75 个程序集**（互相引用）；v1 生成单个自包含 DummyDll.dll（便于直接反编译浏览）。
 - 未生成：AddressAttribute / FieldOffsetAttribute / AttributeAttribute / TokenAttribute 等自定义特性行，GenericParam 表。
 - 这些都是后续可增量补齐项；v1 已满足"可浏览类型/字段/方法结构"的目标。
+
+## 74. 字符串字面量静态恢复（2026-10-17 目标第 3 轮）
+
+> 不是需求，是执行记录。
+
+### 74.1 结论
+前序会话的「stringLiteral 表未定位」在 7.1 上已可解决，且不需要运行时：
+外部工具 gi-stringliteral（github.com/kuma-dayo/gi-stringliteral，commit 1008fd7）版本无关地从 .exe 里
+自动抽取字面量 keystream（op-chain）与表解码算术，再按 KS 前缀和签名定位 metadata 内的字面量表与数据区。
+
+### 74.2 7.1 实测
+- 命令：tools/recover-literals.sh（包装外部工具，不 vendor 第三方代码；已实测可运行）
+- 结果：table @0x1ebb8ec，data @0x1c6c828，86,108 条唯一字面量，索引 0..86107 连续无重复；
+  平均长度 27.8、最长 837、含 1 条空串、1,431 条非 ASCII；
+  含 Data/_BinOutput 路径 243 条、Data/_JsonOutput 68 条。
+- 与前序 ~/gire/meta_string_literals.txt（31,589 唯一串）对比：覆盖 31,444（99.54%）；
+  未覆盖的 145 条是 exe 原生串/运行时拼接串（如 [Packet Before Encrypt - Hex]），不属于 il2cpp 字面量表。
+- 产物：~/gire/out/71/literals.json（6.0MB）。
+
+### 74.3 跨版本性
+- 6.4.0 样本运行失败（工具报 could not extract decryption logic，混淆代次不同），
+  说明该工具对版本并非无条件通用（作者只测过 6.4.51/6.5.51/6.6.50 与后续 OSRELWin6.7.0）。
+- 7.1（本目标版本）验证通过；未来版本若失败，需要适配 extract_constants 的符号执行或移植进本项目 derive 流程。
+  已作为显式外部依赖记录（tools/recover-literals.sh 会检查并提示）。
+
+### 74.4 对 Il2CppDumper 兼容性的含义
+- 字面量「值」已静态可得；script.json 的 ScriptString 还差「使用点地址」（metadataUsage 槽），
+  那部分仍属运行时/加密数据，与字面量表本身是两件事。
