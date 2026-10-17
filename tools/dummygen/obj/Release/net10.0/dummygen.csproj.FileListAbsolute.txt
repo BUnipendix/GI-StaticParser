@@ -1,0 +1,15 @@
+/home/yangsanyi/Documents/git-repo/GI-StaticParser/tools/dummygen/obj/Release/net10.0/dummygen.GeneratedMSBuildEditorConfig.editorconfig
+/home/yangsanyi/Documents/git-repo/GI-StaticParser/tools/dummygen/obj/Release/net10.0/dummygen.AssemblyInfoInputs.cache
+/home/yangsanyi/Documents/git-repo/GI-StaticParser/tools/dummygen/obj/Release/net10.0/dummygen.AssemblyInfo.cs
+/home/yangsanyi/Documents/git-repo/GI-StaticParser/tools/dummygen/obj/Release/net10.0/dummygen.csproj.CoreCompileInputs.cache
+/home/yangsanyi/Documents/git-repo/GI-StaticParser/tools/dummygen/obj/Release/net10.0/dummygen.sourcelink.json
+/home/yangsanyi/Documents/git-repo/GI-StaticParser/tools/dummygen/bin/Release/net10.0/dummygen
+/home/yangsanyi/Documents/git-repo/GI-StaticParser/tools/dummygen/bin/Release/net10.0/dummygen.deps.json
+/home/yangsanyi/Documents/git-repo/GI-StaticParser/tools/dummygen/bin/Release/net10.0/dummygen.runtimeconfig.json
+/home/yangsanyi/Documents/git-repo/GI-StaticParser/tools/dummygen/bin/Release/net10.0/dummygen.dll
+/home/yangsanyi/Documents/git-repo/GI-StaticParser/tools/dummygen/bin/Release/net10.0/dummygen.pdb
+/home/yangsanyi/Documents/git-repo/GI-StaticParser/tools/dummygen/obj/Release/net10.0/dummygen.dll
+/home/yangsanyi/Documents/git-repo/GI-StaticParser/tools/dummygen/obj/Release/net10.0/refint/dummygen.dll
+/home/yangsanyi/Documents/git-repo/GI-StaticParser/tools/dummygen/obj/Release/net10.0/dummygen.pdb
+/home/yangsanyi/Documents/git-repo/GI-StaticParser/tools/dummygen/obj/Release/net10.0/dummygen.genruntimeconfig.cache
+/home/yangsanyi/Documents/git-repo/GI-StaticParser/tools/dummygen/obj/Release/net10.0/ref/dummygen.dll

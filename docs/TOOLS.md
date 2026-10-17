@@ -113,3 +113,5 @@
 - Python `re.finditer` 不重叠 → 系统性欠计数，扫指令逐字节。
 
 - [2026-10-17] dump-gen 的 Slot 列改由 src/vtable.rs 纯静态重算（接口槽前置 + final/显式实现不占类槽），245,235 个 virtual 方法；与 6.4 oracle 严格同构类型一致率 96.03%（tools/validate_slots.py）。
+
+- [2026-10-17] DummyDll v1：`mhydump dump-gen --dummy-out x.jsonl` + `tools/dummygen`（net10.0, System.Reflection.Metadata）→ 单文件 DummyDll.dll（7.1：38MB，88,902 类型/733,442 方法/440,172 字段/548,400 参数/84,377 接口实现；dnfile 独立验证一致）。参考实现为 75 个程序集+自定义特性，v1 为单程序集、无 GenericParam/特性。

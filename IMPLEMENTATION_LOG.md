@@ -4658,3 +4658,28 @@ Slot 列不再标记为静态不可得；属于纯静态可恢复项（来源：
 - 已尝试 mhydump derive 6.4 → 产物是半成品（缺列解 ops），需走 version-triage：derive → colsolve4 → colverify → profile。
 - 备选：用 images 表的 typeStart/count 得到 7.1 类型→程序集映射后，直接模拟 arena 规则；用 6.4 oracle 的
   DateTime/MSCompatUnicodeTable 等类型做定点核对。
+
+## 73. DummyDll 生成器 v1（2026-10-17 目标第 2 轮）
+
+> 不是需求，是执行记录。
+
+### 73.1 实现
+- Rust 侧导出：dump-gen --dummy-out（src/dummy_export.rs），逐行 JSONL：T 类型 / I 接口 / F 字段 / M 方法（含参数）。
+  7.1 实测：88,902 T / 440,172 F / 733,442 M，文件 111MB。
+- C# 生成器：tools/dummygen/（net10.0，System.Reflection.Metadata，无外部依赖）。
+  单次生成单文件 DummyDll.dll：TypeDef（按 tdi 顺序，类型名/命名空间/可见性/abstract/sealed/interface/struct/enum），
+  基类（struct→System.ValueType、enum→System.Enum、class→父类或 System.Object、<Module> 无基类），
+  InterfaceImpl（84,377 行），FieldDef（清 Literal/HasDefault，常量降级为 static 字段），
+  MethodDef（签名+参数；接口/abstract 无方法体，其余给 ldnull/throw 或 ret 最小方法体），Param（548,400 行）。
+
+### 73.2 产物与验证
+- 产物：~/gire/out/71/DummyDll.dll，38 MB。
+- 生成器内置校验：类型/字段/方法/参数计数与 JSONL 一致。
+- 独立验证（venv + dnfile 解析 PE/CLI）：TypeDef 88,902 / MethodDef 733,442 / Field 440,172 /
+  Param 548,400 / InterfaceImpl 84,377 / Assembly=1 / Module=1，与导出一致；样例类型名/命名空间/基类行号正确；
+  87 个重名类型（GI 多程序集合并导致），可被解析器接受。
+
+### 73.3 与 Il2CppDumper 参考实现的差异（v1 已知）
+- 参考实现按 image 生成 **75 个程序集**（互相引用）；v1 生成单个自包含 DummyDll.dll（便于直接反编译浏览）。
+- 未生成：AddressAttribute / FieldOffsetAttribute / AttributeAttribute / TokenAttribute 等自定义特性行，GenericParam 表。
+- 这些都是后续可增量补齐项；v1 已满足"可浏览类型/字段/方法结构"的目标。
