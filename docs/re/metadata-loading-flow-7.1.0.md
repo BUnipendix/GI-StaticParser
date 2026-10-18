@@ -43,7 +43,7 @@
    - 62E8：(hdr[0xAC]^0x6F3B0AC0) ÷3 ×8（配 0x188 表索引）
    - 62F8：(hdr[0xA4]^0x1496B860) ÷0x28 ×88B，哨兵初始化（11 个加密零常量，即 image 各字段的解密常数：+4=0x7B236BA..、+0x18=0x7362B478、+0x20=0x6AFF73A46C9233D6、+0x50=0x4FBFA07B 等）
    - 6308：(hdr[0x170]>>4 ^0x28D714C) ×80B，哨兵 9 常量
-4. metadataUsage 初始化：对表在 startup-metadata 的 (hdr[0x120]^0x1C3F68EA)+62C8 处，{u32 idx,u32 typeIdx} 对 → typearr[typeIdx×0x10] 建指针。
+4. metadataUsage：**usage 索引表与 pair 表都在 body**（R19 实测）：索引表 = body + (hdr[0x19C]^0x159FBC84)、pair 表 = body + (hdr[0x14C]^0x2F249C2F)，解析器 0x140524250；共 311,730 usage / 788,057 pair。startup-metadata 的 (hdr[0x120]^0x1C3F68EA) 是泛型类行表，不是 metadataUsage（旧记录已更正）。
 5. 注册 mscorlib："mscorlib.dll" / "__Generated"（sub_14050d4c0 按名找 image），System.Object / 各 SByteEnum..UInt64Enum 等（sub_140516680(ns,name)）。
 6. 遍历 image 的 typeStart/exportedTypes 注册每个类型：sub_14051e390(image, row) 处理嵌套类型（见 §4）。
 
@@ -74,6 +74,13 @@
 | 0x1E0 | ^ | 0x2EE480FB | 11 | 方法表（0x1A/行）|
 | 0x200 | − | 0x4BC1F14F | 1 | u32/方法（-1=无）→ 6298[+0x8] 索引 |
 | 0x70 | − | 0x6EA5B3FD | (repo) | iface 表（layout71 既有；本扫形式未覆盖）|
+| 0x88 | + | 0xF3C0B2FE | 1 | **stringLiteral offset 表**（u32 前缀和；R19）|
+| 0x118 | ^ | 0x4009A6BF | 26 | **属性实例表** {member token, count<<24\|instance}（R19）|
+| 0x13C | ^ | 0x28B1D785 | 1 | **stringLiteral 数据 blob**（R19）|
+| 0x14C | ^ | 0x2F249C2F | 1 | **metadataUsage pair 表**（8B；handle@+4；R19）|
+| 0x19C | ^ | 0x159FBC84 | 1 | **metadataUsage 索引表**（u32 范围；R19）|
+| 0x1A8 | + | 0xA8B3BA59 | 1 | **attributeTypes 数组**（74,864 typearr 索引；R19）|
+| 0x200 | + | 0xB43E0EB1 | 1 | **每方法 invoker 索引**（733,481×u32，-1=无；R19）|
 
 （单点槽全表见下方机器生成节；注意单点 add 形态存在误绑可能，用前先到 slotrec4.json 按 va 核对现场。）
 

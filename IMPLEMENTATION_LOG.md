@@ -5111,3 +5111,21 @@ property/event）、AttributeAttribute（无法还原的属性实例；RVA/Offse
 - 结论：静态可解数据已全部恢复且可从干净构建复现；剩余项均为已证不可得 / 需运行时数据，
   详见 docs/re/71-final-status.md §3.2。
 
+## 90. R19：metadataUsage / stringLiterals 表解码（2026-10-18）
+
+> 触发：用户要求沿"未解密内容"找可疑函数与关键解密点。以下全为实测。
+
+1. 运行时解析器 0x140524250（8 分支 jump table）读 metadata usage：
+   - usage 索引表 = body + (hdr[0x19C] ^ 0x159FBC84)；maskA(i)=(((i*0x6536)^0x138D67F3)*0x44B1AAD4+0x1F9EA55AD057D0)>>0x15 *0xD0DC29D5；
+   - pair 表 = body + (hdr[0x14C] ^ 0x2F249C2F)；handle=raw4^maskB(j)^0x5CD30101，kind=handle>>29；
+   - 全量 **311,730 usage / 788,057 pair**，kind 分布 1:376,243 / 3:84,875 / 6:185,864 / 5:137,466 / 7:2,564 / 4:1,035 / 0:10。
+2. stringLiteral 分支（kind 5）：offset 表 body+(hdr[0x88]+0xF3C0B2FE)、数据 body+(hdr[0x13C]^0x28B1D785)、
+   解密器 0x140526BD0（唯一 caller 0x14052460F）：key=(((seed*M1)^X1)*M2^X2)*M3，per-qword += 0x70BA8080760AC800。
+   解码 **86,108** 条，与 literals.json 逐条一致（参考工件保留内嵌 NUL；旧 27 条差异由此而来）。
+3. 属性参数结论修订：slot 0x118 = 成员→属性实例表；slot 0x1A8 add 0xA8B3BA59 = body 0x9BACA4 属性类型数组；
+   4 个属性查询 API（0x1404B2400/2710/2C90/5353DC）经 0x140526AF0 只返回 attribute klass，全程序无属性对象构造 ⇒
+   属性参数在构建期丢弃，运行时不需要。
+4. 修正旧记录：body 0xA03E64 起是每方法 invoker 索引表（slot 0x200 add 0xB43E0EB1，733,481×u32），不是属性数据。
+5. 新增 tools/inspect_usage_tables.py（2.8s，输出 OK）；文档 docs/re/71-usage-tables.md；同步更新
+   metadata-loading-flow / remaining-static-limits / gap-inventory / 71-final-status。
+6. 下一步（R20）：把 usage/literal 表接入 Rust 流水线，使 script.json 的 ScriptString/Addresses 与 Il2CppDumper 语义一致。
