@@ -5660,3 +5660,14 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
 2. 全表验收 413,644 行：412,658 个标识符（99.76%）、200 哨兵、786 其它；前 8 个字段名
    value×6/default_vtable/xdomain_vtable，与 7.0 一致。
 3. 新增 docs/re/artifacts-6.7.0/field-name-layout.json；字段 type/attrs 列尚未解。
+
+## 124. R53 6.7 端到端类型清单 + 字段 type 列负结果（2026-10-18）
+
+1. 新增 tools/version-triage/dump67_partial.py：用 6.7 已解布局输出 dump67-partial.txt（47.8 MB）：
+   类型 83,775、字段 413,644（名字）、方法 687,467（含签名）；方法按 6.7 name/flags/returnType/
+   paramStart/paramCount + 参数表渲染，字段 type 列未解（写 ?），属性/事件未接入。
+   样例与 7.1 dump corelib 开头一致（Locale.GetText、Mono.Runtime.* 等）。
+2. 字段 type 列负结果：字段 0 = MonoClass*，6.7 typearr 里 MonoClass 指针条目 409,207/409,209/409,240；
+   以其做已知明文对字段行 +0/+4 的 15 族 x 3 目标搜索，全部候选 2000 行抽样中 1996 行越界；
+   窗口性质检查 +0/+4 也完全不收敛（4.29e9）⇒ 6.7 字段 type 不在简单 row+mask 模型里，
+   可能另有二次变换链或位于别的表。未作为已解记录。

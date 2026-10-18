@@ -723,6 +723,33 @@ jaccard 0.2581）**，反汇编读出字段表：
 全表验收（413,644 行）：**412,658 个标识符（99.76%）**、200 个哨兵、786 个其它；前 8 个字段名
 value/value/.../default_vtable/xdomain_vtable，与 7.0 完全一致。字段 type/attrs 列尚未解。
 
+### 3.2aa 6.7.0 第一份端到端类型清单（dump67-partial）（2026-10-18）
+
+新增 tools/version-triage/dump67_partial.py，用 6.7 已解布局输出全量类型清单
+（~/gire/out/cross/dump67-partial.txt，47.8 MB）：
+
+- 类型 83,775（= 6.7 typeDef 行数）；字段 413,644（名字列）；方法 687,467（含签名）；
+- 方法按 6.7 的 name/flags/returnType/paramStart/paramCount + 参数表渲染，字段只渲染名字
+  （type 列未解，故写 “?”）；属性/事件未接入。
+
+样例与 7.1 dump corelib 开头一致：
+
+    type Locale
+    {
+      System.Void .ctor()
+      System.String GetText(System.String msg)
+      System.String GetText(System.String fmt, kind0x1d args)
+    }
+
+### 3.2aa.1 6.7 字段 type 列的负结果（2026-10-18）
+
+字段 0 是 Mono.RuntimeClassHandle.value，类型应为 MonoClass*；在 6.7 typearr 里找到三个
+MonoClass 指针条目 409,207 / 409,209 / 409,240。用它们做已知明文，对字段行 +0/+4 的 15 种族
+x 3 个目标常数做搜索：**全部候选在 2000 行抽样中都有 1996 行越出 typearr**。
+再用窗口性质（raw±mask / raw^mask）检查 +0/+4 列：窗口大小都在 4.29e9，完全没有收敛。
+⇒ 6.7 字段 type 列不在“row + mask 简单变换”模型里（可能另有类似 name 列的二次变换链，
+或该版本 type 列位于别的表）。**本轮不把 6.7 字段 type 当作已解**。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。
