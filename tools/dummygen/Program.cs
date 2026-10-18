@@ -6,6 +6,12 @@ using System.Text.Json;
 
 namespace DummyGen;
 
+public sealed class ConstRec
+{
+    public string T = "";
+    public string V = "";
+}
+
 public sealed class FieldRec
 {
     public string Name = "";
@@ -13,6 +19,8 @@ public sealed class FieldRec
     public uint Flags;
     public uint Token;
     public long? Offset;
+    public ConstRec Const;
+    public ulong? MetaOffset;
 }
 
 public sealed class ParamRec
@@ -129,6 +137,14 @@ public static class Program
                     if (r.TryGetProperty("token", out var ftok)) fr.Token = ftok.GetUInt32();
                     if (r.TryGetProperty("off", out var foff) && foff.ValueKind == JsonValueKind.Number)
                         fr.Offset = foff.GetInt64();
+                    if (r.TryGetProperty("cv", out var fcv) && fcv.ValueKind == JsonValueKind.Object)
+                        fr.Const = new ConstRec
+                        {
+                            T = fcv.GetProperty("t").GetString() ?? "",
+                            V = fcv.GetProperty("v").GetString() ?? "",
+                        };
+                    if (r.TryGetProperty("mo", out var fmo) && fmo.ValueKind == JsonValueKind.Number)
+                        fr.MetaOffset = fmo.GetUInt64();
                     cur!.Fields.Add(fr);
                     break;
                 case "M":
@@ -305,17 +321,48 @@ public static class Program
         {
             foreach (var f in t.Fields)
             {
-                var fa = (FieldAttributes)(f.Flags & 0x7)
-                         | FieldAttributes.Static & ((FieldAttributes)f.Flags & FieldAttributes.Static);
-                // map the reference tool behaviour: constants become plain static fields (we do not
-                // emit Constant/Marshal tables in v1), so clear Literal/HasDefault/HasFieldMarshal.
-                fa = (FieldAttributes)((uint)fa & ~0x40u & ~0x8000u & ~0x1000u);
+                var fa = (FieldAttributes)(f.Flags & 0x7);
+                // Keep the metadata Literal flag (constants/enum members); HasFieldMarshal is dropped
+                // (no Marshal table) and HasDefault is set exactly when a Constant row is emitted.
                 if ((f.Flags & 0x10) != 0) fa |= FieldAttributes.Static;
                 if ((f.Flags & 0x20) != 0) fa |= FieldAttributes.InitOnly;
+                if ((f.Flags & 0x40) != 0) fa |= FieldAttributes.Literal;
+                if (f.Const != null) fa |= (FieldAttributes)0x8000; // HasDefault
                 var blob = new BlobBuilder();
                 var fenc = new BlobEncoder(blob).FieldSignature();
                 WriteSigType(fenc, f.Type, types);
                 mb.AddFieldDefinition(fa, mb.GetOrAddString(f.Name), mb.GetOrAddBlob(blob));
+            }
+        }
+
+        // ---- Constant table (field default values) ----
+        // Every field default that has a CLR-representable kind becomes a Constant row; the rest get
+        // a MetadataOffsetAttribute marker (added with the other custom attributes below).
+        static object ConstObject(ConstRec c) => c.T switch
+        {
+            "b" => c.V != "0",
+            "c" => (char)ushort.Parse(c.V),
+            "s8" => sbyte.Parse(c.V, System.Globalization.CultureInfo.InvariantCulture),
+            "u8" => byte.Parse(c.V, System.Globalization.CultureInfo.InvariantCulture),
+            "s16" => short.Parse(c.V, System.Globalization.CultureInfo.InvariantCulture),
+            "u16" => ushort.Parse(c.V, System.Globalization.CultureInfo.InvariantCulture),
+            "s32" => int.Parse(c.V, System.Globalization.CultureInfo.InvariantCulture),
+            "u32" => uint.Parse(c.V, System.Globalization.CultureInfo.InvariantCulture),
+            "s64" => long.Parse(c.V, System.Globalization.CultureInfo.InvariantCulture),
+            "u64" => ulong.Parse(c.V, System.Globalization.CultureInfo.InvariantCulture),
+            "f4" => float.Parse(c.V, System.Globalization.CultureInfo.InvariantCulture),
+            "f8" => double.Parse(c.V, System.Globalization.CultureInfo.InvariantCulture),
+            _ => (object)c.V,
+        };
+        int constantRows = 0;
+        foreach (var t in types)
+        {
+            foreach (var f in t.Fields)
+            {
+                if (f.Const == null || f.Token == 0) continue;
+                var fh = MetadataTokens.FieldDefinitionHandle((int)(f.Token - 0x04000000));
+                mb.AddConstant(fh, ConstObject(f.Const));
+                constantRows++;
             }
         }
 
@@ -551,6 +598,7 @@ public static class Program
         var addressCtor = attrCtors[0];
         var attributeCtor = attrCtors[1];
         var fieldOffsetCtor = attrCtors[2];
+        var metadataOffsetCtor = attrCtors[3];
         var tokenCtor = attrCtors[4];
         int customAttrCount = 0;
         static void WriteSerString(BlobBuilder bb, string value)
@@ -586,11 +634,20 @@ public static class Program
         {
             foreach (var f in t.Fields)
             {
-                if (f.Token == 0 || f.Offset is null) continue;
+                if (f.Token == 0) continue;
                 var fh = MetadataTokens.FieldDefinitionHandle((int)(f.Token - 0x04000000));
-                mb.AddCustomAttribute(fh, fieldOffsetCtor,
-                    NamedArgsBlob(new[] { ("Offset", "0x" + f.Offset.Value.ToString("X")) }));
-                customAttrCount++;
+                if (f.Offset is long offv)
+                {
+                    mb.AddCustomAttribute(fh, fieldOffsetCtor,
+                        NamedArgsBlob(new[] { ("Offset", "0x" + offv.ToString("X")) }));
+                    customAttrCount++;
+                }
+                if (f.MetaOffset is ulong mo)
+                {
+                    mb.AddCustomAttribute(fh, metadataOffsetCtor,
+                        NamedArgsBlob(new[] { ("Offset", "0x" + mo.ToString("X")) }));
+                    customAttrCount++;
+                }
             }
             foreach (var me in t.Methods)
             {
@@ -774,6 +831,55 @@ public static class Program
         if (fieldCount != expFields) throw new Exception($"field count mismatch {fieldCount} vs {expFields}");
         if (methodCount != expMethods) throw new Exception($"method count mismatch {methodCount} vs {expMethods}");
         if (paramCount != expParams) throw new Exception($"param count mismatch {paramCount} vs {expParams}");
+        // ---- Constant table check ----
+        int constRows = md.GetTableRowCount(TableIndex.Constant);
+        int expConst = expected.Sum(t => t.Fields.Count(f => f.Const != null && f.Token != 0));
+        int expMetaOffsets = expected.Sum(t => t.Fields.Count(f => f.MetaOffset != null));
+        Console.WriteLine($"verify: constants={constRows} (expected {expConst}), metadataOffsets={expMetaOffsets}");
+        if (constRows != expConst) throw new Exception($"constant count mismatch {constRows} vs {expConst}");
+        {
+            int checkedConsts = 0;
+            bool done = false;
+            foreach (var t in expected)
+            {
+                if (done) break;
+                foreach (var f in t.Fields)
+                {
+                    if (f.Const == null || f.Token == 0) continue;
+                    var fh = MetadataTokens.FieldDefinitionHandle((int)(f.Token - 0x04000000));
+                    var fd = md.GetFieldDefinition(fh);
+                    if ((fd.Attributes & FieldAttributes.HasDefault) == 0)
+                        throw new Exception($"field {f.Name} has a Constant but no HasDefault flag");
+                    var ch = fd.GetDefaultValue();
+                    if (ch.IsNil) throw new Exception($"field {f.Name} has no Constant row");
+                    var c = md.GetConstant(ch);
+                    var vb = md.GetBlobBytes(c.Value);
+                    string shown = c.TypeCode switch
+                    {
+                        ConstantTypeCode.Boolean => (vb[0] != 0).ToString(),
+                        ConstantTypeCode.Char => ((char)BitConverter.ToUInt16(vb, 0)).ToString(),
+                        ConstantTypeCode.SByte => ((sbyte)vb[0]).ToString(),
+                        ConstantTypeCode.Byte => vb[0].ToString(),
+                        ConstantTypeCode.Int16 => BitConverter.ToInt16(vb).ToString(),
+                        ConstantTypeCode.UInt16 => BitConverter.ToUInt16(vb).ToString(),
+                        ConstantTypeCode.Int32 => BitConverter.ToInt32(vb).ToString(),
+                        ConstantTypeCode.UInt32 => BitConverter.ToUInt32(vb).ToString(),
+                        ConstantTypeCode.Int64 => BitConverter.ToInt64(vb).ToString(),
+                        ConstantTypeCode.UInt64 => BitConverter.ToUInt64(vb).ToString(),
+                        ConstantTypeCode.Single => BitConverter.ToSingle(vb).ToString(),
+                        ConstantTypeCode.Double => BitConverter.ToDouble(vb).ToString(),
+                        ConstantTypeCode.String => System.Text.Encoding.Unicode.GetString(vb),
+                        ConstantTypeCode.NullReference => "null",
+                        _ => "?",
+                    };
+                    if (checkedConsts < 5)
+                        Console.WriteLine($"  constant sample: {md.GetString(md.GetTypeDefinition(fd.GetDeclaringType()).Name)}::{f.Name} = {shown} ({c.TypeCode})");
+                    checkedConsts++;
+                    if (checkedConsts >= 300) { done = true; break; }
+                }
+            }
+            Console.WriteLine($"verify: constants decoded OK ({checkedConsts} sampled)");
+        }
         // ---- property table check ----
         int propRows = md.GetTableRowCount(TableIndex.Property);
         int propMapRows = md.GetTableRowCount(TableIndex.PropertyMap);

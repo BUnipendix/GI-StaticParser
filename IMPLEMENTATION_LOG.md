@@ -5025,3 +5025,30 @@ property/event）、AttributeAttribute（无法还原的属性实例；RVA/Offse
 - 产物：DummyDll.dll 96,388,096 -> **145,609,728 B**；dummy.jsonl 186,550,006 -> **193,164,322 B**；dump.cs 不变（127,953,647 B）；
 - cargo test 17 passed。
 
+
+## 87. DummyDll Constant 表 + MetadataOffsetAttribute（2026-10-18）
+
+> 不是需求，是执行记录。目标第 4 轮。
+
+### 87.1 数据与接线
+- 字段默认值表 75,548 行（已有），本轮导出到 DummyDll：
+  - 可表示为 CLR Constant 的 kind（bool / char / s8..u64 / f4 / f8 / str）-> **Constant 74,632 行**；
+  - 其余 kind（class / valuetype / generic 等）-> **MetadataOffsetAttribute(Offset=值 blob 的 body 偏移) 916 条**；
+  - 74,632 + 916 = 75,548，与默认值表行数精确相等（无静默遗漏）。
+- dummy_export 的 F 记录新增 cv（{"t":kind,"v":"value"}）与 mo（u64 偏移）。
+- dummygen：字段 flags 不再无条件清掉 Literal/HasDefault（HasDefault 只在写 Constant 时置位）；
+  AddConstant 按类型写入 bool/char/全部整数/float/double/string；const 字段没有实例偏移，
+  MetadataOffsetAttribute 与 FieldOffsetAttribute 独立判断（修复了第一版把 MetaOffset 判断放在
+  "有实例偏移"的 continue 之后导致 916 条全部漏发的问题，计数暴露后立即修正）。
+
+### 87.2 验证
+- 生成器内置：Constant = 74,632（与期望相等），抽样 300 条逐条解码并核对 HasDefault 标志；
+  customAttrs **2,491,943** = 1,041,595（Address/FieldOffset）+ 1,378,740（Token）+ 70,692（属性实例）+ 916（MetadataOffset）；
+- 独立 SRM 读回（不复用生成器代码）：
+  - System.Int32.MaxValue = 2147483647（Int32；Literal + HasDefault + Static）；
+  - System.Boolean.TrueLiteral = "True"（string Constant）；
+  - System.DayOfWeek.Monday = 1（enum 常量按底层 Int32 写入）；
+  - <PrivateImplementationDetails> 的 class-kind 默认值字段带 MetadataOffsetAttribute(Offset=0x...)，且无 Constant 行；
+- 产物：DummyDll.dll 145,609,728 -> **146,508,800 B**；dummy.jsonl 193,164,322 -> **203,232,915 B**；dump.cs 不变（127,953,647 B）；
+- cargo test：17 passed / 0 failed。
+

@@ -92,6 +92,48 @@ fn rva_to_file(m: &Meta, rva: u32) -> Option<u32> {
     None
 }
 
+/// Typed constant value for a field default: (kind tag, value as string). None means the kind
+/// cannot be represented as a CLR Constant row (class/valuetype/generic) -> MetadataOffsetAttribute.
+fn enc_default(m: &Meta, tix: u32, dataoff: i32) -> Option<(&'static str, String)> {
+    let (kind, _, _) = m.il2cpp_type(tix as usize)?;
+    let bytes = |n: usize| m.default_value_bytes(dataoff, n);
+    match kind {
+        0x02 => Some(("b", if bytes(1)?[0] != 0 { "1" } else { "0" }.to_string())),
+        0x03 => Some(("c", u16::from_le_bytes(bytes(2)?.try_into().unwrap()).to_string())),
+        0x04 => Some(("s8", (bytes(1)?[0] as i8).to_string())),
+        0x05 => Some(("u8", bytes(1)?[0].to_string())),
+        0x06 => Some(("s16", i16::from_le_bytes(bytes(2)?.try_into().unwrap()).to_string())),
+        0x07 => Some(("u16", u16::from_le_bytes(bytes(2)?.try_into().unwrap()).to_string())),
+        0x08 => Some(("s32", i32::from_le_bytes(bytes(4)?.try_into().unwrap()).to_string())),
+        0x09 => Some(("u32", u32::from_le_bytes(bytes(4)?.try_into().unwrap()).to_string())),
+        0x0A => Some(("s64", i64::from_le_bytes(bytes(8)?.try_into().unwrap()).to_string())),
+        0x0B => Some(("u64", u64::from_le_bytes(bytes(8)?.try_into().unwrap()).to_string())),
+        0x0C => {
+            let v = f32::from_le_bytes(bytes(4)?.try_into().unwrap());
+            let s = if v.is_nan() { "NaN".to_string() }
+                else if v.is_infinite() { if v > 0.0 { "Infinity".into() } else { "-Infinity".into() } }
+                else { format!("{:?}", v) };
+            Some(("f4", s))
+        }
+        0x0D => {
+            let v = f64::from_le_bytes(bytes(8)?.try_into().unwrap());
+            let s = if v.is_nan() { "NaN".to_string() }
+                else if v.is_infinite() { if v > 0.0 { "Infinity".into() } else { "-Infinity".into() } }
+                else { format!("{:?}", v) };
+            Some(("f8", s))
+        }
+        0x0E => {
+            // String default: {u32 byte-length, UTF-8 bytes} in the shared value blob.
+            let len = u32::from_le_bytes(bytes(4)?.try_into().unwrap()) as usize;
+            if len > 1 << 20 {
+                return None;
+            }
+            Some(("str", String::from_utf8_lossy(m.default_value_bytes(dataoff + 4, len)?).into_owned()))
+        }
+        _ => None,
+    }
+}
+
 pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize, usize, usize, usize)> {
     let (tds, mds) = collect(m);
     let inst_offsets = super::dump_gen::instance_offsets(m, &tds);
@@ -189,16 +231,34 @@ pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize
                     inst_idx += 1;
                     v.and_then(|o| o.get(idx).copied())
                 };
+                // Constant / MetadataOffset: field defaults exist for literal constants and for a
+                // few non-literal fields (reference DummyDll emits a Constant row for every field
+                // default, and a MetadataOffset marker when the value kind has no CLR Constant).
+                let (cv_json, mo_json) = match m.field_default(row) {
+                    Some((dataoff, tix)) => match enc_default(m, tix, dataoff) {
+                        Some((tag, value)) => (
+                            format!("{{\"t\":\"{}\",\"v\":{}}}", tag, serde_json::to_string(&value)?),
+                            "null".to_string(),
+                        ),
+                        None => (
+                            "null".to_string(),
+                            (m.default_values as u64 + dataoff as u64).to_string(),
+                        ),
+                    },
+                    None => ("null".to_string(), "null".to_string()),
+                };
                 writeln!(
                     w,
-                    "{{\"k\":\"F\",\"id\":{},\"row\":{},\"name\":{},\"type\":{},\"flags\":{},\"token\":{},\"off\":{}}}",
+                    "{{\"k\":\"F\",\"id\":{},\"row\":{},\"name\":{},\"type\":{},\"flags\":{},\"token\":{},\"off\":{},\"cv\":{},\"mo\":{}}}",
                     i,
                     row,
                     serde_json::to_string(&fname)?,
                     serde_json::to_string(&enc)?,
                     attrs,
                     0x0400_0001u32.wrapping_add(row),
-                    serde_json::to_string(&off)?
+                    serde_json::to_string(&off)?,
+                    cv_json,
+                    mo_json
                 )?;
                 n_fields += 1;
             }
