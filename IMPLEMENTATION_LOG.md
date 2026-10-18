@@ -5375,3 +5375,25 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
 5. 已知缺口：5.4 属性对（数组重叠）；6.4 字段对（跨行 count 偏移 0x78）；嵌套/接口对多数版本。
 6. 复现：find_type_ranges.py → type_defs_dump.py（5 参数：版本目录/derive/tables/out/ranges）→
    校验脚本在 ~/gire/out/cross/validate_props2.py。
+
+## 103. R32 7.0 方法/参数表行布局：从代码提取并全量验证（2026-10-18）
+
+1. 定位方法：先用 64 位掩码常量做指纹在 .text 里搜（numpy bytes.find，秒级），命中 327
+   组 → 5 个站点/3 个函数：0x1404E5560（运行时方法缓存 builder）、0x1404E59E0（方法指针解析器）、
+   0x1404F9750（方法元数据 decoder，参数解析）。避免了对 4,525 个加载点做全量 capstone 扫描
+   （Python 会超时）。
+2. 从这三处读出方法行布局（写入 docs/re/artifacts-7.0.0/method-layout.json，纯数据，带 provenance）：
+   - 方法表基址 hdr[0x138] + 0xD37E9675；stride 26（lea 5*5+1）；掩码链
+     mul 0x3639B538F896 / add 0xCC49CF2E948F28F / shr 13 / mul 0x3209B9A2 / add 0x066E3EE5EEBB7B78；
+   - paramStart = raw[+4] + 0xAC706A39 - mask；paramCount = (raw8[+0x18] ^ 0x5B) - mask8；
+     flags = raw16[+0x0E] - mask + 0x13；decl = raw[+8] - mask + 0x997E86CD；
+   - 参数表基址 hdr[0x1FC] + 0xFC3EC0CE，stride 8，掩码链 mul 0x2F64C993DFFE / add 0xAB42C68E0D4A /
+     shr 17 / mul 0x272E941C / xor 0x705880A8；name=(raw[+4]+0xDA14EDA6)^mask、type=(raw[+0]+0x8FE5701B)^mask。
+3. 新工具 tools/version-triage/method_rows.py 应用布局并做数据验收（7.0.0 实测）：
+   - 713,956 方法行（= md_size/26）；paramStart 哨兵 401,636 行且这些行 paramCount=0；
+   - 非哨兵 paramStart 链 0 违例；sum(paramCount)=532,361；
+   - 参数表 532,361 行 name/type 全部解码成功（0 失败），样本 msg/fmt/args/resourceFormat/p1；
+   - flags 66 种取值、static(0x10)=83,868；decl 989 个哨兵，非哨兵值域待定。
+4. 尚未定位：方法 name 与 returnType 列（其余偏移用现行掩码族未过全量验证，怀疑 mask2/另一条链）；
+   decl 语义（token/container）。
+5. 复现：python3 tools/version-triage/method_rows.py <版本目录> <derive> <sites> <layout>。

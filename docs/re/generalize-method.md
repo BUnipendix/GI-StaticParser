@@ -251,6 +251,38 @@ propCount 比较；同名类型占多数差异）：
 当前六版本的类型行已含：ns/name/fieldStart/fieldCount/methodStart/methodCount/propStart/
 propCount/eventStart/eventCount。5.4.0 的属性对因数组重叠被拒绝（显式报告），事件对保留。
 
+### 3.2f 方法/参数表行布局：7.0 已从代码提取并数据验证（2026-10-18）
+
+7.0 的方法表行布局从代码里直接读出（三个函数共享同一条方法行掩码链）：
+
+- 0x1404E5560 运行时方法缓存 builder、0x1404E59E0 方法指针解析器、0x1404F9750 方法元数据
+  decoder（参数解析）。署名依据：这三处都出现同一组 64 位掩码常量
+  0x3639B538F896 / 0xCC49CF2E948F28F / shr 13 / 0x3209B9A2 / 0x066E3EE5EEBB7B78。
+- 方法表基址 = hdr[0x138] + 0xD37E9675；stride 26 由 lea rcx,[rdx+rdx*4]; lea rcx,[rcx+rcx*4];
+  add rcx,rdx 直接给出（5*5+1）。
+- 列变换（从指令逐条读出，写入 docs/re/artifacts-7.0.0/method-layout.json，纯数据）：
+  paramStart = raw[+4] + 0xAC706A39 - mask；paramCount = (raw8[+0x18] ^ 0x5B) - mask8；
+  flags = raw16[+0x0E] - mask + 0x13；decl = raw[+8] - mask + 0x997E86CD。
+- 参数表：基址 = hdr[0x1FC] + 0xFC3EC0CE，stride 8；参数行掩码链
+  mul 0x2F64C993DFFE / add 0xAB42C68E0D4A / shr 17 / mul 0x272E941C / xor 0x705880A8；
+  name = (raw[+4] + 0xDA14EDA6) ^ mask，type = (raw[+0] + 0x8FE5701B) ^ mask。
+
+数据验证（tools/version-triage/method_rows.py，7.0.0）：
+
+| 检查 | 结果 |
+|---|---|
+| 方法行数 / stride | 713,956 / 26（= md_size/26） |
+| paramStart 哨兵行（0xFFFFFFFF） | 401,636，全部 paramCount = 0 |
+| paramStart 链（非哨兵行）| 0 处违例（start_i 恰等于已累计参数数） |
+| sum(paramCount) | 532,361 = 参数表行数 |
+| 参数表 name/type 解码 | 532,361/532,361 全部成功（0 失败）；样本 msg/fmt/args/resourceFormat/p1/exception |
+| flags | 66 种取值，static(0x10) 83,868，max 0xFA36 |
+| decl | 989 个 0xFFFFFFFF 哨兵；非哨兵语义未定（值域待确认） |
+
+结论：7.0 的方法表（paramStart/paramCount/flags/decl）与参数表（name/type/掩码）已经可解码，
+且被参数表全量解码独立验证。尚未定位：方法 name 与 returnType 列（怀疑使用 mask2 或另一条
+掩码链，7.0 行内其余偏移用当前掩码族均未通过全量验证），以及 decl 的语义（token/container）。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。

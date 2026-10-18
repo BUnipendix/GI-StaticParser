@@ -1,0 +1,73 @@
+{
+  "artifact": "method-row-layout",
+  "artifact_version": 1,
+  "note": "7.0.0 method/param row layout recovered from code (mask chain + column transforms read at the cited VAs). Constants are DATA; automated code extraction is the next step. All integers are hex strings to avoid transcription errors.",
+  "provenance": {
+    "builder_fn": "0x1404e5560",
+    "resolver_fn": "0x1404e59e0",
+    "param_decoder_fn": "0x1404f9750"
+  },
+  "method": {
+    "table": {
+      "slot": "0x138",
+      "op": "add",
+      "imm": "0xD37E9675"
+    },
+    "stride": 26,
+    "rows": 713956,
+    "mask": {
+      "mul1": "0x3639B538F896",
+      "add1": "0xCC49CF2E948F28F",
+      "shr": 13,
+      "mul2": "0x3209B9A2",
+      "add2": "0x066E3EE5EEBB7B78"
+    },
+    "columns": {
+      "param_start": {
+        "off": 4,
+        "kind": "AddCSubMask32",
+        "c": "0xAC706A39"
+      },
+      "decl": {
+        "off": 8,
+        "kind": "SubMaskAddC32",
+        "c": "0x997E86CD"
+      },
+      "flags": {
+        "off": 14,
+        "kind": "SubMaskAddC16",
+        "c": "0x13"
+      },
+      "param_count": {
+        "off": 24,
+        "kind": "XorCSubMask8",
+        "c": "0x5B"
+      }
+    }
+  },
+  "param": {
+    "table": {
+      "slot": "0x1FC",
+      "op": "add",
+      "imm": "0xFC3EC0CE"
+    },
+    "stride": 8,
+    "mask": {
+      "mul1": "0x2F64C993DFFE",
+      "add1": "0xAB42C68E0D4A",
+      "shr": 17,
+      "mul2": "0x272E941C",
+      "xor2": "0x705880A8"
+    },
+    "name": {
+      "off": 4,
+      "kind": "AddCXorMask32",
+      "c": "0xDA14EDA6"
+    },
+    "type": {
+      "off": 0,
+      "kind": "AddCXorMask32",
+      "c": "0x8FE5701B"
+    }
+  }
+}
