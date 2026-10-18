@@ -283,6 +283,38 @@ propCount/eventStart/eventCount。5.4.0 的属性对因数组重叠被拒绝（�
 且被参数表全量解码独立验证。尚未定位：方法 name 与 returnType 列（怀疑使用 mask2 或另一条
 掩码链，7.0 行内其余偏移用当前掩码族均未通过全量验证），以及 decl 的语义（token/container）。
 
+### 3.2g 7.0 方法表 name/returnType 补齐（2026-10-18）
+
+上一轮把 +0x08 当成 decl，实际它是**方法名**列：解析器 0x1404E59E0 把该列传给 0x1404E0110
+（名字解析），且全表按 (raw[+8] + 0x997E86CD) - mask 解码后 99.8% 是可打印标识符。returnType
+列没有已知明文，改用**窗口性质**在数据上钉常数：真实值 in [0, B) 且 value = (raw - mask) + C，
+对 200k 行求 A = raw - mask 后 A 落在长度 < B 的环形窗口内，由此唯一解出
+C = 0xDF812A65，解码值 0..0x15390（86,928）、76,000 种不同取值。
+
+更新后的 7.0 方法行布局（docs/re/artifacts-7.0.0/method-layout.json v2）：
+
+| 字段 | 偏移 | 变换 | 常数 |
+|---|---|---|---|
+| paramStart | +0x04 | (raw + C) - mask | 0xAC706A39 |
+| name | +0x08 | (raw + C) - mask | 0x997E86CD |
+| flags | +0x0E | raw16 - mask + C | 0x13 |
+| returnType | +0x10 | (raw + C) - mask | 0xDF812A65 |
+| paramCount | +0x18 | (raw8 ^ C) - mask8 | 0x5B |
+
+全表验收（713,956 行）：
+
+| 检查 | 结果 |
+|---|---|
+| name | 712,680 标识符 + 989 个 0xFFFFFFFF 哨兵 + 287 其它 = 99.82% 有效 |
+| returnType | max 0x15390（86,928），76,000 种取值，分布合理（无越界） |
+| paramStart 链 / 哨兵 | 0 违例 / 401,636 哨兵且 paramCount=0 |
+| paramCount 总和 | 532,361 = 参数表行数 |
+| 参数表 name/type | 532,361/532,361 全部解码成功 |
+
+仍未定位：**slot 列**（候选 +0x16 i16 公式 (raw-mask-0x3EBD)，但 slot 与 virtual(0x40) 的相关性
+不符：10,288 个 virtual 方法里 10,278 个解成 -1，说明候选不对或 flags 列语义另有映射），
+以及 flags 位映射（当前 66 种取值，static 位 0x10 可信）。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。

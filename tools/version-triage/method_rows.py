@@ -12,7 +12,7 @@ and validates the result against data invariants (no version constant lives here
 
 Usage: method_rows.py <version dir> <derive JSON> <sites JSON> <layout JSON>
 """
-import json, struct, sys
+import json, re, struct, sys
 
 def pe_map(path):
     d = open(path, 'rb').read()
@@ -117,12 +117,11 @@ def main():
         width = {'flags': 2, 'param_count': 1}.get(name, 4)
         raw = struct.unpack_from('<H' if width == 2 else ('<B' if width == 1 else '<I'), body, ro + off)[0]
         return col_value(kind, c, raw, mm(i))
-    starts = [0] * rows; counts = [0] * rows; flags = [0] * rows; decls = [0] * rows
+    starts = [0] * rows; counts = [0] * rows; flags = [0] * rows
     for i in range(rows):
         starts[i] = col('param_start', i)
         counts[i] = col('param_count', i)
         flags[i] = col('flags', i)
-        decls[i] = col('decl', i)
     # paramStart uses 0xFFFFFFFF as "this method has no parameters"; those rows are
     # skipped in the chain check and must carry count 0. Everything else must equal the
     # running parameter count exactly (methods are stored in parameter order).
@@ -141,8 +140,21 @@ def main():
     print(f'  paramStart chain violations (non-sentinel): {chain_bad}')
     print(f'  sum(paramCount) = {cum}')
     print(f'  flags: max 0x{max(flags):X}, distinct {len(set(flags))}, static(0x10) {sum(1 for f in flags if f & 0x10)}')
-    real_decls = [x for x in decls if x != 0xFFFFFFFF]
-    print(f'  decl: sentinel(0xFFFFFFFF) {len(decls) - len(real_decls)}, max 0x{(max(real_decls) if real_decls else 0):X}')
+    # name column: every real method has a name; 0xFFFFFFFF is the "no name" sentinel.
+    idre = re.compile(r'^[A-Za-z_.<>][A-Za-z0-9_.<>' + chr(96) + r'=+]*$')
+    named = 0; named_sentinel = 0; named_bad = 0; name_sample = []
+    for i in range(rows):
+        s = cipher.dec(body, col('name', i))
+        if s is None:
+            named_sentinel += 1
+        elif idre.match(s):
+            named += 1
+            if len(name_sample) < 8: name_sample.append(s)
+        else:
+            named_bad += 1
+    print(f'  name: identifier {named}, sentinel/undecodable {named_sentinel}, other {named_bad}, sample {name_sample}')
+    rets = [col('return_type', i) for i in range(rows)]
+    print(f'  return_type: max 0x{max(rets):X}, distinct {len(set(rets))}')
     total_params = cum
     ok = bad = 0; sample = []
     pname = lay['param']['name']; ptype = lay['param']['type']

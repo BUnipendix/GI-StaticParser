@@ -5397,3 +5397,21 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
 4. 尚未定位：方法 name 与 returnType 列（其余偏移用现行掩码族未过全量验证，怀疑 mask2/另一条链）；
    decl 语义（token/container）。
 5. 复现：python3 tools/version-triage/method_rows.py <版本目录> <derive> <sites> <layout>。
+
+## 104. R33 7.0 方法表 name/returnType 补齐 + slot 负结果（2026-10-18）
+
+1. 纠正 R32 的列归属：方法行 +0x08 不是 decl，而是 **name**——解析器 0x1404E59E0 把该列传给
+   0x1404E0110（名字解析），且 (raw[+8] + 0x997E86CD) - mask 解码后全表 99.82% 是标识符
+   （712,680 标识符 + 989 个 0xFFFFFFFF + 287 其它）。样本 .ctor/GetText/Format/
+   mono_runtime_install_handlers。
+2. returnType 无已知明文，改用窗口性质钉常数：value = (raw - mask) + C、真实值落在 [0,B)，
+   对 200k 行求 A = raw - mask，A 必在长度 < B 的环形窗口内 → 唯一 C = 0xDF812A65；
+   解码值 0..0x15390（86,928）、76,000 种不同取值。
+3. 最终 7.0 方法行布局（docs/re/artifacts-7.0.0/method-layout.json v2）：
+   paramStart +0x04 (raw+C)-mask C=0xAC706A39；name +0x08 (raw+C)-mask C=0x997E86CD；
+   flags +0x0E raw16-mask+C C=0x13；returnType +0x10 (raw+C)-mask C=0xDF812A65；
+   paramCount +0x18 (raw8^C)-mask8 C=0x5B。参数表布局沿用 R32（532,361 行 100% 解码）。
+4. 负结果：slot 列候选 +0x16（i16，(raw-mask-0x3EBD)）与 virtual(0x40) 相关性不符
+   （10,288 个 virtual 中 10,278 解成 -1）⇒ 候选不对/或 flags 位映射未定，slot 留待后续。
+5. method_rows.py 现在同时输出 name/returnType 验收；7.0 全表：name 99.82% 有效、
+   returnType max 86,928、paramStart 链 0 违例、参数表 100%。

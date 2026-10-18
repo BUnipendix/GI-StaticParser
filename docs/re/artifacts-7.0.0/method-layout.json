@@ -1,11 +1,13 @@
 {
   "artifact": "method-row-layout",
-  "artifact_version": 1,
-  "note": "7.0.0 method/param row layout recovered from code (mask chain + column transforms read at the cited VAs). Constants are DATA; automated code extraction is the next step. All integers are hex strings to avoid transcription errors.",
+  "artifact_version": 2,
+  "note": "7.0.0 method/param row layout recovered from code (mask chain + column transforms) and completed by data validation for the two columns the code path we found does not touch (name, returnType). Constants are DATA; automated extraction is the next step.",
   "provenance": {
     "builder_fn": "0x1404e5560",
     "resolver_fn": "0x1404e59e0",
-    "param_decoder_fn": "0x1404f9750"
+    "param_decoder_fn": "0x1404f9750",
+    "name_column_source": "code: (raw[+8] + 0x997E86CD) - mask ; validated by full-table string decode (99.5% identifiers, 0.4% 0xFFFFFFFF)",
+    "ret_column_source": "data: (raw[+0x10] - mask) + C, C pinned by the range/window property over 200k rows"
   },
   "method": {
     "table": {
@@ -28,7 +30,7 @@
         "kind": "AddCSubMask32",
         "c": "0xAC706A39"
       },
-      "decl": {
+      "name": {
         "off": 8,
         "kind": "SubMaskAddC32",
         "c": "0x997E86CD"
@@ -37,6 +39,11 @@
         "off": 14,
         "kind": "SubMaskAddC16",
         "c": "0x13"
+      },
+      "return_type": {
+        "off": 16,
+        "kind": "AddCSubMask32",
+        "c": "0xDF812A65"
       },
       "param_count": {
         "off": 24,
