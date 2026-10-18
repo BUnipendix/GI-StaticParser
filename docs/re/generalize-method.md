@@ -996,6 +996,13 @@ method/param/prop/field/event/typearr/typeDef 行数）。当前覆盖：
 docs/re/artifacts-6.4.0/method-param-layout-candidate.json 的
 field_or_property_accessor_candidate 段，标记 CANDIDATE - NOT VALIDATED。
 
+
+### 3.3 目标完成度总结（第 40 轮，2026-10-18）
+
+完整评估见 docs/re/objective-final-report.md：7.0.0 与 6.7.0 已达成「通用方法 + 跨版本差异 +
+oracle 端到端验证」的完整样例；6.4.0 部分完成（typeDef 验收 + paramCount 60/60）；6.0/5.4/7.1
+到 typeDef 级；5.x/6.1–6.3/6.5–6.6 仅 derive；4.2–4.7 尚未开始。目标未全部完成，goal 保持 active。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。
