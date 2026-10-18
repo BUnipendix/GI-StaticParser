@@ -5515,3 +5515,17 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
    5,164/5,166 = 99.96%；2 个不一致均为泛型方法 MVAR 返回（!!1895 vs public T）⇒ 需要泛型参数名映射。
 4. 结论：方法表的声明类型/方法名/返回类型在本版本已端到端可用；剩余 GENERICINST 表定位、
    VAR/MVAR 名字映射，然后渲染字段/参数/属性并生成 dump.cs。
+
+## 112. R41 7.0 字段表 type 列定案（已知明文）+ 分布验收（2026-10-18）
+
+1. R37 的窗口常数 0xA90E9923 错误（解码 top 全 genericinst）。改用已知明文：字段 0
+   (Mono.RuntimeClassHandle.value) 类型是 MonoClass*；在 typearr 的 PTR(0x0F) 条目中解析元素类型，
+   找到 MonoClass 指针条目 429,796/429,798/429,829；以 429,796 反解常数，15 族 × 偏移 0..4 中只有
+   value = (raw + C) - mask（C = 0xA9152807）满足 0 越界且分布可解释。
+2. 定案后 kind 分布（430,290 字段）：CLASS 111,845 / VALUETYPE 111,199 / GENERICINST 41,875 /
+   Boolean 36,449 / Int32 35,523 / UInt32 27,565 / Single 23,481 / String 19,554 / SZARRAY 12,484；
+   前几个字段 MonoClass*/RemoteClass*/GenericParamInfo*/IntPtr/IntPtr/GPtrArray* 与 corelib 结构体吻合；
+   全表仅 64 行越出 typearr（尾部）。
+3. verify_70.py 字段 type 检查改为 primitive-kind>=100k 且越界<=100（实测 149,852 / 64）；
+   13 项检查全部 PASS。
+4. field-layout.json type 常数更新为 0xA9152807；field_rows.py 输出越界计数。

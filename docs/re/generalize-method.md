@@ -466,6 +466,33 @@ Runtime.mono_runtime_install_handlers : System.Void、Runtime.LoadBinData : Syst
 GENERICINST 表定位、VAR/MVAR 映射成真实泛型参数名，然后同样渲染字段/参数/属性类型并生成
 dump.cs。
 
+### 3.2o 7.0 字段表 type 列定案（已知明文 + kind 分布）（2026-10-18）
+
+R37 用窗口性质得到的字段 type 常数 0xA90E9923 是错的（解码后 top 值全是 genericinst）。
+本轮用已知明文重钉：字段 0（Mono.RuntimeClassHandle.value）类型是 MonoClass*，在 typearr 里
+对 PTR(0x0F) 条目解析元素类型，找到三处 MonoClass 指针条目 429,796 / 429,798 / 429,829；
+以 field0 = 429,796 反解常数，在 15 种族 × 偏移 0..4 中只有 value = (raw + C) - mask
+（C = 0xA9152807）同时满足“0 越界且值集合可解释”。
+
+定案后的 type kind 分布（430,290 字段）：
+
+| kind | 行数 |
+|---|---|
+| CLASS (0x12) | 111,845 |
+| VALUETYPE (0x11) | 111,199 |
+| GENERICINST (0x15) | 41,875 |
+| Boolean | 36,449 |
+| Int32 | 35,523 |
+| UInt32 | 27,565 |
+| Single | 23,481 |
+| String | 19,554 |
+| SZARRAY (0x1D) | 12,484 |
+
+前几个字段解析为 MonoClass* / RemoteClass* / GenericParamInfo* / IntPtr / IntPtr / GPtrArray*，
+与 corelib 结构体定义吻合。全表 430,290 行中只有 64 行落在 typearr 之外（尾部行），
+其余全部可解析。verify_70.py 的字段 type 检查更新为：primitive-kind 行 >= 100k 且越界 <= 100
+（实测 149,852 / 64），13 项检查全部 PASS。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。

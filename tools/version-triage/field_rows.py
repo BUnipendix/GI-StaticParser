@@ -89,15 +89,16 @@ def main():
         elif idre.match(s): ok += 1
         else: bad += 1
     print(f'field rows {rows}: identifiers {ok}, other {bad}, sentinel/undecodable {sentinel} (base 0x{base:X})')
-    # type column (offset 0): raw = typeIndex + C + mask, C pinned by the range/window
-    # property (all decoded indexes lie in one contiguous window starting at 0).
+    # type column (offset 0): value = (raw + C) - mask (kind AddCSubMask32). C was pinned
+    # with known plaintext (field 0 = MonoClass* -> typearr index 429796).
     tcol = lay['columns']['type']; toff = tcol['off']; tc = h(tcol['c'])
     tv = []
     for i in range(rows):
         raw = struct.unpack_from('<I', body, base + i * stride + toff)[0]
         tv.append((raw + tc - mask(i)) & 0xFFFFFFFF)
-    tv.sort()
-    print(f'field type column: min {tv[0]}, max {tv[-1]}, distinct {len(set(tv))}')
+    oob = sum(1 for v in tv if v >= 662534)
+    print(f'field type column: min {min(tv)}, max {max(tv)}, distinct {len(set(tv))}, '
+          f'out-of-typearr {oob} (tail rows only)')
     types = [json.loads(l) for l in open(typedefs_path, encoding='utf-8')]
     covered = mismatch = 0
     for typ in types:

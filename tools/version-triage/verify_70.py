@@ -126,12 +126,20 @@ def main():
         if s is None: fsent += 1
         elif idre.match(s): fid += 1
     check('field name sample', fid >= 19300, f'{fid} ids / {fsent} none')
-    tmax = 0
-    for i in range(20000):
+    ta0 = json.load(open(f'{ART}/typearr.json'))
+    Nf = ta0['count']; taf = open(sites['exe'], 'rb').read(); ta0_off = int(ta0['file_off'], 16)
+    oob = 0; prim = 0; total = 0
+    for i in range(430290):
         raw = struct.unpack_from('<I', body, fb + i * fst + tcol['off'])[0]
         v = (raw + h(tcol['c']) - fmask(i)) & 0xFFFFFFFF
-        if v > tmax: tmax = v
-    check('field type range', tmax <= 300000, f'max type index {tmax} in 20k rows')
+        total += 1
+        if v >= Nf:
+            oob += 1
+            continue
+        if taf[ta0_off + 16 * v + 10] <= 0x0E:
+            prim += 1
+    check('field type column', oob <= 100 and prim >= 100000,
+          f'{prim} primitive-kind rows, {oob} out-of-typearr out of {total}')
 
     # --- typearr + corrected return type column -----------------------------
     ta = json.load(open(f'{ART}/typearr.json'))

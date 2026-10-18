@@ -1,7 +1,7 @@
 {
  "artifact": "field-row-layout",
  "artifact_version": 1,
- "note": "7.0.0 field table (8-byte rows) located from the lazy field-name accessor 0x1404EDB50 (found as a caller of the name resolver 0x1404E0110): base = hdr[0x1D0] + 0xB98BE77F, stride 8, per-row mask chain read from the same function. Row index used by the mask is the ABSOLUTE field index (typeDef fieldStart + local index), which matches the data-solved fieldStart column. Type column solved from data by the range/window property over 430,290 rows: raw = typeIndex + C + mask, C pinned by min(A)=0; decoded type indexes 0..232,880 (68,305 distinct).",
+ "note": "7.0.0 field table (8-byte rows) located from the lazy field-name accessor 0x1404EDB50 (found as a caller of the name resolver 0x1404E0110): base = hdr[0x1D0] + 0xB98BE77F, stride 8, per-row mask chain read from the same function. Row index used by the mask is the ABSOLUTE field index (typeDef fieldStart + local index), which matches the data-solved fieldStart column. Type column solved from data by the range/window property over 430,290 rows: raw = typeIndex + C + mask, C pinned by min(A)=0; decoded type indexes 0..232,880 (68,305 distinct). R41 correction: type constant re-pinned with known plaintext (field 0 = MonoClass*, typearr index 429796) to C=0xA9152807, giving a plausible distribution (Boolean 36,449 / Int32 35,523 / UInt32 27,565 / Single 23,481 / String 19,554) instead of the generic-instance-heavy window guess 0xA90E9923.",
  "provenance": {
   "accessor_fn": "0x1404edb50",
   "name_resolver": "0x1404e0110",
@@ -30,7 +30,7 @@
   "type": {
    "off": 0,
    "kind": "AddCSubMask32",
-   "c": "0xA90E9923"
+   "c": "0xA9152807"
   }
  }
 }
