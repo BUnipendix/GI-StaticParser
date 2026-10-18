@@ -926,6 +926,24 @@ constants-index.md 的 2b 节；6.4 方法与参数仍 CANDIDATE - NOT VALIDATED
 （.ctor/GetText/GetText/Format）与堆里候选偏移做 K 交集求解（80/46/333 个候选）也无解。
 因此仍判定为 CANDIDATE - NOT VALIDATED：表基址/stride/掩码链可信，行索引或列公式仍需修正。
 
+
+### 3.2ak 6.4.0 方法表部分验证：paramCount 列定案（2026-10-18）
+
+用 6.4Dump.cs 前 60 个方法的参数个数作为 oracle，对方法行做穷举：
+(offset 0..25) × (族 xor/sub/add/xor_nomask) × (常数 0..255)。
+
+唯一命中：paramCount = row+0x10 的 u8，(raw8 ^ mask8 ^ 0x63)；
+60 个方法的参数个数 60/60 完全一致。这同时验证了 6.4 方法表身份：
+
+- base = hdr[0x1FC] ^ 0x22414276，stride 26；
+- 行掩码 = (index*0x11D36B90D36A8EDD + 0x68C1F6C86562CBFC) >> 0x13。
+
+（解码器 0x1404799E2 里读的是 [r12+0x18]，其中 r12 比表公式的行基址多 8 字节，两者一致。）
+
+仍未解：paramStart 列（累计和约束穷举无候选）与 name 列（已知名字 × 堆偏移 × 4 族，
+最佳仅 9/30 标识符，怀疑还有类似 6.7 字段/属性的二次变换链）。6.4 状态更新为
+PARTIALLY VALIDATED。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。

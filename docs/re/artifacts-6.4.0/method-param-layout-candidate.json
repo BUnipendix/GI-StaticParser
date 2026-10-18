@@ -1,7 +1,7 @@
 {
  "artifact": "method-param-layout-candidate",
  "artifact_version": 0,
- "status": "CANDIDATE - NOT VALIDATED (table identity supported by decoder 0x1404799E2, but column validation still fails and name formula is unknown)",
+ "status": "PARTIALLY VALIDATED (method table identity/base/stride/mask and paramCount column validated; paramStart/name still unresolved)",
  "version": "6.4.0",
  "provenance": {
   "method": "shape-transfer seed 6.7 method metadata decoder -> 6.4 sites; best hit fn 0x140479C80, then its cipher-caller fn 0x14048D770 was disassembled (this is the 6.4 param/default-value decoder)",
@@ -109,13 +109,31 @@
    "best_ids": 7,
    "verdict": "name formula rejected for this base/mask"
   },
-  "r62_update": "R61 rejection revisited: fn 0x1404799E2 is a method metadata decoder that uses the same hdr[0x1FC]^0x22414276 + 26*index rows and reads paramCount/flags/token columns from them, so the table identity is likely correct; the failing part is the row-index/column formula mapping, not the table base."
+  "r62_update": "R61 rejection revisited: fn 0x1404799E2 is a method metadata decoder that uses the same hdr[0x1FC]^0x22414276 + 26*index rows and reads paramCount/flags/token columns from them, so the table identity is likely correct; the failing part is the row-index/column formula mapping, not the table base.",
+  "r63": {
+   "paramCount_bruteforce": {
+    "method": "brute force (offset 0..25) x (family xor/sub/add/xor_nomask) x (constant 0..255) against 6.4Dump first 60 methods",
+    "result": "unique match: off 0x10, family xor, constant 0x63; 60/60 rows correct",
+    "verdict": "VALIDATED"
+   },
+   "paramStart_bruteforce": {
+    "method": "cumulative-sum constraint over first 60 methods, offsets 0..22 x families",
+    "result": "no candidate",
+    "verdict": "unresolved"
+   },
+   "name_bruteforce": {
+    "method": "known names x heap offsets x 4 families, decode identifier rate over 30 rows",
+    "result": "best 9/30",
+    "verdict": "unresolved (name likely has an extra transform like 6.7 field/attr chains)"
+   }
+  }
  },
  "method_decoder_function": "0x1404799E2",
  "method_columns_from_decoder": {
   "param_count": {
    "off": 24,
-   "formula": "(raw8 ^ mask8 ^ 0x63) & 0xFF"
+   "formula": "(raw8 ^ mask8 ^ 0x63) & 0xFF",
+   "note": "decoder 0x1404799E2 reads byte at [r12+0x18] where r12 is 8 bytes past the row base used by the table formula; the validated column is row+0x10"
   },
   "flags": {
    "off": 22,
@@ -132,6 +150,13 @@
   "bitfield": {
    "off": 25,
    "formula": "(raw8 ^ mask8 ^ 0x27) with flag-bit assembly"
+  }
+ },
+ "method_columns_validated": {
+  "param_count": {
+   "off": 16,
+   "formula": "(raw8 ^ (mask & 0xFF) ^ 0x63) & 0xFF",
+   "validation": "matches 6.4Dump.cs first 60 methods param counts exactly (60/60)"
   }
  }
 }

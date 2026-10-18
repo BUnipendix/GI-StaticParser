@@ -5774,3 +5774,14 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
    仍解出 paramCount 22（期望 0）；名字公式 (raw32[0]^mask^0x0834AA45) 仍 None；以 .ctor/GetText/
    GetText/Format 四个已知方法名与堆候选偏移做 K 交集（80/46/333 候选）无解。
 3. 结论保持 CANDIDATE - NOT VALIDATED：基址/stride/掩码链可信，行索引/列公式待修正。
+
+## 134. R63 6.4 方法表部分验证：paramCount 列定案（2026-10-18）
+
+1. 用 6.4Dump.cs 前 60 个方法参数个数做 oracle，对方法行穷举 (offset 0..25) x 族
+   (xor/sub/add/xor_nomask) x 常数 0..255：唯一命中 paramCount = row+0x10 u8，
+   (raw8 ^ mask8 ^ 0x63)，60/60 完全一致。
+2. 这同时验证 6.4 方法表身份：base=hdr[0x1FC]^0x22414276、stride 26、
+   掩码=(index*0x11D36B90D36A8EDD+0x68C1F6C86562CBFC)>>0x13（解码器 0x1404799E2 的
+   [r12+0x18] 与表公式 row+0x10 相差 8 字节，两者一致）。
+3. 仍未解：paramStart（累计和约束穷举无候选）、name（已知名字 x 堆偏移 x 4 族最佳 9/30，
+   疑有二次变换链）。6.4 状态 PARTIALLY VALIDATED。
