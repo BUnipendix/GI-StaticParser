@@ -1,0 +1,61 @@
+{
+  "artifact": "method-param-layout",
+  "artifact_version": 1,
+  "version": "6.7.0",
+  "provenance": {
+    "seed_version": "7.0.0",
+    "seed_function": "0x1404F9750",
+    "target_function": "0x1404D3990",
+    "match": "shape transfer over hdr load-site fingerprints (jaccard 0.3163), then code reading"
+  },
+  "method_table": {
+    "slot": "0x38",
+    "op": "add",
+    "imm": "0xD515CAA3"
+  },
+  "method_stride": 26,
+  "method_rows": 687452,
+  "method_mask": {
+    "mul1": "0xCB87",
+    "xor0": "0x1D9A1A7A",
+    "mul2": "0x38036D18",
+    "shr": 8,
+    "add1": "0x7964C76C",
+    "xor1": "0x324CAF19"
+  },
+  "method_columns": {
+    "param_start": {
+      "off": 0,
+      "kind": "XorCSubMask32",
+      "c": "0xD62B555"
+    },
+    "param_count": {
+      "off": 24,
+      "kind": "AddCSubMask8",
+      "c": "0xA8"
+    }
+  },
+  "param_table": {
+    "slot": "0x14C",
+    "op": "xor",
+    "imm": "0x12C9258B"
+  },
+  "param_stride": 8,
+  "param_mask": {
+    "mul": "0x2A2E98A6",
+    "add": "0x59887B45"
+  },
+  "param_columns": {
+    "name": {
+      "off": 0,
+      "kind": "XorMaskXorC32",
+      "c": "0x3CBE0533"
+    },
+    "type": {
+      "off": 4,
+      "kind": "XorMaskXorC32",
+      "c": "0x5A301FB"
+    }
+  },
+  "notes": "param index used by the row mask is the GLOBAL param index (paramStart + local). The type column decodes to an Il2CppType index; 6.7 typearr base is registration+0x78 (different offset from 7.0's +0x70)."
+}

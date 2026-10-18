@@ -5588,3 +5588,17 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
    无假阳性）。
 3. 全量分类（86,905 有效 typeDef）：class 72,632、struct 4,690、interface 1,624、enum 7,959。
    dump70_partial.py 接入 enum 规则，清单输出四种关键字（样例 enum Mono.Security.UriPartial 等）。
+
+## 118. R47 跨版本转移：6.7.0 方法/参数表布局（2026-10-18）
+
+1. 7.0 方法/参数解码函数 0x1404F9750 作种子，hdr 载入点指纹在 6.7 的 4,334 个载入点匹配，
+   最佳 0x1404D3990（jaccard 0.3163）；反汇编读出常数写入
+   docs/re/artifacts-6.7.0/method-param-layout.json。
+2. 6.7 布局：方法表 hdr[0x38]+0xD515CAA3 stride 26；方法行掩码 mul 0xCB87/xor 0x1D9A1A7A/
+   mul 0x38036D18/shr 8/add 0x7964C76C/xor 0x324CAF19；paramStart=(raw32[0]^0xD62B555)-mask；
+   paramCount=(raw8[+0x18]+0xA8-mask低8位)；参数表 hdr[0x14C]^0x12C9258B stride 8；
+   参数行掩码=idx*0x2A2E98A6+0x59887B45；参数名=raw^掩码^0x3CBE0533，类型=raw^掩码^0x5A301FB。
+3. 新工具 tools/version-triage/decode_params.py；6.7 全表 687,452 行、哨兵 385,937、坏行 0；
+   前 8 方法参数名 msg/fmt,args/resourceFormat,p1/exception/flag/obj/klass/ptr 与 7.1 dump 一致。
+4. 与 7.1 dump 前 1200 方法位置对齐：参数个数 1050/1200、参数名 1495/1542；残余为版本间方法
+   增删导致的顺序错位。

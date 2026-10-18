@@ -606,6 +606,26 @@ enum 与 struct 都是 valuetype，靠 parent 列区分失败（valuetype 的 pa
 dump70_partial.py 已接入 enum 规则，清单现在输出 class/struct/interface/enum 四种关键字；
 样例：enum Mono.Security.UriPartial、enum Sign、enum ExtenderType 等。
 
+### 3.2u 跨版本转移：6.7.0 方法/参数表布局（7.0 → 6.7）（2026-10-18）
+
+同一套“形态转移 + 代码阅读”流程第一次完整挪到 6.7.0：
+
+1. 以 7.0 的方法/参数解码函数 0x1404F9750 为种子，用 hdr 载入点指纹在 6.7 的 4,334 个
+   载入点里匹配，最佳命中 **0x1404D3990（jaccard 0.3163）**；
+2. 反汇编该函数，读出全部常数（纯数据写入 docs/re/artifacts-6.7.0/method-param-layout.json）：
+   - 方法表：hdr[0x38] + 0xD515CAA3，stride 26；
+   - 方法行掩码：mul 0xCB87 / xor 0x1D9A1A7A / mul 0x38036D18 / shr 8 / add 0x7964C76C / xor 0x324CAF19；
+   - paramStart = (raw32[+0] ^ 0xD62B555) − mask；paramCount = (raw8[+0x18] + 0xA8 − mask低8位)；
+   - 参数表：hdr[0x14C] ^ 0x12C9258B，stride 8；行掩码 = idx*0x2A2E98A6 + 0x59887B45；
+   - 参数名 = raw ^ 掩码 ^ 0x3CBE0533；参数类型 = raw ^ 掩码 ^ 0x5A301FB。
+3. 新工具 tools/version-triage/decode_params.py 用该 JSON 解码：6.7 全表 687,452 行、
+   paramStart 哨兵 385,937 个（count 全 0）、坏行 0；前 8 个方法的参数名
+   msg / fmt,args / resourceFormat,p1 / exception / flag / obj / klass / ptr 与 7.1 dump 完全一致。
+4. 与 7.1 dump 的位置对齐（前 1200 个方法）：参数个数 1050/1200 一致、参数名 1495/1542 一致；
+   残余来自 6.7 与 7.1 之间方法增删导致的顺序错位，不是解码错误（前段完全一致）。
+
+这证明：种子函数形态在 7.0→6.7 之间稳定，布局常数可以每版重新提取而不改工具代码。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。
