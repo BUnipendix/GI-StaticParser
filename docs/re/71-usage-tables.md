@@ -50,12 +50,21 @@ start = maskL(i)+raw[i]+0x81555D04 ; end = maskL(i+1)+raw[i+1]+0x81555D04
 kind 语义（与 il2cpp 一致的 3 位分类）：1=Il2CppType，3=MethodInfo，5=stringLiteral，
 6=TypeInfo/方法引用类，4/7 少量；0 的 10 条为解码边界噪声（index 越界）。
 
-## 3. 对流水线的意义
+## 3. 流水线接线（R20 已完成）
 
-- `script.json` 的 `ScriptString` 现在可静态生成：kind 5 的 usage → literal 索引。
-- `Addresses`/`ScriptMetadataMethod` 有据可依：Il2CppDumper 语义是"被 usage 引用的方法"，
-  不是我们此前用的"全部方法指针（460,313）"。
-- 下一步（R20）：Rust 接线 + 输出与 6.4 oracle 的 script.json 对照。
+- Rust 模块 `src/usage_tables.rs`；样本测试：`MHY_SAMPLE_EXE=… MHY_SAMPLE_DAT=… cargo test --release usage_tables -- --ignored`
+  断言 311,730 groups / 788,057 pairs / kind5=137,466，且 literal(0..) = i,m,s,u,x,evt,"",navMeshData。
+- `script.json` 新增（全 PASS，final_verify.py 断言）：
+  - `ScriptString` **137,466** 条（kind5；Value=解密字面量，逐条 ∈ literals.json 值集，max len 837）；
+  - `ScriptMetadataMethod` **84,875** 条（kind3；Name=`Method$<类型>.<方法>()`，MethodAddress=方法 RVA；977 条无代码指针故为 0）；
+  - `Addresses` 仍为 **460,313**（方法指针数组；Il2CppDumper 还会并入 genericMethodPointers/invokerPointers，
+    7.1 这两张数组静态未定位，留待后续）。
+- **`Address` 字段写 0**：Il2CppDumper 的 "usage slot 地址" 在 GI 7.1 不存在——生成代码以立即数 usage 索引调用
+  `0x140524250`，解析结果缓存在运行时解码的 registration 数组；exe 内搜不到编码 token（已实测）。
+  这是与参考实现的语义偏差，`script_json.rs` 与本节均已标注；payload 字段是精确的。
+- 未接线：kind6 185,864（MethodRef，需 methodSpecs）、kind1 376,243（Il2CppType → `ScriptMetadata "_var"`）、
+  kind7 2,564、kind4 1,035。下一步继续。
+- 对比：script.json 160,118,677 → **176,561,152 B**；dump.cs / DummyDll / dummy.jsonl 均未变。
 
 ## 4. 属性参数：确证为"运行时不需要"
 

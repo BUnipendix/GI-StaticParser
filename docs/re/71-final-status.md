@@ -15,7 +15,7 @@ DummyDll 的 Token/Attribute/Constant/MetadataOffset 全量接线，以及两个
 | 文件 | 大小 | 内容 |
 |---|---|---|
 | dump.cs | 127,953,647 B | 88,902 类型 / 440,172 字段 / 733,442 方法 / 115,596 真实属性（Slot 列已静态重算） |
-| script.json | 160,118,677 B | ScriptMethod 679,867 + Addresses 460,313（Il2CppDumper 兼容格式） |
+| script.json | 176,561,152 B | ScriptMethod 679,867 + **ScriptString 137,466** + **ScriptMetadataMethod 84,875** + Addresses 460,313（usage 表见 docs/re/71-usage-tables.md §3） |
 | attributes.json | 10,025,050 B | 74,864 条属性实例，Recovered 70,693 |
 | literals.json | 6,287,449 B | 86,108 条字符串字面量（静态解密） |
 | images.json | 14,326 B | 75 images / 75 assemblies |

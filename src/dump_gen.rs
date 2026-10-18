@@ -855,17 +855,68 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
     // code pointer, in method-table order. Built up-front because it needs the parent map and
     // the struct-name dictionary (see src/script_json.rs for the reference mapping).
     let mut script_methods: Vec<crate::script_json::ScriptMethod> = Vec::with_capacity(mds.len());
+    // Il2CppDumper names metadata-method usages as `Method$<TypeDefName>.<name>()`; build that
+    // map for every method row (not only the ones that get a ScriptMethod entry).
+    let mut script_method_names: Vec<Option<String>> = vec![None; mds.len()];
     {
         let namer = crate::script_json::Namer { m, tds: &tds, parents: &parents };
         let structs = namer.struct_names();
         for ti in 0..tds.len() {
             for &gmi in &per_type[ti] {
+                let tname = namer.typedef_name(ti, 0);
+                script_method_names[gmi] = Some(format!("Method${}.{}()", tname, mds[gmi].name));
                 if let Some(entry) = namer.method_entry(&structs, ti, &mds[gmi]) {
                     script_methods.push(entry);
                 }
             }
         }
     }
+
+    // Metadata usages (docs/re/71-usage-tables.md): kind 5 -> string literal, kind 3 -> method
+    // def. 7.1 stores the handles in the metadata body, so the reference "usage slot Address"
+    // does not exist statically and is written as 0; the payload fields are exact.
+    let ut = crate::usage_tables::UsageTables::new(&m.header, m.body);
+    let mut script_strings: Vec<crate::script_json::ScriptString> = Vec::new();
+    let mut script_meta_methods: Vec<crate::script_json::ScriptMetadataMethod> = Vec::new();
+    let mut literal_cache: Vec<Option<String>> = vec![None; crate::usage_tables::LITERAL_COUNT];
+    let mut kind_counts = [0usize; 8];
+    let (usage_groups, usage_pairs, _) = ut.scan_usages(|kind, idx| {
+        kind_counts[kind as usize] += 1;
+        match kind {
+            5 => {
+                let i = idx as usize;
+                let cached = literal_cache.get_mut(i).map(|slot| {
+                    if slot.is_none() {
+                        *slot = ut.literal(idx);
+                    }
+                    slot.clone().unwrap_or_default()
+                });
+                script_strings.push(crate::script_json::ScriptString {
+                    address: 0,
+                    value: cached.unwrap_or_default(),
+                });
+            }
+            3 => {
+                let i = idx as usize;
+                let name = script_method_names
+                    .get(i)
+                    .and_then(|n| n.clone())
+                    .unwrap_or_else(|| format!("Method$method_{idx}"));
+                script_meta_methods.push(crate::script_json::ScriptMetadataMethod {
+                    address: 0,
+                    name,
+                    method_address: m.method_rva(i) as u64,
+                });
+            }
+            _ => {}
+        }
+    });
+    eprintln!(
+        "[info] metadata usages: {usage_groups} groups / {usage_pairs} pairs; ScriptString {} (kind5) / ScriptMetadataMethod {} (kind3); unresolved kinds: kind6={} kind7={} kind1={} kind0={} kind4={}",
+        script_strings.len(),
+        script_meta_methods.len(),
+        kind_counts[6], kind_counts[7], kind_counts[1], kind_counts[0], kind_counts[4]
+    );
     let mut unresolved_props = 0usize;
     let mut synthesized_props = 0usize;
     let mut props_synth_types = 0usize;
@@ -1344,7 +1395,13 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
         .collect();
     addresses.sort_unstable();
     addresses.dedup();
-    crate::script_json::write_json(wj, &script_methods, &addresses)?;
+    crate::script_json::write_json(
+        wj,
+        &script_methods,
+        &script_strings,
+        &script_meta_methods,
+        &addresses,
+    )?;
     // Never emit placeholders silently (REQUIREMENTS R3/R4): every unresolved category is
     // reported here with its count so a consumer can judge the dump instead of trusting it.
     if computed_offsets > 0 || unresolved_offsets > 0 || static_offsets > 0 {

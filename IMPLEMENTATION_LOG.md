@@ -5129,3 +5129,24 @@ property/event）、AttributeAttribute（无法还原的属性实例；RVA/Offse
 5. 新增 tools/inspect_usage_tables.py（2.8s，输出 OK）；文档 docs/re/71-usage-tables.md；同步更新
    metadata-loading-flow / remaining-static-limits / gap-inventory / 71-final-status。
 6. 下一步（R20）：把 usage/literal 表接入 Rust 流水线，使 script.json 的 ScriptString/Addresses 与 Il2CppDumper 语义一致。
+## 91. R20：metadataUsage / stringLiteral 接入 script.json（2026-10-18）
+
+> 目标轮次：把 R19 解出的表接入流水线并全量验证。
+
+1. 新增 `src/usage_tables.rs`：usage 索引表 / pair 表 / literal offset 表 / literal 数据 / 0x140526BD0 cipher 的 Rust 实现，
+   `scan_usages()` 返回 groups/pairs/kind 直方图；`literal(i)` 解密单条字面量。
+   样本测试（`#[ignore]`，需 MHY_SAMPLE_EXE/MHY_SAMPLE_DAT）：groups=311,730 pairs=788,057 kind5=137,466，
+   literal(0..7)=i,m,s,u,x,evt,"",navMeshData；Python 侧 `tools/inspect_usage_tables.py` 结论一致。
+2. `script.json` 接线（src/dump_gen.rs + src/script_json.rs）：
+   - ScriptString 137,466 条（kind5；Value 精确）；
+   - ScriptMetadataMethod 84,875 条（kind3；`Method$<类型>.<方法>()` + MethodAddress=RVA；977 条无代码指针=0）；
+   - Addresses 维持 460,313（方法指针数组；generic/invoker 数组未定位）；
+   - **Address 字段=0**：GI 7.1 无静态 usage slot（生成代码以立即数 usage 索引调 0x140524250，结果缓存在运行时
+     registration 数组；exe 内无编码 token，已搜）。语义偏差已在代码注释 + docs/re/71-usage-tables.md §3 标注。
+   - 未接线：kind6 185,864（需 methodSpecs）、kind1 376,243、kind7 2,564、kind4 1,035。
+3. 验证：
+   - 全量比较：137,466 条 Value 全部 ∈ literals.json（0 例外），MethodAddress 除 0 外全为合法 RVA；
+   - `tools/final_verify.py` 增加 script.json 两个计数断言 + 新 size（176,561,152）；
+   - `tools/final_verify.sh` 全 PASS；`cargo test --release` 通过。
+4. 下一步：Addresses 语义补全（genericMethodPointers/invokerPointers）、kind1→ScriptMetadata、kind6→methodSpecs；
+   然后回到泛型参数名 / 接口基接口的运行时来源追查。

@@ -20,6 +20,22 @@ use super::dump_gen::Td;
 
 pub type ScriptMethod = (u64, String, String, String);
 
+/// Reference `ScriptString`: `Address` is the metadata-usage slot VA in the image. GI 7.1 has
+/// no static usage slots (generated code calls the resolver with an immediate group index and
+/// the resolver caches into runtime-decoded registration arrays), so `address` is written as 0
+/// and documented in docs/re/71-usage-tables.md; the payload (`value`) is exact.
+pub struct ScriptString {
+    pub address: u64,
+    pub value: String,
+}
+
+/// Reference `ScriptMetadataMethod`: usage slot address, `Method$<type>.<name>()`, method RVA.
+pub struct ScriptMetadataMethod {
+    pub address: u64,
+    pub name: String,
+    pub method_address: u64,
+}
+
 const ARITY_SEP: char = '\u{60}';
 
 fn fix_name(s: &str) -> String {
@@ -402,11 +418,14 @@ impl<'a> Namer<'a> {
     }
 }
 
-/// Serialize script.json in the reference layout. ScriptString/ScriptMetadata/
-/// ScriptMetadataMethod stay empty: they require metadataUsage, unavailable statically for 7.1.
+/// Serialize script.json in the reference layout. `ScriptString` and `ScriptMetadataMethod`
+/// are filled from the metadata-usage tables (`crate::usage_tables`); their `Address` is 0
+/// because 7.1 stores usage handles in metadata rather than in image slots.
 pub fn write_json<W: Write>(
     w: &mut W,
     methods: &[ScriptMethod],
+    strings: &[ScriptString],
+    metadata_methods: &[ScriptMetadataMethod],
     addresses: &[u64],
 ) -> std::io::Result<()> {
     writeln!(w, "{{")?;
@@ -423,9 +442,30 @@ pub fn write_json<W: Write>(
         )?;
     }
     writeln!(w, "],")?;
-    writeln!(w, "\"ScriptString\": [],")?;
+    writeln!(w, "\"ScriptString\": [")?;
+    for (i, s) in strings.iter().enumerate() {
+        let comma = if i + 1 == strings.len() { "" } else { "," };
+        writeln!(
+            w,
+            "  {{\"Address\": {}, \"Value\": \"{}\"}}{comma}",
+            s.address,
+            json_escape(&s.value)
+        )?;
+    }
+    writeln!(w, "],")?;
     writeln!(w, "\"ScriptMetadata\": [],")?;
-    writeln!(w, "\"ScriptMetadataMethod\": [],")?;
+    writeln!(w, "\"ScriptMetadataMethod\": [")?;
+    for (i, m) in metadata_methods.iter().enumerate() {
+        let comma = if i + 1 == metadata_methods.len() { "" } else { "," };
+        writeln!(
+            w,
+            "  {{\"Address\": {}, \"Name\": \"{}\", \"MethodAddress\": {}}}{comma}",
+            m.address,
+            json_escape(&m.name),
+            m.method_address
+        )?;
+    }
+    writeln!(w, "],")?;
     write!(w, "\"Addresses\": [")?;
     for (i, a) in addresses.iter().enumerate() {
         if i > 0 {

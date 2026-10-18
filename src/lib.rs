@@ -25,3 +25,4 @@ pub mod pe;
 pub mod script_json;
 pub mod td_dump;
 pub mod typenames;
+pub mod usage_tables;
