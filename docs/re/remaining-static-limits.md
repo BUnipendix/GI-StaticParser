@@ -8,6 +8,7 @@
 | 项 | 证据 |
 |---|---|
 | 静态字段偏移（109,214 个字段）| oracle 首静态偏移 vs TypeDefIndex 单调性仅 50.2% ⇒ 偏移由运行时类初始化顺序决定；7.1 元数据无静态偏移表 |
+| 补充（2026-10-18）| 用 6.4Dump 的 instance 偏移序列在 6.4 exe 全量搜索（tools/version-triage/check_field_offsets_cross.py）：只命中 0x70/0x78/0x80 通用平凡序列，无真实每类型数组 ⇒ 6.4 的值同样来自运行时辅助 dump，不是文件里的静态数组。|
 | 方法 Slot 非零值 | 反汇编 0x1405155FC 构建器逐句核对：7.1 元数据几乎全 -1；oracle 6.4 非零 Slot 属 oracle 运行时语义 |
 | interface 的基接口（oracle 270 行）| 7.1 元数据 interface 的 iface_start/count 全哨兵（0xFFFF/0）；且实现类接口列表**已扁平化**（7.1 ResourceReader 行含 IResourceReader+IEnumerable+IDisposable），运行时判定 0x140513260 只遍历 klass+0x20 接口数组、不递归基接口 ⇒ 构建期裁掉，运行时不需要（docs/re/71-generics-interface-origin.md）|
 | ~~metadataUsage~~（script.json Addresses/ScriptMetadata 基础）| **已推翻（2026-10-18，R19）**：索引表 body+(hdr[0x19C]^0x159FBC84)、pair 表 body+(hdr[0x14C]^0x2F249C2F)，解析器 0x140524250；全量 311,730 usage / 788,057 pair（tools/inspect_usage_tables.py，见 docs/re/71-usage-tables.md）|

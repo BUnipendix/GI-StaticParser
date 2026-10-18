@@ -5823,3 +5823,16 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
    6.5–6.6 仅 derive；4.2–4.7 未开始 ⇒ 目标未全部完成，goal 保持 active。
 2. 最终自检：verify_70.py 13 项 PASS；6.7 oracle 对照字段 100%/返回 100%/参数 100%/属性 96.3%；
    status_matrix.py 重新生成 26 版本覆盖矩阵。
+
+## 139. 追问：静态字段偏移的载体与 6.4 对照实验（2026-10-18）
+
+1. 新增 tools/version-triage/check_field_offsets_cross.py：解析 6.4Dump.cs 的 instance 偏移序列，在
+   6.4 exe 全量搜索每类型 fieldOffsets 数组。
+2. 结果：2,738 个候选序列抽样 200，只命中 0x70/0x78/0x80/0x88 这类通用小偏移的平凡序列（与 7.1
+   的误报相同），无真实数组 ⇒ 6.4 的偏移（含 30,587 个静态偏移）同样不是文件里的静态数组，而是
+   运行时辅助 dump 的值。这补强了 remaining-static-limits.md A 的结论：7.1 无运行时快照 + 文件
+   无载体 ⇒ 静态不可得。
+3. 顺藤摸瓜法已用于本会话多数关键发现（属性构建器、字段/方法/参数解码器、6.7 事件/属性分支）；
+   静态偏移这条线摸到 image 表 loader（无 typeStart/count）、exe 数组搜索（0 命中）两个有证据的
+   终点；尚未摸的藤：loader per-image 注册 sub_14051e390 的 typeStart 来源、0x188/0x118 大表、
+   VMP 初始化器仿真。
