@@ -14,7 +14,7 @@ DummyDll 的 Token/Attribute/Constant/MetadataOffset 全量接线，以及两个
 
 | 文件 | 大小 | 内容 |
 |---|---|---|
-| dump.cs | 127,953,647 B | 88,902 类型 / 440,172 字段 / 733,442 方法 / 115,596 真实属性（Slot 列已静态重算） |
+| dump.cs | 127,769,231 B | 88,902 类型 / 440,172 字段 / 733,442 方法 / 115,596 真实属性（Slot 列已静态重算；**泛型参数名已渲染**，见 docs/re/71-generic-params.md） |
 | script.json | 176,764,249 B | ScriptMethod 679,867 + **ScriptString 137,466** + **ScriptMetadataMethod 84,875** + **Addresses 483,496**（方法 460,313 + generic 12,827 + invoker 25,651；见 docs/re/71-usage-tables.md §3） |
 | attributes.json | 10,025,050 B | 74,864 条属性实例，Recovered 70,693 |
 | literals.json | 6,287,449 B | 86,108 条字符串字面量（静态解密） |
@@ -33,6 +33,7 @@ DummyDll 的 Token/Attribute/Constant/MetadataOffset 全量接线，以及两个
 | instance 字段偏移 | 布局重建 | dump_gen::instance_offsets；类型级与 6.4 oracle 一致率 79.55%（跨版本差异 + 显式布局限制） |
 | propertyDefs | 已恢复（§83） | hdr[0x158]−0x1D545CCC，10B 行：115,596 条 / 30,226 类型；getter 112,107 / setter 19,907 全部 < methodCount；全量铺瓦 0 不规则；名称经 cipher 解码；vs 6.4 oracle corelib 序列全等 1,272/1,318=96.5%（tools/validate_properties.py） |
 | eventDefs | 已恢复（§85） | hdr[0x64]+0xE6130C67，14B 行：628 条 / 225 类型；铺瓦 0 不规则；type 全合法；未混淆类型 add/remove 命中 add_*/remove_*；raise 全 0xFFFF（未保留） |
+| 泛型参数名 | 已恢复（R23） | `body+(hdr[0x174]+0xCED1EDB1)` = 0xDF8708，14B×5,796，逐行 mask；真实名字 TKey/TValue/TRest… 已进 dump.cs（docs/re/71-generic-params.md）|
 | 参数默认值 | 已恢复（§88） | hdr[0x1D0]^0x07D0BBF9，12B 行：25,374 行（key=全局参数索引，升序）；15,595 有值 / 9,779 dataIndex=-1；对应参数 100% 带 Optional|HasDefault |
 | DummyDll Constant | 已接入 | 90,224 = 74,632 字段 + 15,592 参数；不可表示 kind → MetadataOffsetAttribute（919 = 916 + 3） |
 | 字符串字面量 | 已恢复 | gi-stringliteral（外部工具）：86,108 条；旧 meta_string_literals.txt 覆盖 99.54% |
