@@ -570,6 +570,27 @@ RVA/Token/Slot、泛型实例名都还没有；但“表 → 名字/类型”的
 结论：泛型实例表很可能在加密指针区域（7.0 的 .data 全局指针是密文，如 0x35125d183ea8b34e），
 需要找到运行时全局指针解密例程才能静态还原；这条线索下一轮再挖。
 
+### 3.2s 7.0 typeDef 的 byval/parent 列 + class/struct/interface 分类（2026-10-18）
+
+两个新列都用“引用一致性”解出来（不需要已知明文常数）：
+
+1. **byvalTypeIndex**：typeDef 行 u32 @+12，raw ^ 0x1253E298。它指向 typearr 里该类自己的
+   Il2CppType 条目，而该条目的 data 字段恰好等于 typeDefIndex——用这个自反关系做交集求解，
+   全表 86,905/86,932 行成立（27 行是尾部 padding）。条目 kind 字节给出 class(0x12, 74,238)
+   还是 valuetype(0x11, 12,649)。
+2. **parentTypeIndex**：typeDef 行 u32 @+4，raw ^ 0x149B1F48。接口的 parent 是 0xFFFFFFFF，
+   类的 parent 是合法 typeDefIndex。
+
+分类规则：parent==0xFFFFFFFF → interface；byval kind==0x11 → struct；否则 class；<Module> 特判为
+class。与 7.1 dump 的 corelib 114 个类型对照：**108/114 = 94.7%**
+（class 87/87、struct 18/18、interface 3/3 全对；5 个 enum 被归为 struct，1 个 <Module> 特判处理）。
+
+enum 与 struct 目前不可区分：需要 System.Enum 父类信息，而 parent 列对 valuetype 给出的值尚不可解释
+（同一 enum 类簇都解出 0x4A，明显不是 typeDefIndex），已显式记录为未完成，不用猜测。
+
+dump70_partial.py 已接入该分类，类型清单现在输出 class/struct/interface 关键字
+（72,632 class / 12,649 struct / 1,624 interface）。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。

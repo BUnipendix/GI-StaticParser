@@ -7,6 +7,7 @@ attributes are not decoded yet, so this is a listing, not a compilable dump.cs.
 import io, json, re, struct, sys
 sys.path.insert(0, '/home/yangsanyi/Documents/git-repo/GI-StaticParser/tools/version-triage')
 import type_render as tr
+import type_kinds as tk
 import field_rows as fr
 import method_rows as mr
 
@@ -70,6 +71,7 @@ def main():
         raw = struct.unpack_from('<H' if key in ('getter', 'setter') else '<I', body, ro + off)[0]
         return mr.col_value(kind, c, raw, pmask2(i))
     out = io.open(OUT, 'w', encoding='utf-8')
+    kinds = tk.classify(sites['exe'], body)
     cur_ns = None
     nf = nm_ = np_ = 0
     for typ in types:
@@ -105,6 +107,21 @@ def main():
                 out.write(f'  {ret} {nm}({", ".join(psx)})\n'); nm_ += 1
         out.write('}\n\n')
     out.close()
+    # second pass: prefix each type with class/struct/interface from the kind classifier
+    nl = chr(10)
+    lines = open(OUT, encoding='utf-8').read().split(nl)
+    cur = None
+    outp = []
+    for ln in lines:
+        if ln.startswith('// TypeDefIndex: '):
+            try:
+                cur = int(ln.split(': ')[1].split()[0])
+            except Exception:
+                cur = None
+        elif ln.startswith('type ') and cur is not None and cur < len(kinds) and kinds[cur] != '?':
+            ln = kinds[cur] + ' ' + ln[5:]
+        outp.append(ln)
+    open(OUT, 'w', encoding='utf-8').write(nl.join(outp))
     print(f'dump70-partial -> {OUT}: fields {nf}, properties {np_}, methods {nm_}')
 
 if __name__ == '__main__':

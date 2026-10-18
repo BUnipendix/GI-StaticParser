@@ -5565,3 +5565,17 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
 3. GENERICINST 表三轮扫描全部 0 候选：exe 16B {argc,pad,argv_ptr}、24/32B generic-class 记录、
    metadata body 任意列<86,932 的规则表（stride 8..64）。判断泛型实例表在加密指针区域
    （7.0 .data 全局指针为密文），需先找运行时全局指针解密例程。
+
+## 116. R45 typeDef byval/parent 列 + class/struct/interface 分类（2026-10-18）
+
+1. byvalTypeIndex：typeDef 行 u32 @+12 raw^0x1253E298 → typearr 里该类自身 Il2CppType 条目
+   （条目 data == typeDefIndex 的自反关系做交集求解）；86,905/86,932 行成立（27 行尾部 padding）。
+   条目 kind：class 0x12 = 74,238、valuetype 0x11 = 12,649。
+2. parentTypeIndex：typeDef 行 u32 @+4 raw^0x149B1F48；接口 parent=0xFFFFFFFF，类 parent 合法。
+3. 分类规则 parent sentinel→interface、byval kind 0x11→struct、否则 class、<Module> 特判：
+   与 7.1 dump corelib 114 类型对照 108/114 = 94.7%（class 87/87、struct 18/18、interface 3/3；
+   5 个 enum 归为 struct、<Module> 特判）。
+4. enum 无法与 struct 区分：System.Enum 父类信息缺失，parent 列对 valuetype 的值不可解释
+   （同簇都解出 0x4A），显式记为未完成。
+5. 新增 tools/version-triage/type_kinds.py；dump70_partial.py 接入分类，清单输出
+   class/struct/interface 关键字（72,632 / 12,649 / 1,624）。
