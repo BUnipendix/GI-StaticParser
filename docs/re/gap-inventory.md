@@ -63,7 +63,7 @@ Token 前 3 个 = 0x06000001/2/3 与 oracle 完全一致。回归 17 passed / 0 
 | 7 | 枚举字面值 | **已解（2026-10-17）** | **已关闭**：字段默认值表 base = `hdr[0x164]^0x03893506`，12B 行 `{valueOff, fieldIndex, typeIdx}`，行数 `(hdr[0x144]+0xD1F800F2)/12`（75,548 行）；值区 `body+(hdr[0x128]^0x371354A2)+valueOff`，按 kind 解码；字符串 = `{u32 len, UTF-8}`。dump 已渲染 74,614 个 const 值；vs 6.4 oracle 枚举值 99.83%、全 const 99.26% |
 | 8 | stringLiterals.json | 689,799 串 | 字符串字面量表（独立于用户串堆）|
 | 9 | script.json ScriptString/Addresses/Signature | 689,799 / 239,153 | 依赖 #8 + 方法特征定位 |
-| 10 | il2cpp.h / DummyDll | 整套 | 已生成单程序集 DummyDll（2026-10-18 v5：Property 115,596 / Event 628 / TokenAttribute 1,378,740 / 属性实例 70,692 / **Constant 74,632 + MetadataOffset 916**；参数归属与 SequenceNumber 已修复）；il2cpp.h 与 75 程序集划分仍缺；参数默认值表未定位（Parameter Constant 暂无） |
+| 10 | il2cpp.h / DummyDll | 整套 | 已生成单程序集 DummyDll（2026-10-18 v6：Property 115,596 / Event 628 / TokenAttribute 1,378,740 / 属性实例 70,692 / **Constant 90,224（字段 74,632 + 参数默认值 15,592）+ MetadataOffset 919**；参数归属/SequenceNumber/HasDefault 已修复）；**参数默认值表已定位（hdr[0x1D0]，25,374 行）**；il2cpp.h 与 75 程序集划分仍缺 |
 | 11 | **泛型类型渲染**（新发现，2026-10-17）| 42,313 字段 | **已关闭（2026-10-17，§52）**：`GENERICINST.data`=g → startup-metadata 8B 行表（`hdr[0x120]^0x1C3F68EA`，行=`{defTdi, genericInstIdx}`）→ `Il2CppMetadataRegistration+0x28` 的 16B `Il2CppGenericInst{argc,pad,argv}` → argv 的 `Il2CppType*`。实测 `List`1<GameObject>`/`IComparer`1<Level2Map>`/`ReadOnlyCollection`1<MoleMole…>` 全对；字段类型 vs 6.4 oracle **98.33%**（泛型字段 95.23%）。遗留：kind 0x13/0x1E 泛型参数引用仍是占位（需 genericParameters 表） |
 
 ## 三、script.json 现状（2026-10-17 升级）

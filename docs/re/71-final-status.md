@@ -16,8 +16,8 @@
 | attributes.json | 10,025,050 B | 74,864 条属性实例，Recovered 70,693 |
 | literals.json | 6,287,449 B | 86,108 条字符串字面量（静态解密） |
 | images.json | 14,326 B | 75 images / 75 assemblies |
-| DummyDll.dll | 146,508,800 B | 88,907 TypeDef / 733,447 Method / 440,182 Field / 115,596 Property / 628 Event / 133,270 MethodSemantics / **74,632 Constant** / **2,491,943 CustomAttribute**（Address/FieldOffset/Token/属性实例/MetadataOffset）/ 1,195 GenericParam |
-| dummy.jsonl | 203,232,915 B | DummyDll 生成器输入（结构化导出，含 115,596 P + 628 E + 70,692 A 记录；字段带 cv/mo 常量数据） |
+| DummyDll.dll | 146,666,496 B | 88,907 TypeDef / 733,447 Method / 440,182 Field / 115,596 Property / 628 Event / 133,270 MethodSemantics / **90,224 Constant（74,632 字段 + 15,592 参数）** / **2,491,946 CustomAttribute** / 1,195 GenericParam |
+| dummy.jsonl | 217,786,835 B | DummyDll 生成器输入（结构化导出，含 115,596 P + 628 E + 70,692 A 记录；字段/参数带 cv/mo 常量数据） |
 
 ## 3. 逐项状态
 
@@ -33,7 +33,7 @@
 | 接口继承（interface 的基接口） | 未保留 | 7.1 metadata 1,580 个 interface 的基接口行 = 0（全量），6.4 oracle 有 270 个（日志 §75） |
 | property 表 | **已恢复（真实表，2026-10-18）** | metadata body 的 10B 行表（hdr[0x158]−0x1D545CCC）即 propertyDefs：115,596 条 / 30,226 类型，getter 112,107 / setter 19,907 全部索引合法；属性名经字符串 cipher 解码；与 6.4 oracle corelib shared 类型属性序列全等 1,272/1,318=96.5%、名称 Jaccard 0.9899（tools/validate_properties.py；日志 §83）。dump.cs 由合成 63,117 换成真实 115,596 |
 | metadataUsage / ScriptString / ScriptMetadata | 未解（需运行时/加密） | script.json 对应字段为空；metadataUsage 槽在运行时 BSS（历史轮次已证） |
-| DummyDll | 已生成 | 单程序集自包含（146MB）；Address/FieldOffset 特性 1,041,595 条；GenericParam 1,195；Property 115,596 + Event 628 + MethodSemantics 133,270（真实表）；TokenAttribute 1,378,740 + 属性实例 70,692；**Constant 74,632（字段默认值；不可表示 kind 用 MetadataOffsetAttribute 916 条）；参数归属/SequenceNumber 已修复** |
+| DummyDll | 已生成 | 单程序集自包含（146MB）；Address/FieldOffset 1,041,595 条；GenericParam 1,195；Property 115,596 + Event 628 + MethodSemantics 133,270（真实表）；TokenAttribute 1,378,740 + 属性实例 70,692；**Constant 90,224（字段 74,632 + 参数默认值 15,592；不可表示 kind 用 MetadataOffsetAttribute 919 条）；参数归属/SequenceNumber/HasDefault 已修复** |
 | DummyDll 75 程序集划分 | 不可得 | startup image 表解列后无 typeStart/typeCount（反汇编 loader，日志 §78） |
 | 方法泛型参数 / 泛型约束 | 不可得 | method 泛型容器信息未从 metadata 解出；约束未保留 |
 

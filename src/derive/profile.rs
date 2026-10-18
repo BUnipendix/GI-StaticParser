@@ -500,6 +500,14 @@ pub struct Profile {
     /// PARAMETER definition table (8-byte rows): name at +4, typearr index at +0 (-1 = none).
     /// Disassembled at 0x1405297EE: base = hdr[0x68] ^ 0x146BE503; both columns decode as
     /// `(raw ^ col_xor).wrapping_sub(mask(index))`, where the mask is the same chain for both.
+    /// PARAMETER-DEFAULT table (12-byte rows {parameterIndex u32, valueTypeIndex u32,
+    /// dataOffset i32 (-1 = no value)}; sorted by parameterIndex). 7.1.0 base = hdr[0x1D0]
+    /// ^ 0x07D0BBF9, size = hdr[0x18] + 0xA1C835BE (bytes), rows = size/12. Validated 2026-10-18:
+    /// 25,374 rows, every key < total parameter count, every key's parameter carries
+    /// ParameterAttributes.Optional|HasDefault (0x1010) -- the accessor at 0x1405287A0 binary
+    /// stores a typed value into the same shared default-value blob as field defaults.
+    #[serde(default)]
+    pub param_defaults_size: Option<TableBase>,
     #[serde(default)]
     pub param_defs: Option<TableBase>,
     #[serde(default)]

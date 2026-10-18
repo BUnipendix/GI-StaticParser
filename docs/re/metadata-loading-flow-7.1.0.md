@@ -65,6 +65,8 @@
 | 0x110 | ^ | 0x1AB6109A | 3 | 0x74 表字节数 |
 | 0x118 | ^ | 0x4009A6BF | 26 | 大表（语义待定）|
 | 0x134 | + | 0x8EEFDB56 | 3 | 方法表字节数（÷0x1A=行数）|
+| 0x18 | + | 0xA1C835BE | 1 | 参数默认值表字节数（÷0x0C=行数；§4c）|
+| 0x1D0 | ^ | 0x7D0BBF9 | 1 | 参数默认值表 base（12B 行；§4c）|
 | 0x158 | − | 0x1D545CCC | 1 | **propertyDefs 表（10B 行）**；运行时 PropertyInfo 构建器 0x140515FC0 直接读该槽 ⇒ 此槽是属性表锚点（2026-10-18，§83）|
 | 0x170 | >>4,^ | 0x28D714C | 1 | assembly 行数 |
 | 0x188 | ^ | 0x57DD5CA8 | 207 | 泛型实例表 12B/行 {i32,i32(-1=无),i32} |
@@ -118,6 +120,18 @@
 mask(i) = ((i*0x9C54 ^ 0x1F0DA79F) * 0x1BF89D8B64959BB7 + 0x295EE0EBA6CAFAEA) >> 15（64-bit 乘法）。
 来源：0x140515AE0 的 EventInfo 缓存构建器（写入 klass+0x38，元素 0x30）。全量 628 行精确铺瓦 [0,628)，
 type 索引全部合法，未混淆类型的 add/remove 落到 add_*/remove_* 方法（详见 IMPLEMENTATION_LOG §85）。
+
+## 4c. 参数默认值行（stride 12，base=hdr[0x1D0]^0x07D0BBF9+body）
+
+| 偏移 | 宽 | 语义 |
+|---|---|---|
+| 0x00 | u32 | key = **全局参数索引**（升序，可二分）|
+| 0x04 | u32 | 值类型 typearr 索引 |
+| 0x08 | i32 | 值在共享 blob 的偏移（-1 = 无值；blob = body + (hdr[0x128]^0x371354A2)）|
+
+行数 = (hdr[0x18] + 0xA1C835BE) / 12。全量验证（2026-10-18）：25,374 行、每个 key < 548,400、
+对应参数 **100% 带 Optional|HasDefault(0x1010)**；15,595 行有值、9,779 行 dataOffset=-1。
+访问器 0x1405287A0（详见 IMPLEMENTATION_LOG §88）。
 
 ## 5. 方法行（stride 0x1A，base=hdr[0x1E0]^0x2EE480FB+body）
 

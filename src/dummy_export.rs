@@ -334,14 +334,33 @@ pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize
                     match m.param_type(idx) {
                         Some(Some(pti)) => {
                             let enc = enc_param_type(m, pti);
+                            let pattrs = m.il2cpp_type(pti as usize).map(|(_, _, a)| a).unwrap_or(0);
                             let pname = m.param_name(idx).unwrap_or_default();
+                            // Parameter default (optional parameter): typed Constant, or a
+                            // MetadataOffset marker for kinds without a CLR Constant.
+                            let (cv_json, mo_json) = match m.param_default(idx) {
+                                Some((tix, Some(dataoff))) => match enc_default(m, tix, dataoff) {
+                                    Some((tag, value)) => (
+                                        format!("{{\"t\":\"{}\",\"v\":{}}}", tag, serde_json::to_string(&value)?),
+                                        "null".to_string(),
+                                    ),
+                                    None => (
+                                        "null".to_string(),
+                                        (m.default_values as u64 + dataoff as u64).to_string(),
+                                    ),
+                                },
+                                _ => ("null".to_string(), "null".to_string()),
+                            };
                             params.push_str(&format!(
-                                "{{\"n\":{},\"t\":{}}}",
+                                "{{\"n\":{},\"t\":{},\"a\":{},\"cv\":{},\"mo\":{}}}",
                                 serde_json::to_string(&pname)?,
-                                serde_json::to_string(&enc)?
+                                serde_json::to_string(&enc)?,
+                                pattrs,
+                                cv_json,
+                                mo_json
                             ));
                         }
-                        _ => params.push_str("{\"n\":\"\",\"t\":\"obj\"}"),
+                        _ => params.push_str("{\"n\":\"\",\"t\":\"obj\",\"a\":0,\"cv\":null,\"mo\":null}"),
                     }
                 }
                 params.push(']');

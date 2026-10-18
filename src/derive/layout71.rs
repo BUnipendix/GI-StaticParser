@@ -166,6 +166,13 @@ pub fn gen71() -> Profile {
         default_value_data: Some(TableBase { hdr_off: 0x128, sub: None, xor: Some(0x3713_54A2), add: None }),
         // Parameter definition table (8B rows): base = hdr[0x68] ^ 0x146BE503 (accessor 0x1405297EE).
         // name = (raw@+4 ^ 0x6B95F108) - mask(i); type = (raw@+0 ^ 0x76621606) - mask(i), -1 = none.
+        // Parameter-default table: base = hdr[0x1D0] ^ 0x07D0BBF9 (profile.params, 12B rows), size
+        // = hdr[0x18] + 0xA1C835BE. Accessor 0x1405287A0 searches a sorted key column
+        // (= global parameter index) and yields {valueTypeIndex u32@+4, dataOffset i32@+8};
+        // the value lives in the same shared blob as field defaults (hdr[0x128] ^ 0x371354A2).
+        // Full-table check: 25,374 rows, all keys < 548,400, all corresponding parameters carry
+        // Optional|HasDefault, 15,595 rows have a value and 9,779 have dataOffset = -1.
+        param_defaults_size: Some(TableBase { hdr_off: 0x18, sub: None, xor: None, add: Some(0xA1C8_35BE) }),
         param_defs: Some(TableBase { hdr_off: 0x68, sub: None, xor: Some(0x146B_E503), add: None }),
         param_def_stride: 8,
         param_def_name_xor: 0x6B95_F108,

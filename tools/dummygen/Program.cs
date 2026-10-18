@@ -27,6 +27,9 @@ public sealed class ParamRec
 {
     public string Name = "";
     public string Type = "obj";
+    public uint Attrs;
+    public ConstRec Const;
+    public ulong? MetaOffset;
 }
 
 public sealed class MethodRec
@@ -161,11 +164,24 @@ public static class Program
                     if (r.TryGetProperty("foff", out var mfoff) && mfoff.ValueKind == JsonValueKind.Number)
                         m.FileOffset = mfoff.GetInt64();
                     foreach (var p in r.GetProperty("params").EnumerateArray())
-                        m.Params.Add(new ParamRec
+                    {
+                        var pr = new ParamRec
                         {
                             Name = p.GetProperty("n").GetString() ?? "",
                             Type = p.GetProperty("t").GetString() ?? "obj",
-                        });
+                        };
+                        if (p.TryGetProperty("a", out var pat) && pat.ValueKind == JsonValueKind.Number)
+                            pr.Attrs = pat.GetUInt32();
+                        if (p.TryGetProperty("cv", out var pcv) && pcv.ValueKind == JsonValueKind.Object)
+                            pr.Const = new ConstRec
+                            {
+                                T = pcv.GetProperty("t").GetString() ?? "",
+                                V = pcv.GetProperty("v").GetString() ?? "",
+                            };
+                        if (p.TryGetProperty("mo", out var pmo) && pmo.ValueKind == JsonValueKind.Number)
+                            pr.MetaOffset = pmo.GetUInt64();
+                        m.Params.Add(pr);
+                    }
                     cur!.Methods.Add(m);
                     break;
                 case "P":
@@ -432,7 +448,19 @@ public static class Program
                     MetadataTokens.ParameterHandle(paramRows));
                 for (int k = 0; k < me.Params.Count; k++)
                 {
-                    mb.AddParameter(0, mb.GetOrAddString(me.Params[k].Name), k + 1);
+                    var pr = me.Params[k];
+                    var pa = (ParameterAttributes)(pr.Attrs & 0xFFFF);
+                    // Keep Optional etc. from the metadata, but HasDefault must exactly track the
+                    // Constant rows we actually write (metadata rows with dataIndex=-1 carry the
+                    // flag but no value; the reference emits the dangling flag, we drop it).
+                    if (pr.Const != null) pa |= ParameterAttributes.HasDefault;
+                    else pa &= ~ParameterAttributes.HasDefault;
+                    var ph = mb.AddParameter(pa, mb.GetOrAddString(pr.Name), k + 1);
+                    if (pr.Const != null)
+                    {
+                        mb.AddConstant(ph, ConstObject(pr.Const));
+                        constantRows++;
+                    }
                     paramRows++;
                 }
             }
@@ -630,6 +658,7 @@ public static class Program
             }
             return mb.GetOrAddBlob(bb);
         }
+        int paramRowCursor = 1;
         foreach (var t in types)
         {
             foreach (var f in t.Fields)
@@ -647,6 +676,21 @@ public static class Program
                     mb.AddCustomAttribute(fh, metadataOffsetCtor,
                         NamedArgsBlob(new[] { ("Offset", "0x" + mo.ToString("X")) }));
                     customAttrCount++;
+                }
+            }
+            // Parameter defaults without a CLR Constant kind -> MetadataOffsetAttribute on the
+            // parameter (the reference does the same for TryGetDefaultValue failures).
+            foreach (var me in t.Methods)
+            {
+                foreach (var pr in me.Params)
+                {
+                    if (pr.MetaOffset is ulong pmo)
+                    {
+                        mb.AddCustomAttribute(MetadataTokens.ParameterHandle(paramRowCursor), metadataOffsetCtor,
+                            NamedArgsBlob(new[] { ("Offset", "0x" + pmo.ToString("X")) }));
+                        customAttrCount++;
+                    }
+                    paramRowCursor++;
                 }
             }
             foreach (var me in t.Methods)
@@ -833,8 +877,11 @@ public static class Program
         if (paramCount != expParams) throw new Exception($"param count mismatch {paramCount} vs {expParams}");
         // ---- Constant table check ----
         int constRows = md.GetTableRowCount(TableIndex.Constant);
-        int expConst = expected.Sum(t => t.Fields.Count(f => f.Const != null && f.Token != 0));
-        int expMetaOffsets = expected.Sum(t => t.Fields.Count(f => f.MetaOffset != null));
+        int expFieldConst = expected.Sum(t => t.Fields.Count(f => f.Const != null && f.Token != 0));
+        int expParamConst = expected.Sum(t => t.Methods.Sum(m => m.Params.Count(p => p.Const != null)));
+        int expConst = expFieldConst + expParamConst;
+        int expMetaOffsets = expected.Sum(t => t.Fields.Count(f => f.MetaOffset != null))
+            + expected.Sum(t => t.Methods.Sum(m => m.Params.Count(p => p.MetaOffset != null)));
         Console.WriteLine($"verify: constants={constRows} (expected {expConst}), metadataOffsets={expMetaOffsets}");
         if (constRows != expConst) throw new Exception($"constant count mismatch {constRows} vs {expConst}");
         {
@@ -879,6 +926,57 @@ public static class Program
                 }
             }
             Console.WriteLine($"verify: constants decoded OK ({checkedConsts} sampled)");
+        }
+        // ---- parameter default constants ----
+        {
+            int pCursor = 1;
+            int checkedParamConsts = 0;
+            bool done = false;
+            foreach (var t in expected)
+            {
+                if (done) break;
+                foreach (var mm in t.Methods)
+                {
+                    foreach (var p in mm.Params)
+                    {
+                        if (p.Const != null)
+                        {
+                            var ph = MetadataTokens.ParameterHandle(pCursor);
+                            var pd = md.GetParameter(ph);
+                            if ((pd.Attributes & ParameterAttributes.HasDefault) == 0)
+                                throw new Exception($"parameter {p.Name} has a Constant but no HasDefault flag");
+                            var ch = pd.GetDefaultValue();
+                            if (ch.IsNil) throw new Exception($"parameter {p.Name} has no Constant row");
+                            var c = md.GetConstant(ch);
+                            if (checkedParamConsts < 5)
+                                Console.WriteLine($"  param constant sample: {mm.Name}({p.Name}) type={c.TypeCode}");
+                            checkedParamConsts++;
+                            if (checkedParamConsts >= 300) { done = true; break; }
+                        }
+                        pCursor++;
+                    }
+                    if (done) break;
+                }
+            }
+            Console.WriteLine($"verify: parameter constants decoded OK ({checkedParamConsts} sampled)");
+        }
+        {
+            int hasDefault = 0, constParams = 0, mismatched = 0;
+            foreach (var mh in md.MethodDefinitions)
+            {
+                var mdef = md.GetMethodDefinition(mh);
+                foreach (var ph in mdef.GetParameters())
+                {
+                    var pd = md.GetParameter(ph);
+                    bool hd = (pd.Attributes & ParameterAttributes.HasDefault) != 0;
+                    bool cd = !pd.GetDefaultValue().IsNil;
+                    if (hd) hasDefault++;
+                    if (cd) constParams++;
+                    if (hd != cd) mismatched++;
+                }
+            }
+            Console.WriteLine($"verify: params HasDefault={hasDefault}, with Constant={constParams}, mismatched={mismatched}");
+            if (mismatched != 0) throw new Exception($"{mismatched} parameters have HasDefault inconsistent with Constant rows");
         }
         // ---- property table check ----
         int propRows = md.GetTableRowCount(TableIndex.Property);

@@ -5052,3 +5052,38 @@ property/event）、AttributeAttribute（无法还原的属性实例；RVA/Offse
 - 产物：DummyDll.dll 145,609,728 -> **146,508,800 B**；dummy.jsonl 193,164,322 -> **203,232,915 B**；dump.cs 不变（127,953,647 B）；
 - cargo test：17 passed / 0 failed。
 
+
+## 88. 参数默认值表定位 + DummyDll Parameter Constant（2026-10-18）
+
+> 不是需求，是执行记录。目标第 5 轮。
+
+### 88.1 表定位（推翻旧笔记的"未定位/窗口未解"结论）
+- 旧笔记把 hdr[0x1D0] 的 12B 行表 key 当成"paramStart 编码 + 未解窗口"，参数默认值一直暂缓。
+- 本轮重新反汇编访问器 **0x1405287A0** 并对全表做结构验证：
+  - base = body + (hdr[0x1D0] ^ 0x07D0BBF9)，size = hdr[0x18] + 0xA1C835BE，stride 12，rows = **25,374**；
+  - 行 = {parameterIndex u32, valueTypeIndex u32, dataOffset i32 (-1 = 无值)}，按 parameterIndex 升序；
+  - 值存放于共享 blob：body + (hdr[0x128] ^ 0x371354A2) + dataOffset（与字段默认值同一 blob）。
+- **决定性验证（全量）**：25,374 个 key 全部 < 参数总数 548,400；对应参数 **100% 带
+  ParameterAttributes.Optional|HasDefault (0x1010)** —— 即这些行恰好就是全部可选参数；
+  15,595 行有值，9,779 行 dataIndex = -1。旧"key 是编码 paramStart"是对运行时算术的误读；
+  key 就是全局参数索引，升序可直接二分。
+
+### 88.2 接线
+- profile 新增 param_defaults_size（hdr[0x18] + 0xA1C835BE）；engine 新增 param_default_base/rows 与
+  param_default(gpi) 二分查找；dummy_export 的参数记录新增 a（ParameterAttributes）/cv/mo，复用
+  enc_default（与字段默认值同一套 kind 判定）。
+- dummygen：Parameter 行按 metadata attrs 写 Optional 等；**HasDefault 与 Constant 行严格一致**——
+  dataIndex=-1 的 9,779 个 Optional 参数不写 HasDefault（避免"有 flag 无 Constant"的非法元数据；
+  参考实现会保留 dangling flag，这里选择合法化并在文档说明）；另 3 个无 CLR Constant 表示的参数默认值
+  写 MetadataOffsetAttribute。
+
+### 88.3 验证
+- 生成器内置：Constant **90,224** = 74,632（字段）+ 15,592（参数）；metadataOffsets 919 = 916 + 3；
+  params HasDefault=15,592、with Constant=15,592、mismatched=0；抽样 300 条参数 Constant 解码通过；
+- 独立 SRM 读回：
+  - System.TimeZoneInfo.GetUtcOffset(DateTime, bool forOffset = false)：forOffset HasDefault + Constant Boolean false；
+  - 字符串默认值样本：MiHoYo.SDK.WebDelegate.InitDelegate::Invoke(url = "")、SetJoypadStatus(strType = "0") 等；
+- 产物：DummyDll.dll 146,508,800 -> **146,666,496 B**；dummy.jsonl 203,232,915 -> **217,786,835 B**；
+  dump.cs 不变（127,953,647 B）；
+- cargo test：17 passed / 0 failed。
+

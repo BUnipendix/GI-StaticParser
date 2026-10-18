@@ -46,6 +46,10 @@ pub struct Meta<'a> {
     pub param_def_base: usize,
     /// Nested-types table base (u32 typeDef indexes per row).
     pub nested_base: usize,
+    /// Parameter-default table base (12-byte rows; 0 when the profile lacks it).
+    pub param_default_base: usize,
+    /// Parameter-default table row count (0 when the profile lacks it).
+    pub param_default_rows: usize,
     /// Property-definition table base (10-byte rows in 7.1; 0 when the profile lacks it).
     pub property_base: usize,
     /// Event-definition table base (14-byte rows in 7.1; 0 when the profile lacks it).
@@ -163,6 +167,12 @@ impl<'a> Meta<'a> {
             iface_base: profile.iface_table.resolve(&header_bytes),
             param_def_base: profile.param_defs.as_ref().map(|t| t.resolve(&header_bytes)).unwrap_or(0),
             nested_base: profile.nested_types.as_ref().map(|t| t.resolve(&header_bytes)).unwrap_or(0),
+            param_default_base: profile.params.resolve(&header_bytes),
+            param_default_rows: profile
+                .param_defaults_size
+                .as_ref()
+                .map(|t| t.resolve(&header_bytes) / profile.param_stride.max(1) as usize)
+                .unwrap_or(0),
             property_base: profile.property_defs.as_ref().map(|t| t.resolve(&header_bytes)).unwrap_or(0),
             event_base: profile.event_defs.as_ref().map(|t| t.resolve(&header_bytes)).unwrap_or(0),
             field_defaults,
@@ -514,6 +524,33 @@ impl<'a> Meta<'a> {
         let raw = self.body.read_u32(row);
         let v = (raw ^ self.profile.param_def_type_xor).wrapping_sub(mask);
         Some(if v == u32::MAX { None } else { Some(v) })
+    }
+
+    /// Parameter DEFAULT value for global parameter index `gpi`: `(value typearr index,
+    /// optional byte offset in the shared default-value blob)`. `None` = no default row for that
+    /// parameter. Row format (12 bytes, sorted by parameterIndex):
+    /// {parameterIndex u32, valueTypeIndex u32, dataOffset i32}.
+    pub fn param_default(&self, gpi: u32) -> Option<(u32, Option<i32>)> {
+        if self.param_default_rows == 0 {
+            return None;
+        }
+        let stride = self.profile.param_stride as usize;
+        let (mut lo, mut hi) = (0usize, self.param_default_rows);
+        while lo < hi {
+            let mid = (lo + hi) / 2;
+            let at = self.param_default_base + stride * mid;
+            let key = self.body.read_u32(at);
+            if key < gpi {
+                lo = mid + 1;
+            } else if key > gpi {
+                hi = mid;
+            } else {
+                let tix = self.body.read_u32(at + 4);
+                let off = self.body.read_u32(at + 8) as i32;
+                return Some((tix, if off == -1 { None } else { Some(off) }));
+            }
+        }
+        None
     }
 
     /// typeDef nestedTypesStart (u16 column; 0xFFFF = none).

@@ -131,3 +131,5 @@
 - [2026-10-18] DummyDll v4：5 个标记类型（Address/Attribute/FieldOffset/MetadataOffset/Token，与 bundled Il2CppDummyDll 一致）+ TokenAttribute 1,378,740 + 属性实例 70,692（AttributeAttribute 标记）；修复 ParamList 游标与 Parameter.SequenceNumber 两处旧 bug。DummyDll.dll 145,609,728 B，customAttrs 2,491,027。证据/验证：IMPLEMENTATION_LOG §86。
 
 - [2026-10-18] DummyDll v5：字段默认值接入 Constant（74,632 行；kind 不支持时写 MetadataOffsetAttribute，916 条），字段 flags 保留 Literal/HasDefault；F 记录带 cv/mo。验证：Int32.MaxValue/Boolean.TrueLiteral/DayOfWeek.Monday/enum 常量与 <PrivateImplementationDetails> MetadataOffset 均正确（日志 §87）。
+
+- [2026-10-18] 参数默认值表：hdr[0x1D0]^0x07D0BBF9、stride 12、rows=(hdr[0x18]+0xA1C835BE)/12；行 {全局参数索引(升序), valueTypeIndex, dataOffset(-1=无值)}，值在共享 blob (hdr[0x128]^0x371354A2)。7.1 解出 25,374 行（15,595 有值），DummyDll Constant 90,224（字段+参数），HasDefault 与 Constant 严格一致。证据/公式：IMPLEMENTATION_LOG §88、metadata-loading-flow §4c。
