@@ -5216,3 +5216,18 @@ property/event）、AttributeAttribute（无法还原的属性实例；RVA/Offse
    dump.cs/script.json 不变；tools/final_verify.sh 全 PASS。
 4. 未接线：泛型**方法**的参数（DummyDll GenericParam 行仍 1,195 类型级；metadata 总 5,796，方法级约 4,601）；
    泛型约束仍未解；下一轮可接方法级 GenericParam 与约束 accessor。
+## 96. R25：方法级泛型参数接线，DummyDll GenericParam 全量 5,796（2026-10-18）
+
+1. 引擎：容器 owner 解码同时产出 type/method 两张表（MVAR owner=methodIndex），新增
+   Meta::method_generic_param_names；dummy_export 的 M 记录新增 "gp" 数组（按参数槽对齐）。
+2. dummygen：
+   - MethodDef 创建时收集方法级 GenericParam；因 ECMA 要求按 owner 编码索引排序
+     （TypeOrMethodDef = (row<<1)|tag，TypeDef/MethodDef 按 row 交错），统一收集后排序再 Add；
+   - 嵌套在泛型类型里的类型名字无 `N 后缀，arity 取 max(name arity, gp 长度)，
+     否则会丢掉嵌套类型的泛型参数（此前 GenericParam 只有 4,294）。
+   - Verify 断言：ValueTuple`8 第 8 参数=TRest、Dictionary`2=TKey/TValue、存在 T1/T2 泛型方法。
+3. 结果：GenericParam = **5,796**（类型级 2,697 + 方法级 3,099），与 metadata 参数表一致；
+   dummy.jsonl 224,397,559 B；DummyDll.dll 146,724,352 B；dump.cs/script.json 不变。
+4. 验证：tools/final_verify.sh 全 PASS；spot checks 通过。
+5. 仍未解：泛型约束（参数行 +4/+6/+8 未找到约束表读取路径；+6 已确认是 variance 位，
+   被 0x140512880/0x14051A330 的接口变体判定使用）。

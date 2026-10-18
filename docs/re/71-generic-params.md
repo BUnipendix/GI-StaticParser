@@ -46,10 +46,13 @@ case VAR(0x13)/MVAR(0x1E) @0x14050E897/0x14050E986:
   的 16B 加密行（4,425 行）。`data == mask2(V)+0xE276AF5D` ⇒ VAR（owner=typeDefIndex），否则 MVAR（owner=methodIndex）；
   `owner = attrs ^ (mask2(V)+0x71555646) ^ 0x5C56350B`。已验证 `ValueTuple`1..`8`→T1..T7/TRest、
   `Dictionary`2`→TKey/TValue、`List`1`→T。
-- DummyDll 的 GenericParam 名字**已接真实表（R24）**：`dummy.jsonl` T 记录新增 `"gp"`（按 arity 对齐，控制字符名→空串），
-  dummygen 用它 `AddGenericParameter`，并在 Verify 中断言 ValueTuple`8/Dictionary`2；
-  泛型**方法**的参数尚未加进 DummyDll（GenericParam 行仍 1,195 = 类型级；metadata 总数 5,796，方法级约 4,601）。
-- 工件变化：dummy.jsonl 217,786,835 → **218,514,639 B**；DummyDll.dll 146,666,496 → **146,667,520 B**；final_verify 全 PASS。
+- DummyDll 的 GenericParam **全部接线（R24/R25）**：T 与 M 记录都新增 `"gp"`（按参数槽对齐，控制字符名→空串），
+  dummygen 用真实名字 `AddGenericParameter`；需要按 ECMA 排序（TypeOrMethodDef 编码索引 = `(row<<1)|tag`，
+  TypeDef/MethodDef 按 row 交错），且泛型类型**嵌套类型**（名字无 `` `N `` 后缀）以 `gp` 长度为准。
+  Verify 断言：ValueTuple`8 第 8 个参数=TRest、Dictionary`2=TKey/TValue、存在 2 个泛型参数名为 T1/T2 的方法。
+  **GenericParam 总行数 = 5,796**（类型级 2,697 + 方法级 3,099，含嵌套泛型类型），与 metadata 参数表完全一致。
+- 工件变化（相对 R23）：dummy.jsonl 217,786,835 → **224,397,559 B**；DummyDll.dll 146,666,496 → **146,724,352 B**；
+  dump.cs/script.json 不变；final_verify 全 PASS。
 
 ## 4. 复现
 

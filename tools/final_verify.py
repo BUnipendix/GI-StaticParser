@@ -18,8 +18,8 @@ EXPECT_SIZE = {
     'attributes.json': 10_025_050,
     'literals.json': 6_287_449,
     'images.json': 14_326,
-    'dummy.jsonl': 218_514_639,
-    'DummyDll.dll': 146_667_520,
+    'dummy.jsonl': 224_397_559,
+    'DummyDll.dll': 146_724_352,
 }
 EXPECT_DUMMY = {'T': 88_902, 'F': 440_172, 'M': 733_442, 'P': 115_596, 'E': 628, 'A': 70_692}
 

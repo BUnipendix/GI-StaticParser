@@ -34,6 +34,8 @@ pub struct Meta<'a> {
     /// typeDef index -> global generic-parameter indexes (type owners only; the encrypted
     /// 16-byte container table at slot 0xC8 marks type owners with `data == mask2`).
     pub generic_params_by_type: std::collections::HashMap<u32, Vec<u32>>,
+    /// method index -> global generic-parameter indexes (method owners; container MVAR rows).
+    pub generic_params_by_method: std::collections::HashMap<u32, Vec<u32>>,
     pub methodptrs: usize,
     pub methodptrs_len: usize,
     pub rdata: (u64, usize, usize),
@@ -159,6 +161,8 @@ impl<'a> Meta<'a> {
         };
         let mut generic_params_by_type: std::collections::HashMap<u32, Vec<u32>> =
             std::collections::HashMap::new();
+        let mut generic_params_by_method: std::collections::HashMap<u32, Vec<u32>> =
+            std::collections::HashMap::new();
         for gpi in 0..gp_count as u32 {
             let at = gp_base + 14 * gpi as usize + 0xC;
             let Some(row) = body_buf.get(at..at + 2) else { break };
@@ -169,9 +173,13 @@ impl<'a> Meta<'a> {
             let data = u32::from_le_bytes([ent[0], ent[1], ent[2], ent[3]]);
             let attrs = u32::from_le_bytes([ent[12], ent[13], ent[14], ent[15]]);
             let x = data.wrapping_add(0x8EDE_A6E9);
+            let owner = attrs ^ x ^ 0x5C56_350B;
             if x == container_mask2(v as u32) {
-                let owner = attrs ^ x ^ 0x5C56_350B;
+                // VAR: owner is a typeDef index.
                 generic_params_by_type.entry(owner).or_default().push(gpi);
+            } else {
+                // MVAR: owner is a method index.
+                generic_params_by_method.entry(owner).or_default().push(gpi);
             }
         }
         let (methodptrs, methodptrs_len) =
@@ -253,6 +261,7 @@ impl<'a> Meta<'a> {
             gp_base,
             gp_count,
             generic_params_by_type,
+            generic_params_by_method,
             methodptrs,
             methodptrs_len,
             rdata,
@@ -298,6 +307,20 @@ impl<'a> Meta<'a> {
     /// positional fallback stays aligned; control-character names come back as empty strings.
     pub fn type_generic_param_names(&self, tdi: u32) -> Vec<String> {
         let Some(list) = self.generic_params_by_type.get(&tdi) else {
+            return Vec::new();
+        };
+        list.iter()
+            .map(|g| match self.generic_param_name(*g) {
+                Some(n) if !n.chars().any(char::is_control) => n,
+                _ => String::new(),
+            })
+            .collect()
+    }
+
+    /// Names of a generic *method* definition's parameters (MVAR containers), one slot per
+    /// parameter; control-character names come back as empty strings.
+    pub fn method_generic_param_names(&self, mi: u32) -> Vec<String> {
+        let Some(list) = self.generic_params_by_method.get(&mi) else {
             return Vec::new();
         };
         list.iter()

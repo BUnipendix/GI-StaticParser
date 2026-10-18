@@ -369,9 +369,11 @@ pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize
                 }
                 params.push(']');
             }
+            // Real generic-method parameter names (MVAR containers, R25); aligned per slot.
+            let gps = serde_json::to_string(&m.method_generic_param_names(gmi as u32))?;
             writeln!(
                 w,
-                "{{\"k\":\"M\",\"id\":{},\"name\":{},\"ret\":{},\"flags\":{},\"rva\":{},\"token\":{},\"slot\":{},\"foff\":{},\"params\":{}}}",
+                "{{\"k\":\"M\",\"id\":{},\"name\":{},\"ret\":{},\"flags\":{},\"rva\":{},\"token\":{},\"slot\":{},\"foff\":{},\"gp\":{},\"params\":{}}}",
                 i,
                 serde_json::to_string(&md.name)?,
                 serde_json::to_string(&ret)?,
@@ -380,6 +382,7 @@ pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize
                 0x0600_0001u32.wrapping_add(gmi as u32),
                 serde_json::to_string(&vtable_slots[gmi])?,
                 serde_json::to_string(&rva_to_file(m, md.rva))?,
+                gps,
                 params
             )?;
             n_methods += 1;

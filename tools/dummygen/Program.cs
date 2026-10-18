@@ -41,6 +41,7 @@ public sealed class MethodRec
     public uint Token;
     public int? Slot;
     public long? FileOffset;
+    public List<string> Gp = new();
     public List<ParamRec> Params = new();
 }
 
@@ -167,6 +168,8 @@ public static class Program
                         m.Slot = mslot.GetInt32();
                     if (r.TryGetProperty("foff", out var mfoff) && mfoff.ValueKind == JsonValueKind.Number)
                         m.FileOffset = mfoff.GetInt64();
+                    if (r.TryGetProperty("gp", out var mgp) && mgp.ValueKind == JsonValueKind.Array)
+                        m.Gp = mgp.EnumerateArray().Select(x => x.GetString() ?? "").ToList();
                     foreach (var p in r.GetProperty("params").EnumerateArray())
                     {
                         var pr = new ParamRec
@@ -311,20 +314,23 @@ public static class Program
         }
 
         // ---- GenericParam rows (arity from the metadata type name suffix; real names from R23) ----
+        // The GenericParam table must be sorted by owner (ECMA coded index: all TypeDef owners
+        // first, then MethodDef owners) and by parameter number, so every row is collected here
+        // and emitted once at the end in that order.
         int genericParamRows = 0;
+        var pendingGps = new List<(int Kind, int Row, int Number, string Name)>();
         foreach (var t in types)
         {
-            int arity = ArityOf(t.Name);
+            // Nested types inside generic types carry GenericParam rows without a `N name
+            // suffix; the decoded gp list is authoritative in that case.
+            int arity = Math.Max(ArityOf(t.Name), t.Gp.Count);
             if (arity == 0) continue;
-            var ownerTd = MetadataTokens.TypeDefinitionHandle(t.Id + 1);
             // t.Gp carries the decoded generic-parameter names (R23 table). It can be shorter
             // when a name is an obfuscated control char; fall back to positional T1..Tn there.
             for (int k = 0; k < arity; k++)
             {
                 string name = k < t.Gp.Count && t.Gp[k].Length > 0 ? t.Gp[k] : "T" + (k + 1);
-                mb.AddGenericParameter(ownerTd, GenericParameterAttributes.None,
-                    mb.GetOrAddString(name), k);
-                genericParamRows++;
+                pendingGps.Add((0, t.Id + 1, k, name));
             }
         }
 
@@ -450,9 +456,18 @@ public static class Program
                     }
                     bodyOffset = bodyStream.AddMethodBody(enc, maxStack: 1);
                 }
-                methodHandles[gmiCursor++] = mb.AddMethodDefinition(ma, impl, mb.GetOrAddString(me.Name),
+                var methodHandle = mb.AddMethodDefinition(ma, impl, mb.GetOrAddString(me.Name),
                     mb.GetOrAddBlob(sigBlob!), bodyOffset,
                     MetadataTokens.ParameterHandle(paramRows));
+                methodHandles[gmiCursor++] = methodHandle;
+                // Method-owned GenericParam rows (tag 1) are collected here and emitted after
+                // every TypeDef-owned row; the table must be sorted by owner.
+                int methodRow = MetadataTokens.GetRowNumber(methodHandle);
+                for (int k = 0; k < me.Gp.Count; k++)
+                {
+                    string gpName = me.Gp[k].Length > 0 ? me.Gp[k] : "T" + (k + 1);
+                    pendingGps.Add((1, methodRow, k, gpName));
+                }
                 for (int k = 0; k < me.Params.Count; k++)
                 {
                     var pr = me.Params[k];
@@ -471,6 +486,23 @@ public static class Program
                     paramRows++;
                 }
             }
+        }
+
+        // Emit GenericParam rows in ECMA order: TypeDef owners first, then MethodDef owners.
+        // ECMA coded-index order for TypeOrMethodDef is (row << 1) | tag, i.e. TypeDef and
+        // MethodDef owners interleave by row number.
+        pendingGps.Sort((a, b) =>
+            (a.Row * 2 + a.Kind) != (b.Row * 2 + b.Kind)
+                ? (a.Row * 2 + a.Kind).CompareTo(b.Row * 2 + b.Kind)
+                : a.Number.CompareTo(b.Number));
+        foreach (var (kind, row, number, name) in pendingGps)
+        {
+            var owner = kind == 0
+                ? (EntityHandle)MetadataTokens.TypeDefinitionHandle(row)
+                : MetadataTokens.MethodDefinitionHandle(row);
+            mb.AddGenericParameter(owner, GenericParameterAttributes.None,
+                mb.GetOrAddString(name), number);
+            genericParamRows++;
         }
 
         // ---- Property table + PropertyMap + MethodSemantics (real metadata properties) ----
@@ -880,7 +912,9 @@ public static class Program
         }
         int attrRowCount = md.CustomAttributes.Count;
         int genericParamRows = md.GetTableRowCount(TableIndex.GenericParam);
-        int expGenericParams = expected.Sum(t => ArityOf(t.Name));
+        // Type-level + method-level GenericParam rows (R25: method MVAR containers are wired too).
+        int expGenericParams = expected.Sum(t => Math.Max(ArityOf(t.Name), t.Gp.Count))
+            + expected.Sum(t => t.Methods.Sum(m => m.Gp.Count));
         Console.WriteLine($"verify: types={typeCount} fields={fieldCount} methods={methodCount} " +
                           $"params={paramCount} ifaces={ifaceCount} bodies={bodyCount} customAttrs={attrRowCount} genericParams={genericParamRows}");
         if (genericParamRows != expGenericParams) throw new Exception($"generic param count mismatch {genericParamRows} vs {expGenericParams}");
@@ -899,6 +933,18 @@ public static class Program
             if (names.Count != 2 || names[0] != "TKey" || names[1] != "TValue")
                 throw new Exception("Dictionary`2 generic names wrong: " + string.Join(",", names));
         }
+        // R25: method-level GenericParam rows carry real names (e.g. ValueTuple.Create<T1,T2>).
+        bool methodGpOk = false;
+        foreach (var mh in md.MethodDefinitions)
+        {
+            var mdef = md.GetMethodDefinition(mh);
+            var gps = mdef.GetGenericParameters();
+            if (gps.Count != 2) continue;
+            var n0 = md.GetString(md.GetGenericParameter(gps[0]).Name);
+            var n1 = md.GetString(md.GetGenericParameter(gps[1]).Name);
+            if (n0 == "T1" && n1 == "T2") { methodGpOk = true; break; }
+        }
+        if (!methodGpOk) throw new Exception("no generic method with parameters T1,T2");
         // +5 marker types (Address/Attribute/FieldOffset/MetadataOffset/Token) with 10 fields and 5 ctors
         if (typeCount != expected.Count + 5) throw new Exception($"type count mismatch {typeCount} vs {expected.Count + 5}");
         int expFields = expected.Sum(t => t.Fields.Count) + 10;
