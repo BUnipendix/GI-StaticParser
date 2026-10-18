@@ -5333,3 +5333,29 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
    方法/字段/参数表行布局与掩码，所以尚未到完整 dump.cs。
 5. 复现：mhydump tables --base <类型表基址> --json → tools/version-triage/type_defs_dump.py →
    （校验脚本在 ~/gire/out/cross/validate_typedefs.py）。
+
+## 101. R30 数据自解 typeDef 范围列（方法/字段/属性/事件）自动发现（2026-10-18）
+
+1. 新工具 tools/version-triage/find_type_ranges.py：纯数据找 typeDef 行的「起始列+计数列」对。
+   计数常量：多数类型无成员 ⇒ 该列 raw 众数 = plain 0 的编码（xor C=raw / add C=-raw），
+   第 0 行 <Module> 作第二候选；起始常量：取一个计数为 0 的行，其起始 raw = 全 1 哨兵编码
+   （xor C=raw^mask / add C=mask-raw）。全表铺瓦：start 非减、不与上一段重叠、gap 计数；
+   重叠 > 4 即拒绝。count 偏移扫描到 stride+0x60，覆盖跨行存储的布局。
+2. 六版本结果（start/end 均与 R29 用 typeDef 计数字段独立求出的 sum 吻合）：
+   - 7.1.0：方法 0x08/0x3C → 733,442；字段 0x00/0x30 → 440,172；属性 0x24 Add 0xCE2141CC /
+     0x43 Xor 0x86 → 115,596；事件 0x38 Add / 0x44 Xor 0xB5 → 628。（与 profile 逐位一致）
+   - 7.0.0：方法 0x20/0x3C → 713,956（=md_size/26）；字段 0x00/0x32 → 430,290；
+     属性 0x1C Add 0xF6929062 / 0x45 Add 0xDB → 112,949；事件 0x3E Xor 0x66AD / 0x44 Add 0x3A → 625。
+   - 6.7.0：方法 0x0C/0x30 → 687,467；字段 0x14/0x38 → 413,644；属性 0x00 Add 0xF43F5BDC /
+     0x44 Add 0x7C → 108,747；事件 0x34 Add 0xFD33 / 0x40 Xor 0x10 → 617。
+   - 6.4.0：方法 0x14/0x28 → 631,108（=md_size/26）；属性 0x1C Xor 0x1AF4F14C / 0x3A Add 0x6D →
+     99,320；事件 0x2A Add 0xE909 / 0x3B Xor 0x52 → 596；字段对未发现（count 偏移 0x78 越过
+     行宽 0x46，属 IndexTable 跨行模型，见 R28 的 tables 模型）。
+   - 6.0.0：方法 0x14/0x32 → 475,157；字段 0x04/0x28 → 304,855；属性 0x18 Xor 0x08B87A48 /
+     0x38 Xor 0xFC → 77,319；事件 0x2C Xor 0xBA4E / 0x3D Xor 0xC0 → 508。
+   - 5.4.0：字段 0x08/0x1A → 285,058；事件 0x18 Add 0x1255 / 0x20 Xor 0x33 → 486；
+     0x32 Add 0x20A5 / 0x68 Add 0x6 → 35,864（疑似嵌套表，gap=0）；方法/属性对未发现。
+3. 验证：7.1 四对与 layout71 逐位一致；各版本 end 与 R29 的 sum 字段独立互证；7.0/6.4 方法 end
+   等于 md_size/26；事件 end 628/625/617/596/508/486 同源码量级一致。
+4. 已知缺口：6.4 字段对、5.4 方法/属性对、嵌套/接口对多数版本（数组可跨类型乱序、接口含继承项，
+   需要不同链判据）。下一步：把发现器并入 tables 子命令并生成 profile 草稿。
