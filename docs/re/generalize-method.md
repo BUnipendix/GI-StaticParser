@@ -315,6 +315,31 @@ C = 0xDF812A65，解码值 0..0x15390（86,928）、76,000 种不同取值。
 不符：10,288 个 virtual 方法里 10,278 个解成 -1，说明候选不对或 flags 列语义另有映射），
 以及 flags 位映射（当前 66 种取值，static 位 0x10 可信）。
 
+### 3.2h 7.0 属性表行布局：代码提取 + 数据验证（2026-10-18）
+
+缓存构建器 0x1404E6180 读属性表：基址 = hdr[0x15C] ^ 0x368C9997，stride 10
+（lea rax,[rax+rax*4] 两次 = 10）。逐行掩码链：
+mul 0xE0F8 / xor 0x22F6DA00 / mul 0x3AA8EE62 / add 0x49880E3C / xor 0x3E17E98E / add 0x7EC31F32。
+
+列变换（写入 docs/re/artifacts-7.0.0/property-layout.json，纯数据）：
+name = (raw[+0] ^ 0x5DC2119E) - mask；
+getter = raw16[+8] - mask + 0xFFFF945B（0xFFFF = 无）；
+setter = (raw16[+6] ^ 0xFFFFC45A) - mask（0xFFFF = 无）。
+访问器索引是 **每类型相对的方法索引**（与 typeDef methodStart 相加得到全局方法索引）。
+
+全表验收（tools/version-triage/property_rows.py，7.0.0）：
+
+| 检查 | 结果 |
+|---|---|
+| 属性行数 | 112,949（与范围发现 end 一致） |
+| 属性名 | 112,663 标识符 + 65 其它 = 99.94% 有效 |
+| 访问器索引范围 | 128,776 个非空访问器，越出所属类型方法区间 **0 个（0.00%）** |
+| 列语义 | +8 列 61,967 个方法名以 get_ 开头、0 个 set_ ⇒ getter；+6 列 8,781 个 set_、0 个 get_ ⇒ setter |
+| 名称配对 | 未混淆子集里 getter 17,153 / setter 5,761 与属性名严格配对；GI 对属性名与访问器名独立混淆，故仅作参考 |
+
+**更正**：之前 shape-transfer 语义里的 fields（槽 0x15C）其实是**属性表**，不是字段表；7.0 的字段表
+（stride 10，name/type/attrs）仍未定位。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。

@@ -5415,3 +5415,17 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
    （10,288 个 virtual 中 10,278 解成 -1）⇒ 候选不对/或 flags 位映射未定，slot 留待后续。
 5. method_rows.py 现在同时输出 name/returnType 验收；7.0 全表：name 99.82% 有效、
    returnType max 86,928、paramStart 链 0 违例、参数表 100%。
+
+## 105. R34 7.0 属性表行布局：代码提取 + 全表验证（2026-10-18）
+
+1. 缓存构建器 0x1404E6180 读属性表：base = hdr[0x15C] ^ 0x368C9997，stride 10（lea x5 两次）；
+   掩码链 mul 0xE0F8 / xor 0x22F6DA00 / mul 0x3AA8EE62 / add 0x49880E3C / xor 0x3E17E98E / add 0x7EC31F32。
+   列：name = (raw[+0] ^ 0x5DC2119E) - mask；getter = raw16[+8] - mask + 0xFFFF945B；
+   setter = (raw16[+6] ^ 0xFFFFC45A) - mask（0xFFFF = 无）。访问器是每类型相对方法索引。
+2. 新工具 tools/version-triage/property_rows.py + docs/re/artifacts-7.0.0/property-layout.json。
+   7.0 全表验证：112,949 行；属性名 99.94% 标识符；128,776 个非空访问器越出所属类型方法区间
+   **0 个**；+8 列 61,967 个 get_ / 0 个 set_ ⇒ getter，+6 列 8,781 个 set_ / 0 个 get_ ⇒ setter；
+   未混淆子集里 getter 17,153 / setter 5,761 与属性名严格配对（GI 属性名与访问器名独立混淆，
+   故只作参考）。
+3. 更正：shape-transfer 语义中的 fields（槽 0x15C）实际是属性表；7.0 字段表仍未定位。
+4. 复现：property_rows.py <版本目录> <derive> <sites> <property-layout> <typedefs JSONL> <method-layout>。

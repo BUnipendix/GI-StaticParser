@@ -1,0 +1,44 @@
+{
+  "artifact": "property-row-layout",
+  "artifact_version": 1,
+  "note": "7.0.0 property (and property-accessor) row layout read from the cache builder at 0x1404E6180. Row stride 10; per-type ranges come from the data-solved typeDef propertyStart/Count. Accessor indexes are PER-TYPE method indexes (0xFFFF = none), validated against typeDef method ranges.",
+  "provenance": {
+    "builder_fn": "0x1404e6180",
+    "name_resolver": "0x1404e0110",
+    "name_column_source": "code: ((raw[+0] ^ 0x5DC2119E) - mask)",
+    "getter_column_source": "code: raw16[+8] - mask + 0xFFFF945B (0xFFFF = none)",
+    "setter_column_source": "code: (raw16[+6] ^ 0xFFFFC45A) - mask (0xFFFF = none)"
+  },
+  "table": {
+    "slot": "0x15C",
+    "op": "xor",
+    "imm": "0x368C9997"
+  },
+  "stride": 10,
+  "rows": 112949,
+  "mask": {
+    "mul1": "0xE0F8",
+    "xor1": "0x22F6DA00",
+    "mul2": "0x3AA8EE62",
+    "add1": "0x49880E3C",
+    "xor2": "0x3E17E98E",
+    "add2": "0x7EC31F32"
+  },
+  "columns": {
+    "name": {
+      "off": 0,
+      "kind": "XorCSubMask32",
+      "c": "0x5DC2119E"
+    },
+    "setter": {
+      "off": 6,
+      "kind": "XorCSubMask16",
+      "c": "0xFFFFC45A"
+    },
+    "getter": {
+      "off": 8,
+      "kind": "SubMaskAddC16",
+      "c": "0xFFFF945B"
+    }
+  }
+}
