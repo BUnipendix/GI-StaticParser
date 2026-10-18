@@ -5150,3 +5150,19 @@ property/event）、AttributeAttribute（无法还原的属性实例；RVA/Offse
    - `tools/final_verify.sh` 全 PASS；`cargo test --release` 通过。
 4. 下一步：Addresses 语义补全（genericMethodPointers/invokerPointers）、kind1→ScriptMetadata、kind6→methodSpecs；
    然后回到泛型参数名 / 接口基接口的运行时来源追查。
+## 92. R21：Addresses 按 Il2CppDumper 语义合并（2026-10-18）
+
+> 目标轮次 R2：补全 script.json Addresses 的参考语义。
+
+1. 定位静态代码注册数组（`0x1422DF450`）：
+   - +0x8 → invokerPointers 数组（VA 0x1427D5EC0）；计数由 hdr[0x200] 每方法表的最大值+1 推导 = **25,651**
+     （首处非镜像指针在 79,766，>= 25,651，且表中无 >1e6 的合法值）；
+   - +0x78 → genericMethodPointers 数组（VA 0x142238130）；计数由 0x74 表 `(hdr[0x110]^0x1AB6109A)/6` 行数 +
+     u16 列最大值+1 交叉验证 = **12,827**（数组首个非镜像指针正好在第 12,827 项）；
+   - 方法指针数组仍用 locate_methodptrs（.rdata 最长 il2cpp 指针段，460,313；实测位于 VA 0x142452BE8 = codeReg+0x18+8）。
+2. 新增 `src/code_addresses.rs`：合并三类指针 → RVA → 排序去重（丢 0），样本测试断言 12,827 / 25,651 且地址严格递增；
+   实测 **Addresses = 483,496**（460,313 + 12,827 + 25,651 = 498,791，去重后 483,496）。
+   reversePInvokeWrappers / unresolvedVirtualCallPointers 两张数组未定位，运行时日志显式报告（不静默）。
+3. 验证：script.json 176,561,152 → **176,764,249 B**；final_verify.py 增补 Addresses=483,496 断言；
+   `tools/final_verify.sh` 全 PASS；`cargo test --release` 通过（新增 code_addresses 样本测试）。
+4. 下一步：ScriptMetadata（kind1/kind7 归类仍待 jump-table 语义确认）、kind6 methodSpecs；然后回到泛型参数名/接口基接口。

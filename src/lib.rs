@@ -7,6 +7,7 @@
 //! Copyright (C) 2026. Licensed under the GNU General Public License v3.0 (see LICENSE).
 
 pub mod class_model;
+pub mod code_addresses;
 pub mod decode_str;
 pub mod decrypt;
 pub mod default_values;

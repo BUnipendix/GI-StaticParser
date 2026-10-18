@@ -24,7 +24,7 @@
 | 0x145AD62B8 | 0x1427D5CB0 (.rdata) | CRT init 0x1402F376F | 头部（HDRGLOBAL），356 个读点 |
 | 0x145AD62C0 | 文件镜像+0x210 | 加载器 0x1405361B0 | 身体（BODYBASE），343 个读点 |
 | 0x145AD62C8 | startup-metadata.dat | 加载器 0x1405361B7 | 第二文件 |
-| 0x145AD6298 | 0x1422DF450 (.rdata) | CRT init 0x1402F3737 | 静态代码注册：+0x8 invoker 数组、+0x28 方法指针数组、+0x78 泛型方法数组 |
+| 0x145AD6298 | 0x1422DF450 (.rdata) | CRT init 0x1402F3737 | 静态代码注册：**+0x8 invokerPointers（25,651）**、+0x18 方法指针结构（{0, ptr=0x142452BE8}，**460,313** 个指针，即 locate_methodptrs 找到的数组）、**+0x78 genericMethodPointers（12,827）**；+0x28 语义待定。R20 用前两者补全 script.json Addresses（docs/re/71-usage-tables.md §3）|
 | 0x145AD62A0 | 0x142871B68 (.rdata) | CRT init 0x1402F3745 | 静态注册：+0x28 Il2CppType 数组指针、+0x30 ^0x28A0FA2D=计数、+0x50=模块基址（1035 读点）|
 | 0x145AD62A8 | 0x142871C08 (.rdata) | CRT init 0x1402F3753 | 结构 A（+0x60 校验 ^0x56B6352C）|
 | 0x145AD62B0 | 0x1422DF4F8 (.rdata) | CRT init 0x1402F3761 | 版本描述（+4=7 → 0x145AD6350）|

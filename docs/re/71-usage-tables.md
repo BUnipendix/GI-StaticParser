@@ -57,14 +57,16 @@ kind 语义（与 il2cpp 一致的 3 位分类）：1=Il2CppType，3=MethodInfo�
 - `script.json` 新增（全 PASS，final_verify.py 断言）：
   - `ScriptString` **137,466** 条（kind5；Value=解密字面量，逐条 ∈ literals.json 值集，max len 837）；
   - `ScriptMetadataMethod` **84,875** 条（kind3；Name=`Method$<类型>.<方法>()`，MethodAddress=方法 RVA；977 条无代码指针故为 0）；
-  - `Addresses` 仍为 **460,313**（方法指针数组；Il2CppDumper 还会并入 genericMethodPointers/invokerPointers，
-    7.1 这两张数组静态未定位，留待后续）。
+  - `Addresses` = **483,496**（参考语义的合并：460,313 方法指针 + 12,827 genericMethodPointers + 25,651 invokerPointers，
+    排序去重；数组锚点 = codeRegistration `0x1422DF450` 的 +0x08 / +0x78，计数分别由 hdr[0x110]/hdr[0x74] 行数
+    与 hdr[0x200] 表最大值+1 推导，见 `src/code_addresses.rs`；reversePInvokeWrappers / unresolvedVirtualCallPointers
+    两张数组尚未定位，已在运行时日志中显式报告）。
 - **`Address` 字段写 0**：Il2CppDumper 的 "usage slot 地址" 在 GI 7.1 不存在——生成代码以立即数 usage 索引调用
   `0x140524250`，解析结果缓存在运行时解码的 registration 数组；exe 内搜不到编码 token（已实测）。
   这是与参考实现的语义偏差，`script_json.rs` 与本节均已标注；payload 字段是精确的。
 - 未接线：kind6 185,864（MethodRef，需 methodSpecs）、kind1 376,243（Il2CppType → `ScriptMetadata "_var"`）、
   kind7 2,564、kind4 1,035。下一步继续。
-- 对比：script.json 160,118,677 → **176,561,152 B**；dump.cs / DummyDll / dummy.jsonl 均未变。
+- 对比：script.json 160,118,677 → **176,764,249 B**；dump.cs / DummyDll / dummy.jsonl 均未变。
 
 ## 4. 属性参数：确证为"运行时不需要"
 

@@ -14,7 +14,7 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser('~/gire/out/71')
 
 EXPECT_SIZE = {
     'dump.cs': 127_953_647,
-    'script.json': 176_561_152,
+    'script.json': 176_764_249,
     'attributes.json': 10_025_050,
     'literals.json': 6_287_449,
     'images.json': 14_326,
@@ -53,15 +53,19 @@ check('dump.cs methods', methods == 733_442, str(methods))
 check('dump.cs properties', props == 115_596, str(props))
 
 # --- script.json metadata-usage arrays (R20; docs/re/71-usage-tables.md) ---
-script_strings = script_meta = 0
+script_strings = script_meta = script_addresses = 0
 with open(os.path.join(OUT, 'script.json'), encoding='utf-8', errors='replace') as f:
     for ln in f:
         if '"Value":' in ln:
             script_strings += 1
         elif '"MethodAddress":' in ln:
             script_meta += 1
+        elif '"Addresses":' in ln:
+            body = ln.split('[', 1)[1].strip()
+            script_addresses = 0 if body.startswith(']') else body.count(',') + 1
 check('script.json ScriptString', script_strings == 137_466, str(script_strings))
 check('script.json ScriptMetadataMethod', script_meta == 84_875, str(script_meta))
+check('script.json Addresses', script_addresses == 483_496, str(script_addresses))
 
 # --- dummy.jsonl record counts ---
 counts = {k: 0 for k in EXPECT_DUMMY}

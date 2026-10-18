@@ -1386,15 +1386,13 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
         writeln!(w, "}}")?;
     }
 
-    // Addresses: sorted unique method-pointer RVAs (the reference additionally merges
-    // genericMethodPointers / invokerPointers / customAttributeGenerators, which 7.1 does not
-    // expose statically).
-    let mut addresses: Vec<u64> = (0..m.methodptrs_len)
-        .map(|i| m.method_rva(i) as u64)
-        .filter(|r| *r != 0)
-        .collect();
-    addresses.sort_unstable();
-    addresses.dedup();
+    // Addresses: the reference merge (method pointers + genericMethodPointers + invokerPointers,
+    // sorted/deduped). See src/code_addresses.rs for the array anchors and count derivations.
+    let (addresses, addr_stats) = crate::code_addresses::collect(m);
+    eprintln!(
+        "[info] Addresses: {} unique ({} method pointers + {} generic + {} invoker); reference also merges reversePInvokeWrappers / unresolvedVirtualCallPointers, not located for 7.1",
+        addr_stats.unique, addr_stats.method_ptrs, addr_stats.generic_ptrs, addr_stats.invoker_ptrs
+    );
     crate::script_json::write_json(
         wj,
         &script_methods,
