@@ -5753,3 +5753,13 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
    return_type 0↔4；字段 name/type 4↔0；属性 setter 6↔4）；6.7 多事件表（stride 14）与更长掩码链；
    typearr 位置/条数不同（662,534 vs 633,862）。
 3. 结论：结构可跨版继承、常数必须每版重导；差异报告作为下一版推导 checklist。
+
+## 132. R61 6.4 slot 0x1FC 作为方法表的假设被否定（2026-10-18）
+
+三组独立数据检验全部失败：
+1. paramStart 链扫描（start_off 0..22 x 族 xor/sub/add；count_off 0..24 x 族；A_i+C_i==A_{i+1}
+   在 600 行上检验）最高命中率 2.33%，无链关系；
+2. 名字解码：从解码堆取 80 个 ".ctor" 候选偏移，4 种公式族反解常数，前 200 方法标识符名字最多 7 个；
+3. flags 合理性：(raw16[row+0x16]+2)^mask16 的 static 位占 22.1%（6.7 为 11.8%），分布可疑。
+结论：slot 0x1FC 不是 6.4 方法表（或类初始化用法与方法行无关）。6.4 方法/参数继续
+CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反查真实表，或借字段/属性构建器旁路。

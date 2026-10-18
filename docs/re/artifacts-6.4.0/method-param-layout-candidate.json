@@ -1,7 +1,7 @@
 {
  "artifact": "method-param-layout-candidate",
  "artifact_version": 0,
- "status": "CANDIDATE - NOT VALIDATED",
+ "status": "CANDIDATE - NOT VALIDATED (hypothesis 0x1FC-as-method-table rejected)",
  "version": "6.4.0",
  "provenance": {
   "method": "shape-transfer seed 6.7 method metadata decoder -> 6.4 sites; best hit fn 0x140479C80, then its cipher-caller fn 0x14048D770 was disassembled (this is the 6.4 param/default-value decoder)",
@@ -92,5 +92,22 @@
   "function": "0x140479C80",
   "detail": "loop start = dword[typeDefish_ptr + 0x1C] + 0x8A76E6C5; row = method_base + 26*index; mask = (index*0x11D36B90D36A8EDD + 0x68C1F6C86562CBFC)>>0x13; then paramCount read as word at row+0x16 (NOT byte +0x18)",
   "status": "row index domain is the encoded one used by the class initialiser; decoding with a linear global method index yields implausible counts (22/85/88...), so the mapping from global method index to this encoded index is still unresolved"
+ },
+ "hypothesis_tests": {
+  "flags_plausibility": {
+   "formula": "(raw16[row+0x16]+2)^mask16, bit 0x10",
+   "static_fraction": 0.2208,
+   "verdict": "suspicious (6.7 is 11.8%); not sufficient"
+  },
+  "paramStart_chain_scan": {
+   "method": "brute-force (start_off 0..22 x family xor/sub/add) x (count_off 0..24 x family) using A_i + C_i == A_{i+1} on 600 rows with the 0x1FC base/mask",
+   "best_ratio": 0.0233,
+   "verdict": "no chain relation found; base/mask assumption rejected"
+  },
+  "name_plaintext": {
+   "method": ".ctor plaintext: 80 candidate .ctor offsets from the decoded heap, 4 formula families (xorC / addCsub / addC_xor / xorThenAdd), identifier count over 200 rows",
+   "best_ids": 7,
+   "verdict": "name formula rejected for this base/mask"
+  }
  }
 }
