@@ -5698,3 +5698,13 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
    掩码链、列常数、索引语义、类型分类到负结果），含方法、验证数字、出处小节、JSON 路径与复现命令。
 4. 记录审计：逐常数 grep docs/re/generalize-method.md、IMPLEMENTATION_LOG.md、MEMORY.md——除本轮新
    发现的 0xE9FF5F7F 外全部已有记录；已补入并建立索引，常数清单唯一入口 = constants-index.md。
+
+## 127. R56 6.7 端到端验证：与 7.1 dump 逐类型对照全绿（2026-10-18）
+
+1. dump67_partial.py 升级：CLASS/VALUETYPE 解析真实类型名、PTR/SZARRAY/ARRAY 递归、byref 加 &，
+   追加 Properties（名字/类型/get-set）与 Events（名字/类型）；清单仍 83,775 类型/413,644 字段/
+   687,467 方法。
+2. 与 7.1 dump.cs corelib 前 60 类型逐项对照：字段类型 281/281=100%；方法返回类型 425/425=100%；
+   方法参数类型 587/587=100%；属性类型 52/54=96.3%（残余 2 个泛型占位）。
+3. 结论：6.7 的 typeDef/方法/参数/字段/属性/事件在 corelib 上与相邻版本 oracle 完全对齐；
+   6.7 profile 除「属性 +6 列、字段 attrs、泛型实例表、flags 完整语义」外已闭环。
