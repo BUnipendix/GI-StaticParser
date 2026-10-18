@@ -828,6 +828,18 @@ pub fn printable_run(
     n
 }
 
+/// Pick the length-byte key that explains the most rows: non-empty rows whose
+/// length fits the printable run, plus rows that decode to the EMPTY string
+/// (length zero). The non-empty count must reach a floor so that a column whose
+/// raw values are all identical cannot pass via the empty interpretation alone.
+fn select_len_key(votes: &[u16], empties: &[u16]) -> Option<(usize, u16)> {
+    (0..256usize)
+        .filter(|&h| votes[h] as usize >= 8)
+        .max_by_key(|&h| (votes[h] as u32 + empties[h] as u32) * 1024 + votes[h] as u32)
+        .map(|h| (h, votes[h]))
+}
+
+
 /// Find every column of the row table at `(base, stride)` that behaves like a string
 /// index column under an XOR transform (`idx = raw ^ c`).
 ///
@@ -847,9 +859,6 @@ pub fn find_xor_string_columns(
         return Vec::new();
     }
     let pf = PrintableFirstByte::build(body, strsec, sched);
-    let sample: Vec<usize> = (0..STRING_SAMPLE_ROWS)
-        .map(|k| (k * rows / STRING_SAMPLE_ROWS).min(rows - 1))
-        .collect();
     let verify: Vec<usize> = (0..STRING_VERIFY_ROWS)
         .map(|k| (k * rows / STRING_VERIFY_ROWS).min(rows - 1))
         .collect();
@@ -857,11 +866,22 @@ pub fn find_xor_string_columns(
     let mut acc = vec![0u64; IDX_WORDS];
     let mut tmp = vec![0u64; IDX_WORDS];
     for off in 0..stride.saturating_sub(3) {
+        // Sample rows with DISTINCT raw values for THIS column. A plain strided
+        // sample is dominated by the sentinel raw (the empty-namespace entry repeats
+        // on ~25% of typeDefs) and identical raws add no constraint to the
+        // constant-pinning intersection -- the namespace column then survives with
+        // thousands of candidates. Distinct raws make every sampled row informative.
         let mut us: Vec<u32> = Vec::with_capacity(STRING_SAMPLE_ROWS);
-        for &r in &sample {
-            match u32_at_row(body, base, stride, r, off) {
-                Some(v) => us.push(v),
-                None => break,
+        {
+            let mut seen_u = std::collections::HashSet::new();
+            for r in 0..rows {
+                let Some(v) = u32_at_row(body, base, stride, r, off) else { continue };
+                if seen_u.insert(v) {
+                    us.push(v);
+                    if us.len() == STRING_SAMPLE_ROWS {
+                        break;
+                    }
+                }
             }
         }
         if us.len() < STRING_SAMPLE_ROWS {
@@ -891,19 +911,19 @@ pub fn find_xor_string_columns(
         // offset is `(raw ^ l) & 0xFFFFFF` -- the two halves are independent.
         for l in cands {
             let mut votes = vec![0u16; 256];
+            let mut empties = vec![0u16; 256];
             let mut tested = 0usize;
             for &r in &verify {
                 let Some(u) = u32_at_row(body, base, stride, r, off) else { continue };
                 tested += 1;
                 let o = ((u ^ l) & IDX_MASK) as usize;
                 let run = printable_run(body, strsec, sched, o, 255) as u32;
-                if run == 0 {
-                    continue;
-                }
                 let m = (u >> 24) & 0xFF;
                 for h in 0..256u32 {
                     let len = (m ^ h) & 0xFF;
-                    if len >= 1 && len <= run {
+                    if len == 0 {
+                        empties[h as usize] += 1;
+                    } else if run > 0 && len <= run {
                         votes[h as usize] += 1;
                     }
                 }
@@ -911,10 +931,20 @@ pub fn find_xor_string_columns(
             if tested == 0 {
                 continue;
             }
-            if let Some((h, &v)) = votes.iter().enumerate().max_by_key(|(_, &v)| v) {
-                if v as usize * 100 >= tested * STRING_ACCEPT_PCT {
+            if let Some((h, v)) = select_len_key(&votes, &empties) {
+                // Second pass: an EMPTY name (len == 0) is well-formed too -- most
+                // obfuscated types have no namespace, so the namespace column is
+                // rejected by the non-empty-only rule. The trivial h = m solution
+                // yields len == 0 on every row, so it is excluded by also requiring
+                // the non-empty half (v) to pass; a real namespace column keeps a
+                // large non-empty majority (classes in System/Mono/UnityEngine/...).
+                let ok = v as usize;
+                let empty = empties[h] as usize;
+                let non_empty_min = 8usize;
+                if ok >= non_empty_min && (ok + empty) * 100 >= tested * STRING_ACCEPT_PCT {
                     out.push(StringColumn {
                         off,
+                        transform: StringTransform::Xor,
                         c: ((h as u32) << 24) | l,
                         rows_ok: v as usize,
                         rows_tested: tested,
@@ -929,11 +959,27 @@ pub fn find_xor_string_columns(
     out
 }
 
-/// A table column that decodes to a string index by adding a per-build constant.
+/// Transform family of a string-index column.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum StringTransform {
+    Add,
+    Xor,
+}
+
+fn default_string_transform() -> StringTransform {
+    StringTransform::Add
+}
+
+/// A table column that decodes to a string index with a per-build constant.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StringColumn {
     pub off: u32,
-    /// `idx = raw.wrapping_add(c)`
+    /// Transform family: `idx = raw + c` (Add) or `idx = raw ^ c` (Xor).
+    /// Carried explicitly because the two finders run in sequence and the raw
+    /// constant alone cannot tell the caller which family produced it.
+    #[serde(default = "default_string_transform")]
+    pub transform: StringTransform,
+    /// The per-column transform constant.
     pub c: u32,
     /// Sample rows that decoded to a well-formed string.
     pub rows_ok: usize,
@@ -973,9 +1019,6 @@ pub fn find_additive_string_columns(
         return Vec::new();
     }
     let pf = PrintableFirstByte::build(body, strsec, sched);
-    let sample: Vec<usize> = (0..STRING_SAMPLE_ROWS)
-        .map(|k| (k * rows / STRING_SAMPLE_ROWS).min(rows - 1))
-        .collect();
     let verify: Vec<usize> = (0..STRING_VERIFY_ROWS)
         .map(|k| (k * rows / STRING_VERIFY_ROWS).min(rows - 1))
         .collect();
@@ -983,11 +1026,22 @@ pub fn find_additive_string_columns(
     let mut acc = vec![0u64; IDX_WORDS];
     let mut tmp = vec![0u64; IDX_WORDS];
     for off in 0..stride.saturating_sub(3) {
+        // Sample rows with DISTINCT raw values for THIS column. A plain strided
+        // sample is dominated by the sentinel raw (the empty-namespace entry repeats
+        // on ~25% of typeDefs) and identical raws add no constraint to the
+        // constant-pinning intersection -- the namespace column then survives with
+        // thousands of candidates. Distinct raws make every sampled row informative.
         let mut us: Vec<u32> = Vec::with_capacity(STRING_SAMPLE_ROWS);
-        for &r in &sample {
-            match u32_at_row(body, base, stride, r, off) {
-                Some(v) => us.push(v),
-                None => break,
+        {
+            let mut seen_u = std::collections::HashSet::new();
+            for r in 0..rows {
+                let Some(v) = u32_at_row(body, base, stride, r, off) else { continue };
+                if seen_u.insert(v) {
+                    us.push(v);
+                    if us.len() == STRING_SAMPLE_ROWS {
+                        break;
+                    }
+                }
             }
         }
         if us.len() < STRING_SAMPLE_ROWS {
@@ -1018,6 +1072,7 @@ pub fn find_additive_string_columns(
         // in the denominator.
         for l in cands {
             let mut votes = vec![0u16; 256];
+            let mut empties = vec![0u16; 256];
             let mut tested = 0usize;
             for &r in &verify {
                 let Some(u) = u32_at_row(body, base, stride, r, off) else { continue };
@@ -1025,13 +1080,12 @@ pub fn find_additive_string_columns(
                 let w = u.wrapping_add(l);
                 let o = (w & IDX_MASK) as usize;
                 let run = printable_run(body, strsec, sched, o, 255) as u32;
-                if run == 0 {
-                    continue;
-                }
                 let m = (w >> 24) & 0xFF;
                 for h in 0..256u32 {
-                    let len = (m + h) & 0xFF;
-                    if len >= 1 && len <= run {
+                    let len = m.wrapping_add(h) & 0xFF;
+                    if len == 0 {
+                        empties[h as usize] += 1;
+                    } else if run > 0 && len <= run {
                         votes[h as usize] += 1;
                     }
                 }
@@ -1039,13 +1093,17 @@ pub fn find_additive_string_columns(
             if tested == 0 {
                 continue;
             }
-            if let Some((h, &v)) = votes.iter().enumerate().max_by_key(|(_, &v)| v) {
+            if let Some((h, v)) = select_len_key(&votes, &empties) {
                 if std::env::var("MHY_DEBUG").is_ok() {
                     eprintln!("[dbg] strcol off=0x{off:X} l=0x{l:06X} h=0x{h:02X} ok={v}/{tested}");
                 }
-                if v as usize * 100 >= tested * STRING_ACCEPT_PCT {
+                let ok = v as usize;
+                let empty = empties[h] as usize;
+                let non_empty_min = 8usize;
+                if ok >= non_empty_min && (ok + empty) * 100 >= tested * STRING_ACCEPT_PCT {
                     out.push(StringColumn {
                         off,
+                        transform: StringTransform::Add,
                         c: ((h as u32) << 24) | l,
                         rows_ok: v as usize,
                         rows_tested: tested,

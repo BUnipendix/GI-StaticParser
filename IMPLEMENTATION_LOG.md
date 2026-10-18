@@ -5275,3 +5275,38 @@ property/event）、AttributeAttribute（无法还原的属性实例；RVA/Offse
    先在 7.0 闭环）；
    L4b 数据自解兜底（colsolve 需换成 schedule 密码）；.upx0 常数（flags/bitfield）；4.8 形态差异；
    4.2.0 头定位。
+
+## 99. R28 数据自解 typeDef 行布局：name/ns/fs/fc/ms/mc（2026-10-18）
+
+R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移，改为纯数据求解，并用 oracle 验证。
+
+1. Rust 改进（src/derive/tables.rs + src/main.rs）：
+   - StringColumn 新增 transform family（Add/Xor），JSON 与 CLI 都输出；此前只有常数 c，
+     同一列两种族都可能、调用方无法判断（7.0/6.7 名字列是 XOR，6.4/6.0/5.4 是 ADD）。
+   - tables 子命令同时运行 additive 与 xor 两个列搜索器（旧逻辑先 additive、非空就不再试 XOR，
+     会漏掉另一种族的列）。
+   - 字符串列采样改为“按列去重 raw”：空 namespace 的哨兵 raw 在 typeDef 上重复约 25%，
+     旧采样 24 行几乎同值，常数交集不收敛（7.1 namespace 列 survivor 数万）。
+   - 允许 len==0 的空名为合法，并在选择长度键 h 时计入空名投票；同时要求非空行 >= 8，
+     排除 h = m 的平凡解。修正前 7.1 namespace 的 h 会被错选成 0x6F 而整列被拒。
+2. 结果（mhydump tables --base 类型表基址，全表解码）：
+   7.0.0 name 0x10 Xor 0x616B619D / ns 0x18 Xor 0x7351490A / fs 0x00 Add 0x20749BC2 /
+   fc 0x32 Xor 0x6B9B / ms 0x20 Add 0x33AB5AF8 / mc 0x3C Xor 0x37E5；
+   6.7.0 name 0x18 Xor 0x17FB1577 / ns 0x2C Xor 0x4AAC4BAB / fs 0x14 Xor 0x1D37F888 /
+   fc 0x38 Xor 0xEB4C / ms 0x0C Xor 0x4DFA3BEC / mc 0x30 Xor 0x8EED；
+   6.4.0 name 0x18 Add 0xE169AC15 / ns 0x20 Xor 0x468CB988 / fs 0x3E Xor 0x6FE9B568 /
+   fc 0x78 Xor 0xD846 / ms 0x14 Add 0x7589193B / mc 0x28 Xor 0xE8D4；
+   6.0.0 name 0x08 Add 0x85A69E32 / ns 0x0C Add 0x9FA88537 / fs 0x04 Add 0x6635464F /
+   fc 0x28 Xor 0x787B / ms 0x14 Add 0x0BA968F3 / mc 0x32 Xor 0x1D76；
+   5.4.0 name 0x3E Add 0xD13BCB2F / ns 0x42 Add 0xA1316236 / fs 0x08 Xor 0x5CB2D477 /
+   fc 0x1A Xor 0xED8D / ms 0x36 Xor 0x6C8996BE / mc 0x56 Xor 0xF755；
+   7.1.0 name 0x14 Add 0xE811F779 / ns 0x18 Xor 0x666769B5（与 profile 逐位一致）。
+   行数：7.0 86,932 / 6.7 83,775 / 6.4 77,262 / 6.0 59,631 / 5.4 58,938；字段行 430,288 / 413,630 /
+   384,410 / 304,855 / 285,057；方法行 713,953 / 687,452 / 631,104 / 475,153 / 515,379。
+3. 验证：6.4 名字全表 77,232 条解码、99.94% 合法标识符；namespace 376 个 vs 6.4Dump.cs 377 个
+   （Jaccard 0.9973）；6.4 方法行 631,104 vs md_size/26=631,108（差 4 行 padding）；类型行 77,262-2=77,260
+   与 6.4Dump.cs 逐行统计完全一致。6 个版本解出的 namespace 样本集完全一致（含同一混淆 GUID）。
+4. 影响：typeDef 行布局（name/ns/fs/fc/ms/mc + 行数）已不依赖代码迁移；L4a 模板迁移只剩其余表
+   （方法/字段/参数/属性/事件/泛型）与 .upx0 常量（flags/bitfield）。
+5. 验证命令：cargo test --release = 18 passed / 13 ignored；tools/version-triage/loadsites.py +
+   shape_transfer.py 供表基址迁移；docs/re/generalize-method.md §3.2b 记录方法+表格。

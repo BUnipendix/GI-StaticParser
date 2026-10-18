@@ -366,16 +366,19 @@ fn tables_cmd(exe: &str, metadata: &str, base: Option<u64>, json: bool) -> Resul
     let mut col_table: Option<usize> = None;
     if let Some(c) = build.as_ref().and_then(|b| b.cipher.as_ref()) {
         for (i, t) in found.iter().enumerate() {
+            // Run BOTH families and keep both results: the name column and the
+            // namespace column can use different families in the same build (and
+            // the families flip between builds), so a first-hit-wins search loses
+            // one of them. Downstream decoders pick the semantically correct one.
             let mut cand = static_mhy_dumper::derive::tables::find_additive_string_columns(
                 body, c.strsec as usize, &c.schedule, t.base, t.stride, t.rows,
             );
-            if cand.is_empty() {
-                // The two families flip together: 7.0.0 has an ADD index column and an
-                // XOR name column, the opposite of 7.1.0. Try both before giving up.
-                cand = static_mhy_dumper::derive::tables::find_xor_string_columns(
-                    body, c.strsec as usize, &c.schedule, t.base, t.stride, t.rows,
-                );
-            }
+            cand.extend(static_mhy_dumper::derive::tables::find_xor_string_columns(
+                body, c.strsec as usize, &c.schedule, t.base, t.stride, t.rows,
+            ));
+            cand.sort_by(|a, b| b.rows_ok.cmp(&a.rows_ok));
+            let mut seen = std::collections::HashSet::new();
+            cand.retain(|c| seen.insert((c.off, c.transform)));
             if !cand.is_empty() {
                 cols = cand;
                 col_table = Some(i);
@@ -413,7 +416,14 @@ fn tables_cmd(exe: &str, metadata: &str, base: Option<u64>, json: bool) -> Resul
             None => println!("string-index columns:"),
         }
         for c in &cols {
-            println!("  col_off=0x{:02X}  +0x{:08X}  ok {}/{}", c.off, c.c, c.rows_ok, c.rows_tested);
+            let sym = match c.transform {
+                static_mhy_dumper::derive::tables::StringTransform::Add => "+",
+                static_mhy_dumper::derive::tables::StringTransform::Xor => "^",
+            };
+            println!(
+                "  col_off=0x{:02X}  {sym}0x{:08X}  ok {}/{}",
+                c.off, c.c, c.rows_ok, c.rows_tested
+            );
         }
     }
     Ok(())
