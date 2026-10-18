@@ -5650,3 +5650,13 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
    remove=(raw16[0xA]^mask16)^0xC0EE；add=(raw16[0xC]+0x5B99)^mask16，0xFFFF=无。
 4. 属性表仍未定位：6.7 属性行也大概率 14 字节，但属另一组常数/构建器；事件/属性构建器指纹相似，
    下一轮用行数区分后重新匹配。
+
+## 123. R52 6.7.0 字段表 name 列（2026-10-18）
+
+1. 7.0 字段名访问器 0x1404EDB50 载入点指纹在 6.7 匹配到 0x1404C7EAF（函数 0x1404C7E10，
+   jaccard 0.2581）；反汇编读出布局：base=hdr[0xC]+0xD34ADB03（0xC4C0B8）、stride 8、
+   rows 413,644；行掩码=(i*0x1BB4F2A67161+0x251BA412D3BC6)>>18；
+   name=cipher_dec(((raw32[0]^0x70F1D209)+extra)&32)，extra=((((mask+0x2C7618B2)&32)^0x14BDA7A6)*0xC9B392C3)&32。
+2. 全表验收 413,644 行：412,658 个标识符（99.76%）、200 哨兵、786 其它；前 8 个字段名
+   value×6/default_vtable/xdomain_vtable，与 7.0 一致。
+3. 新增 docs/re/artifacts-6.7.0/field-name-layout.json；字段 type/attrs 列尚未解。

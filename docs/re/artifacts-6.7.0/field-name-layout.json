@@ -1,0 +1,47 @@
+{
+  "artifact": "field-name-layout",
+  "artifact_version": 1,
+  "version": "6.7.0",
+  "provenance": {
+    "method": "shape transfer of the 7.0 field-name accessor load site 0x1404EDBE5 -> 6.7 0x1404C7EAF (jaccard 0.2581), then code reading",
+    "function": "0x1404C7E10"
+  },
+  "table": {
+    "slot": "0xC",
+    "op": "add",
+    "imm": "0xD34ADB03"
+  },
+  "stride": 8,
+  "rows": 413644,
+  "mask": {
+    "mul1": "0x1BB4F2A67161",
+    "add1": "0x251BA412D3BC6",
+    "shr": 18,
+    "extra_add": "0x2C7618B2",
+    "extra_xor": "0x14BDA7A6",
+    "extra_mul": "0xC9B392C3"
+  },
+  "columns": {
+    "name": {
+      "off": 0,
+      "formula": "m = ((i*0x1BB4F2A67161 + 0x251BA412D3BC6) >> 18) & 0xFFFFFFFF; extra = ((((m + 0x2C7618B2) & 0xFFFFFFFF) ^ 0x14BDA7A6) * 0xC9B392C3) & 0xFFFFFFFF; name = cipher_dec(((raw32 ^ 0x70F1D209) + extra) & 0xFFFFFFFF)"
+    }
+  },
+  "validation": {
+    "rows": 413644,
+    "name_identifiers": 412658,
+    "name_none": 200,
+    "name_other": 786,
+    "first_names": [
+      "value",
+      "value",
+      "value",
+      "value",
+      "value",
+      "value",
+      "default_vtable",
+      "xdomain_vtable"
+    ]
+  },
+  "notes": "The type column and attrs are not decoded yet. Field rows are 8 bytes with the name column at +0."
+}
