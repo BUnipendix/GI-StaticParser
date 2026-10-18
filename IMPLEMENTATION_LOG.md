@@ -5624,3 +5624,15 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
    与 7.0 分布一致。
 3. 新增 docs/re/artifacts-6.7.0/typearr.json；method-param-layout.json 增加 return_type 列；
    decode_params.py 可打印 6.7 方法签名（GetText -> String、GetTypeFromClass -> IntPtr 等）。
+
+## 121. R50 6.7.0 属性表：构建器定位，布局未定案（2026-10-18）
+
+1. 7.0 属性构建器 0x1404E6180 的载入点指纹在 6.7 匹配到 0x1404C07E9（所属函数 0x1404C0020，
+   jaccard 0.2421）。反汇编得到候选：base = hdr[0x140]+0xB8765480（0x389AFCC）、stride 14、
+   行掩码 = (idx*0xFDA4FDC7922E20A0 + 0x52ED0039DCB14F2E) & 0xFFFFFFFF；列候选 +0 type
+   (raw+0xE2CC29CA)^mask、+4 name (raw+0xA16DD35B)^mask、+8/+0xA/+0xC 访问器（0xC054/0xC0EE/0x5B99）。
+2. 数据验收不通过：108,747 行里只有 1,406 个名字能解出标识符（前 617 行连续正确：
+   KeyGenerated/AssemblyLoad/ProcessDomain/Completed…），其余 packed index 无效 ⇒ 行掩码用的
+   索引不是线性全局属性索引（可能是局部/编码起点），或表长/列语义与 7.0 不同。
+3. 本轮只记录构建器与候选常数，不把 6.7 属性表当作已解；下一步彻底读清循环起点
+   (u16 + 0xFFFFFD33 与 r14b) 的含义。
