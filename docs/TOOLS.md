@@ -127,3 +127,5 @@
 - [2026-10-18] DummyDll 属性表：dump-gen --dummy-out 的新 P 记录（name/get/set）由 tools/dummygen 生成 Property + PropertyMap + MethodSemantics；7.1 实测 Property 115,596 / PropertyMap 30,226 / MethodSemantics 132,014，DummyDll.dll 96,367,616 B。独立校验：SRM 程序读回 DateTimeFormatInfo 属性与 accessor 正确（日志 §84）。
 
 - [2026-10-18] 事件表（eventDefs）：hdr[0x64]+0xE6130C67、stride 14、mask 含 64-bit 乘数；typeDef eventStart=u16@0x38+0xFFFFD6AB、eventCount=u8@0x44^0xB5。7.1 解出 628 行/225 类型，已接入 DummyDll（Event 628 / EventMap 225 / MethodSemantics 总计 133,270）。证据/公式：IMPLEMENTATION_LOG §85、metadata-loading-flow §4b；dump.cs 按 Il2CppDumper 参考格式不含 Events 段。
+
+- [2026-10-18] DummyDll v4：5 个标记类型（Address/Attribute/FieldOffset/MetadataOffset/Token，与 bundled Il2CppDummyDll 一致）+ TokenAttribute 1,378,740 + 属性实例 70,692（AttributeAttribute 标记）；修复 ParamList 游标与 Parameter.SequenceNumber 两处旧 bug。DummyDll.dll 145,609,728 B，customAttrs 2,491,027。证据/验证：IMPLEMENTATION_LOG §86。

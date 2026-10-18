@@ -36,13 +36,23 @@ public sealed class MethodRec
 public sealed class PropRec
 {
     public string Name = "";
+    public int Row;
     public int Get = -1;
     public int Set = -1;
+}
+
+public sealed class AttrRec
+{
+    public uint Token;
+    public int Tdi;
+    public string Name = "";
+    public int Ctor = -1;
 }
 
 public sealed class EventRec
 {
     public string Name = "";
+    public int Row;
     public string Type = "obj";
     public int Add = -1;
     public int Remove = -1;
@@ -75,16 +85,17 @@ public static class Program
         }
         string input = args[0];
         string output = args[1];
-        var types = Load(input);
-        Console.WriteLine($"loaded {types.Count} types, {types.Sum(t => t.Fields.Count)} fields, {types.Sum(t => t.Methods.Count)} methods, {types.Sum(t => t.Props.Count)} properties, {types.Sum(t => t.Events.Count)} events");
-        Emit(types, output);
-        Verify(output, types);
+        var types = Load(input, out var attrs);
+        Console.WriteLine($"loaded {types.Count} types, {types.Sum(t => t.Fields.Count)} fields, {types.Sum(t => t.Methods.Count)} methods, {types.Sum(t => t.Props.Count)} properties, {types.Sum(t => t.Events.Count)} events, {attrs.Count} attribute instances");
+        int emittedAttrs = Emit(types, attrs, output);
+        Verify(output, types, attrs, emittedAttrs);
         return 0;
     }
 
-    static List<TypeRec> Load(string path)
+    static List<TypeRec> Load(string path, out List<AttrRec> attrs)
     {
         var types = new List<TypeRec>();
+        attrs = new List<AttrRec>();
         TypeRec? cur = null;
         using var reader = new StreamReader(path);
         string? line;
@@ -145,14 +156,25 @@ public static class Program
                     cur!.Props.Add(new PropRec
                     {
                         Name = r.GetProperty("name").GetString() ?? "",
+                        Row = r.GetProperty("row").GetInt32(),
                         Get = r.GetProperty("get").GetInt32(),
                         Set = r.GetProperty("set").GetInt32(),
+                    });
+                    break;
+                case "A":
+                    attrs.Add(new AttrRec
+                    {
+                        Token = r.GetProperty("tok").GetUInt32(),
+                        Tdi = r.GetProperty("tdi").GetInt32(),
+                        Name = r.GetProperty("name").GetString() ?? "",
+                        Ctor = r.GetProperty("ctor").GetInt32(),
                     });
                     break;
                 case "E":
                     cur!.Events.Add(new EventRec
                     {
                         Name = r.GetProperty("name").GetString() ?? "",
+                        Row = r.GetProperty("row").GetInt32(),
                         Type = r.TryGetProperty("type", out var ety) && ety.ValueKind == JsonValueKind.String
                             ? (ety.GetString() ?? "obj") : "obj",
                         Add = r.GetProperty("add").GetInt32(),
@@ -168,7 +190,7 @@ public static class Program
         return types;
     }
 
-    static void Emit(List<TypeRec> types, string output)
+    static int Emit(List<TypeRec> types, List<AttrRec> attrs, string output)
     {
         var mb = new MetadataBuilder();
         // module + assembly
@@ -192,8 +214,11 @@ public static class Program
         var vtHandle = vtId >= 0 ? MetadataTokens.TypeDefinitionHandle(vtId + 1) : default;
         var enumHandle = enumId >= 0 ? MetadataTokens.TypeDefinitionHandle(enumId + 1) : default;
 
-        // precompute row counts per type
-        int fieldRows = 1, methodRows = 1, paramRows = 1;
+        // precompute row counts per type. `paramRows` is the MethodDef ParamList cursor (starts at
+        // row 1 and advances as params are emitted); the total is only needed for the marker
+        // attribute ctors, so keep it separate -- using one variable for both made every MethodDef
+        // point at ParamList=total+1 (no method owned its parameters).
+        int fieldRows = 1, methodRows = 1, paramRows = 1, paramTotal = 1;
         var fieldStart = new int[types.Count + 1];
         var methodStart = new int[types.Count + 1];
         for (int i = 0; i < types.Count; i++)
@@ -202,7 +227,7 @@ public static class Program
             methodStart[i] = methodRows;
             fieldRows += types[i].Fields.Count;
             methodRows += types[i].Methods.Count;
-            foreach (var m in types[i].Methods) paramRows += m.Params.Count;
+            foreach (var m in types[i].Methods) paramTotal += m.Params.Count;
         }
         fieldStart[types.Count] = fieldRows;
         methodStart[types.Count] = methodRows;
@@ -358,9 +383,9 @@ public static class Program
                 methodHandles[gmiCursor++] = mb.AddMethodDefinition(ma, impl, mb.GetOrAddString(me.Name),
                     mb.GetOrAddBlob(sigBlob!), bodyOffset,
                     MetadataTokens.ParameterHandle(paramRows));
-                foreach (var p in me.Params)
+                for (int k = 0; k < me.Params.Count; k++)
                 {
-                    mb.AddParameter(0, mb.GetOrAddString(p.Name), paramRows == 0 ? 1 : 1);
+                    mb.AddParameter(0, mb.GetOrAddString(me.Params[k].Name), k + 1);
                     paramRows++;
                 }
             }
@@ -480,8 +505,22 @@ public static class Program
         EntityHandle attrBaseHandle = attrBaseId >= 0
             ? MetadataTokens.TypeDefinitionHandle(attrBaseId + 1) : objHandle;
         var attrCtors = new List<MethodDefinitionHandle>();
-        var attrFieldNames = new[] { new[] { "RVA", "Offset", "VA", "Slot" }, new[] { "Offset" } };
-        var attrTypeNames = new[] { "AddressAttribute", "FieldOffsetAttribute" };
+        // Same five marker types (and field layouts) as the bundled Il2CppDummyDll.dll:
+        // AddressAttribute(RVA/Offset/VA/Slot), AttributeAttribute(Name/RVA/Offset),
+        // FieldOffsetAttribute(Offset), MetadataOffsetAttribute(Offset), TokenAttribute(Token).
+        var attrFieldNames = new[]
+        {
+            new[] { "RVA", "Offset", "VA", "Slot" },
+            new[] { "Name", "RVA", "Offset" },
+            new[] { "Offset" },
+            new[] { "Offset" },
+            new[] { "Token" },
+        };
+        var attrTypeNames = new[]
+        {
+            "AddressAttribute", "AttributeAttribute", "FieldOffsetAttribute",
+            "MetadataOffsetAttribute", "TokenAttribute",
+        };
         for (int ai = 0; ai < attrTypeNames.Length; ai++)
         {
             int firstField = fieldRows;
@@ -510,7 +549,10 @@ public static class Program
             attrCtors.Add(ctor);
         }
         var addressCtor = attrCtors[0];
-        var fieldOffsetCtor = attrCtors[1];
+        var attributeCtor = attrCtors[1];
+        var fieldOffsetCtor = attrCtors[2];
+        var tokenCtor = attrCtors[4];
+        int customAttrCount = 0;
         static void WriteSerString(BlobBuilder bb, string value)
         {
             var bytes = System.Text.Encoding.UTF8.GetBytes(value);
@@ -548,6 +590,7 @@ public static class Program
                 var fh = MetadataTokens.FieldDefinitionHandle((int)(f.Token - 0x04000000));
                 mb.AddCustomAttribute(fh, fieldOffsetCtor,
                     NamedArgsBlob(new[] { ("Offset", "0x" + f.Offset.Value.ToString("X")) }));
+                customAttrCount++;
             }
             foreach (var me in t.Methods)
             {
@@ -561,8 +604,82 @@ public static class Program
                 args.Add(("VA", "0x" + (0x140000000UL + me.Rva).ToString("X")));
                 if (me.Slot is int sl && sl >= 0) args.Add(("Slot", sl.ToString()));
                 mb.AddCustomAttribute(mh, addressCtor, NamedArgsBlob(args.ToArray()));
+                customAttrCount++;
             }
         }
+
+        // ---- TokenAttribute on every row-bearing member (matches DummyDllAddToken=true) ----
+        foreach (var t in types)
+        {
+            var th = MetadataTokens.TypeDefinitionHandle(t.Id + 1);
+            mb.AddCustomAttribute(th, tokenCtor,
+                NamedArgsBlob(new[] { ("Token", "0x" + (0x02000001u + (uint)t.Id).ToString("X")) }));
+            customAttrCount++;
+            foreach (var f in t.Fields)
+            {
+                if (f.Token == 0) continue;
+                var fh = MetadataTokens.FieldDefinitionHandle((int)(f.Token - 0x04000000));
+                mb.AddCustomAttribute(fh, tokenCtor, NamedArgsBlob(new[] { ("Token", "0x" + f.Token.ToString("X")) }));
+                customAttrCount++;
+            }
+            foreach (var me in t.Methods)
+            {
+                if (me.Token == 0) continue;
+                var mh = MetadataTokens.MethodDefinitionHandle((int)(me.Token - 0x06000000));
+                mb.AddCustomAttribute(mh, tokenCtor, NamedArgsBlob(new[] { ("Token", "0x" + me.Token.ToString("X")) }));
+                customAttrCount++;
+            }
+            foreach (var p in t.Props)
+            {
+                var ph = MetadataTokens.PropertyDefinitionHandle(p.Row + 1);
+                uint tok = 0x17000001u + (uint)p.Row;
+                mb.AddCustomAttribute(ph, tokenCtor, NamedArgsBlob(new[] { ("Token", "0x" + tok.ToString("X")) }));
+                customAttrCount++;
+            }
+            foreach (var ev in t.Events)
+            {
+                var eh = MetadataTokens.EventDefinitionHandle(ev.Row + 1);
+                uint tok = 0x14000001u + (uint)ev.Row;
+                mb.AddCustomAttribute(eh, tokenCtor, NamedArgsBlob(new[] { ("Token", "0x" + tok.ToString("X")) }));
+                customAttrCount++;
+            }
+        }
+
+        // ---- Recovered custom attribute instances ----
+        // Restorable classes (exactly one method: a parameterless .ctor, the reference tool's rule)
+        // get the real CustomAttribute; the rest get an AttributeAttribute marker carrying the
+        // attribute class name (RVA/Offset omitted: they need runtime custom-attribute generators).
+        EntityHandle MemberHandle(uint token)
+        {
+            int kind = (int)(token >> 24);
+            int idx = (int)(token & 0xFFFFFF);
+            if (idx < 1) return default;
+            return kind switch
+            {
+                0x02 => idx <= types.Count ? MetadataTokens.TypeDefinitionHandle(idx) : default,
+                0x04 => MetadataTokens.FieldDefinitionHandle(idx),
+                0x06 => MetadataTokens.MethodDefinitionHandle(idx),
+                0x08 => MetadataTokens.ParameterHandle(idx),
+                0x17 => MetadataTokens.PropertyDefinitionHandle(idx),
+                _ => default,
+            };
+        }
+        var classAttrBlob = mb.GetOrAddBlob(new byte[] { 0x01, 0x00, 0x00, 0x00 });
+        foreach (var a in attrs)
+        {
+            var member = MemberHandle(a.Token);
+            if (member.IsNil) continue;
+            if (a.Ctor >= 0 && a.Ctor < methodHandles.Length && !methodHandles[a.Ctor].IsNil)
+            {
+                mb.AddCustomAttribute(member, methodHandles[a.Ctor], classAttrBlob);
+            }
+            else
+            {
+                mb.AddCustomAttribute(member, attributeCtor, NamedArgsBlob(new[] { ("Name", a.Name) }));
+            }
+            customAttrCount++;
+        }
+
         // ---- PE image ----
         var peHeader = new PEHeaderBuilder(
             machine: Machine.I386,
@@ -572,6 +689,7 @@ public static class Program
         peBuilder.Serialize(blobOut);
         File.WriteAllBytes(output, blobOut.ToArray());
         Console.WriteLine($"wrote {output} ({new FileInfo(output).Length / 1024} KB)");
+        return customAttrCount;
     }
 
     static int ArityOf(string name)
@@ -622,7 +740,7 @@ public static class Program
         enc.Type(MetadataTokens.TypeDefinitionHandle(types.FindIndex(t => t.Ns == "System" && t.Name == "Object") + 1), false);
     }
 
-    static void Verify(string path, List<TypeRec> expected)
+    static void Verify(string path, List<TypeRec> expected, List<AttrRec> attrs, int expectedCustomAttrs)
     {
         using var fs = File.OpenRead(path);
         using var pe = new PEReader(fs);
@@ -648,10 +766,10 @@ public static class Program
         Console.WriteLine($"verify: types={typeCount} fields={fieldCount} methods={methodCount} " +
                           $"params={paramCount} ifaces={ifaceCount} bodies={bodyCount} customAttrs={attrRowCount} genericParams={genericParamRows}");
         if (genericParamRows != expGenericParams) throw new Exception($"generic param count mismatch {genericParamRows} vs {expGenericParams}");
-        // +2 attribute types (AddressAttribute, FieldOffsetAttribute) with 5 fields and 2 ctors
-        if (typeCount != expected.Count + 2) throw new Exception($"type count mismatch {typeCount} vs {expected.Count + 2}");
-        int expFields = expected.Sum(t => t.Fields.Count) + 5;
-        int expMethods = expected.Sum(t => t.Methods.Count) + 2;
+        // +5 marker types (Address/Attribute/FieldOffset/MetadataOffset/Token) with 10 fields and 5 ctors
+        if (typeCount != expected.Count + 5) throw new Exception($"type count mismatch {typeCount} vs {expected.Count + 5}");
+        int expFields = expected.Sum(t => t.Fields.Count) + 10;
+        int expMethods = expected.Sum(t => t.Methods.Count) + 5;
         int expParams = expected.Sum(t => t.Methods.Sum(m => m.Params.Count));
         if (fieldCount != expFields) throw new Exception($"field count mismatch {fieldCount} vs {expFields}");
         if (methodCount != expMethods) throw new Exception($"method count mismatch {methodCount} vs {expMethods}");
@@ -710,38 +828,59 @@ public static class Program
             }
             Console.WriteLine($"verify: event table decoded OK ({checkedEvents} rows, all have a type and an accessor)");
         }
-        if (attrRowCount == 0) throw new Exception("no custom attributes emitted");
-        // targeted custom-attribute validation: decode a sample of blobs and resolve their ctor type
-        var ctorNames = new System.Collections.Generic.Dictionary<EntityHandle, string>();
-        int checkedAttrs = 0; int sampleShown = 0;
-        foreach (var ch in md.CustomAttributes)
+        if (attrRowCount != expectedCustomAttrs)
+            throw new Exception($"custom attribute count mismatch {attrRowCount} vs {expectedCustomAttrs} (emitter counted)");
+        if (attrs.Count > 0 && expectedCustomAttrs <= 0) throw new Exception("attribute instances loaded but not emitted");
         {
-            var ca = md.GetCustomAttribute(ch);
-            if (!ctorNames.TryGetValue(ca.Constructor, out var ctorName))
+            var ctorNames = new System.Collections.Generic.Dictionary<EntityHandle, string>();
+            string CtorName(EntityHandle ctor)
             {
-                var mh2 = (MethodDefinitionHandle)ca.Constructor;
-                var mdef2 = md.GetMethodDefinition(mh2);
-                var td2 = md.GetTypeDefinition(mdef2.GetDeclaringType());
-                ctorName = md.GetString(td2.Name);
-                ctorNames[ca.Constructor] = ctorName;
+                if (!ctorNames.TryGetValue(ctor, out var n))
+                {
+                    var mdef = md.GetMethodDefinition((MethodDefinitionHandle)ctor);
+                    n = md.GetString(md.GetTypeDefinition(mdef.GetDeclaringType()).Name);
+                    ctorNames[ctor] = n;
+                }
+                return n;
             }
-            var blob = md.GetBlobBytes(ca.Value);
-            if (blob.Length < 4 || blob[0] != 1 || blob[1] != 0)
-                throw new Exception($"custom attribute blob with bad prolog ({blob.Length} bytes, ctor {ctorName})");
-            int named = blob[2] | (blob[3] << 8);
-            if (named == 0) throw new Exception($"custom attribute {ctorName} has no named arguments");
-            if (ctorName != "AddressAttribute" && ctorName != "FieldOffsetAttribute")
-                throw new Exception($"unexpected custom attribute type {ctorName}");
-            checkedAttrs++;
-            if (sampleShown < 3)
+            int checkedAttrs = 0;
+            var ctorHist = new System.Collections.Generic.Dictionary<string, int>();
+            var sampleRows = new System.Collections.Generic.List<int>();
+            for (int r = 1; r <= Math.Min(300, attrRowCount); r++) sampleRows.Add(r);
+            for (int r = Math.Max(1, attrRowCount - 299); r <= attrRowCount; r++) sampleRows.Add(r);
+            foreach (var row in sampleRows)
             {
-                string text = System.Text.Encoding.UTF8.GetString(blob, 0, Math.Min(blob.Length, 60));
-                Console.WriteLine($"  attr sample: ctor={ctorName} named={named} bytes={blob.Length} ascii={text}");
-                sampleShown++;
+                var ca = md.GetCustomAttribute(MetadataTokens.CustomAttributeHandle(row));
+                string ctorName = CtorName(ca.Constructor);
+                var blob = md.GetBlobBytes(ca.Value);
+                if (blob.Length < 4 || blob[0] != 1 || blob[1] != 0)
+                    throw new Exception($"custom attribute blob with bad prolog ({blob.Length} bytes, ctor {ctorName})");
+                int named = blob[2] | (blob[3] << 8);
+                if (named == 0)
+                {
+                    // A restorable attribute instance: prolog + zero named arguments.
+                    if (blob.Length != 4) throw new Exception($"class attribute blob not 4 bytes (ctor {ctorName})");
+                }
+                else
+                {
+                    // Every emitted named argument is a string field; parse its name.
+                    int p = 4;
+                    if (blob.Length < p + 4 || blob[p] != 0x53 || blob[p + 1] != 0x0E)
+                        throw new Exception($"bad named argument header (ctor {ctorName})");
+                    p += 2;
+                    int len = blob[p];
+                    if ((len & 0x80) != 0) throw new Exception("unexpected long SerString name");
+                    p++;
+                    string argName = System.Text.Encoding.UTF8.GetString(blob, p, len);
+                    if (argName is not ("RVA" or "Offset" or "VA" or "Slot" or "Token" or "Name"))
+                        throw new Exception($"unexpected named argument {argName} (ctor {ctorName})");
+                }
+                ctorHist[ctorName] = ctorHist.GetValueOrDefault(ctorName) + 1;
+                checkedAttrs++;
             }
-            if (checkedAttrs >= 500) break;
+            Console.WriteLine($"verify: custom attributes decoded OK (sample {checkedAttrs}/{attrRowCount}; ctors: " +
+                              string.Join(", ", ctorHist.Select(kv => kv.Key + "=" + kv.Value)) + ")");
         }
-        Console.WriteLine($"verify: custom attributes decoded OK (sample {checkedAttrs}, table rows {attrRowCount})");
         Console.WriteLine("verify: OK (counts match the JSONL export; attribute rows present)");
     }
 }

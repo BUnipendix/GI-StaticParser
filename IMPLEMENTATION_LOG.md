@@ -4990,3 +4990,38 @@ cache 构建函数，确认其语义是 **propertyDefs**：
 - 产物：DummyDll.dll 96,367,616 -> **96,388,096 B**；dummy.jsonl 186,487,969 -> **186,550,006 B**；dump.cs 不变（127,953,647 B）；
 - cargo test：17 passed / 0 failed。
 
+
+## 86. DummyDll 与参考实现对齐：Token / Attribute 标记 + 参数归属修复（2026-10-18）
+
+> 不是需求，是执行记录。目标第 3 轮。
+
+### 86.1 参考实现差异盘点（独立读取 bundled Il2CppDummyDll.dll）
+参考 DummyDll 的 5 个标记类型（全部 string 字段 + 无参 ctor）：
+AddressAttribute(RVA/Offset/VA/Slot)、AttributeAttribute(Name/RVA/Offset)、FieldOffsetAttribute(Offset)、
+MetadataOffsetAttribute(Offset)、TokenAttribute(Token)。参考实现还生成 TokenAttribute（type/field/method/
+property/event）、AttributeAttribute（无法还原的属性实例；RVA/Offset 来自运行时 customAttributeGenerators，
+静态不可得）以及字段/参数 Constant（下一轮）。
+
+### 86.2 本轮实现
+- 标记类型 2 -> 5（字段布局与参考逐字一致；+10 字段 / +5 ctor）；
+- **TokenAttribute**：type 0x02000001+tdi、field 0x04000001+row、method 0x06000001+gmi、
+  property 0x17000001+propRow、event 0x14000001+eventRow，共 **1,378,740** 条；
+- **自定义属性实例**：dummy_export 新增 A 记录（tok/tdi/name/ctor），7.1 共 **70,692** 条；
+  - 与参考相同的"可还原"判定（属性类恰好 1 个方法且为无参 .ctor）-> 真 CustomAttribute（blob 01000000）；
+  - 其余 -> AttributeAttribute(Name=类原名)；RVA/Offset 省略（运行时生成器指针，静态不可得）；
+- property/event 记录补充 row 字段，用于 token 与 metadata handle 定位；
+- **修复两个既有 DummyDll 缺陷**（此前版本都存在，dnfile 只统计行数所以从未暴露）：
+  1) MethodDef 的 ParamList 游标与参数总数共用一个变量 —— 旧产物所有 MethodDef 的 ParamList 都等于
+     paramTotal+1，任何方法都不"拥有"参数；现分离 paramRows（游标）/paramTotal（计数）；
+  2) Parameter.SequenceNumber 恒为 1 —— 现为方法内 1..n。
+
+### 86.3 验证
+- 生成器内置：customAttrs = **2,491,027** = 1,041,595（Address/FieldOffset）+ 1,378,740（Token）+ 70,692（属性实例）；
+  types=88,907（+5）、fields=440,182（+10）、methods=733,447（+5）；CustomAttribute 抽样 600 条 prolog/命名参数全部合法；
+- 独立 SRM 程序读回（不复用生成器代码）：
+  - System.LocalDataStore（token 0x200008B）：TokenAttribute Token=0x200008B + AttributeAttribute Name=ComVisibleAttribute；
+  - Param row 2（"fmt"）：ParamArrayAttribute；参数归属与 seq 正确（Locale.GetText: msg seq1；第二重载 fmt/args seq1/2）；
+  - Property row 0x42（PrimeGeneratorBase.PrimalityTest）：TokenAttribute 0x17000042 + AttributeAttribute Name=ComVisibleAttribute；
+- 产物：DummyDll.dll 96,388,096 -> **145,609,728 B**；dummy.jsonl 186,550,006 -> **193,164,322 B**；dump.cs 不变（127,953,647 B）；
+- cargo test 17 passed。
+

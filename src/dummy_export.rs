@@ -92,7 +92,7 @@ fn rva_to_file(m: &Meta, rva: u32) -> Option<u32> {
     None
 }
 
-pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize, usize, usize)> {
+pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize, usize, usize, usize)> {
     let (tds, mds) = collect(m);
     let inst_offsets = super::dump_gen::instance_offsets(m, &tds);
     let mut per_type: Vec<Vec<usize>> = vec![Vec::new(); tds.len()];
@@ -127,6 +127,7 @@ pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize
     let mut n_methods = 0usize;
     let mut n_props = 0usize;
     let mut n_events = 0usize;
+    let mut n_attrs = 0usize;
 
     for (i, td) in tds.iter().enumerate() {
         let kind = type_kind(m, &tds, td);
@@ -222,8 +223,9 @@ pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize
                 let pname = m.decode_str(name_idx);
                 writeln!(
                     w,
-                    "{{\"k\":\"P\",\"id\":{},\"name\":{},\"get\":{},\"set\":{}}}",
+                    "{{\"k\":\"P\",\"id\":{},\"row\":{},\"name\":{},\"get\":{},\"set\":{}}}",
                     i,
+                    row,
                     serde_json::to_string(&pname)?,
                     get,
                     set
@@ -245,8 +247,9 @@ pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize
                 let ty = etype.map(|ti| enc_type(m, ti, 0));
                 writeln!(
                     w,
-                    "{{\"k\":\"E\",\"id\":{},\"name\":{},\"type\":{},\"add\":{},\"remove\":{},\"raise\":{}}}",
+                    "{{\"k\":\"E\",\"id\":{},\"row\":{},\"name\":{},\"type\":{},\"add\":{},\"remove\":{},\"raise\":{}}}",
                     i,
+                    row,
                     serde_json::to_string(&ename)?,
                     serde_json::to_string(&ty)?,
                     gmi_of(add),
@@ -299,8 +302,58 @@ pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize
             n_methods += 1;
         }
     }
+    // Custom attribute instances (the real data layer): each record carries the member token, the
+    // attribute class typeDef and the parameterless ctor's global method index when the class has
+    // one (-1 = the class needs constructor arguments; the generator then writes an
+    // AttributeAttribute marker with the class name, mirroring Il2CppDumper's DummyDll, except the
+    // RVA/Offset fields whose custom-attribute-generator pointers are runtime-only).
+    {
+        let prop_rows: u32 = (0..tds.len())
+            .map(|i| m.td_prop_count(i).unwrap_or(0))
+            .sum();
+        for (inst, token) in m.attribute_instance_tokens() {
+            let kind = token >> 24;
+            let idx = token & 0x00FF_FFFF;
+            let member_ok = match kind {
+                0x02 => idx >= 1 && (idx as usize) <= tds.len(),
+                0x04 => idx >= 1,
+                0x06 => idx >= 1 && (idx as usize) <= mds.len(),
+                0x08 => idx >= 1,
+                0x17 => idx >= 1 && idx <= prop_rows,
+                _ => false,
+            };
+            if !member_ok {
+                continue;
+            }
+            let Some(ti) = m.attribute_type_idx(inst) else { continue };
+            let Some((ak, adata, _)) = m.il2cpp_type(ti as usize) else { continue };
+            if ak != 0x12 {
+                continue;
+            }
+            let tdi = adata as usize;
+            let Some(td) = tds.get(tdi) else { continue };
+            let ctor = per_type
+                .get(tdi)
+                .and_then(|ms| {
+                    ms.iter()
+                        .copied()
+                        .find(|&g| mds[g].name == ".ctor" && mds[g].param_count == 0)
+                })
+                .map(|g| g as i64)
+                .unwrap_or(-1);
+            writeln!(
+                w,
+                "{{\"k\":\"A\",\"tok\":{},\"tdi\":{},\"name\":{},\"ctor\":{}}}",
+                token,
+                tdi,
+                serde_json::to_string(&td.name)?,
+                ctor
+            )?;
+            n_attrs += 1;
+        }
+    }
     w.flush()?;
-    Ok((n_types, n_fields, n_methods, n_props, n_events))
+    Ok((n_types, n_fields, n_methods, n_props, n_events, n_attrs))
 }
 
 fn td_parent_tdi(m: &Meta, tds: &[Td], td: &Td) -> i64 {
