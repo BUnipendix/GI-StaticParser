@@ -5708,3 +5708,16 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
    方法参数类型 587/587=100%；属性类型 52/54=96.3%（残余 2 个泛型占位）。
 3. 结论：6.7 的 typeDef/方法/参数/字段/属性/事件在 corelib 上与相邻版本 oracle 完全对齐；
    6.7 profile 除「属性 +6 列、字段 attrs、泛型实例表、flags 完整语义」外已闭环。
+
+## 128. R57 6.4.0 方法/参数表常数（候选，未验证）（2026-10-18）
+
+1. 6.7 方法元数据解码器作种子，形态转移 6.4 最佳命中 fn 0x140479C80；顺名字解析器（cipher site
+   0x14047539A 的 52 个调用者）找到 6.4 参数/默认值解码器 fn 0x14048D770，读出常数：
+   方法表 hdr[0x1FC]^0x22414276 stride 26；方法行掩码 (idx*0x11D36B90D36A8EDD+0x68C1F6C86562CBFC)>>0x13；
+   paramCount=(raw8[0x18]^mask8^0x63)；paramStart=((raw32[8]+0xEE6D5044)^mask32)+local；
+   参数表 hdr[0x2C]+0x934F4900 stride 8；参数行掩码 ((((j*0x227BBC409D01)>>0xE)^0x224F51C3)*0x25E50B2E)>>0xC；
+   参数名=((raw32[0]+0xE7B06DEA)^mask32)。
+2. 数据验收失败：用线性全局方法索引代入，paramStart 解出 ~1.5e10 越界 ⇒ 6.4 行索引来自类字段
+   (r8=[rdi+0x18])，语义与 6.7 不同（疑编码 methodStart）。
+3. 常数写入 docs/re/artifacts-6.4.0/method-param-layout-candidate.json（status CANDIDATE - NOT
+   VALIDATED），不当作已解；下一步读清 r8 来源或找真正方法元数据解码器。
