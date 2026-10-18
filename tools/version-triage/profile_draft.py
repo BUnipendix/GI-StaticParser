@@ -23,6 +23,7 @@ def fail(msg):
 def main():
     (vdir, out, derive_p, tables_p, typedefs_p,
      ranges_p, method_p, property_p) = sys.argv[1:9]
+    field_p = sys.argv[9] if len(sys.argv) > 9 else None
     derive = json.load(open(derive_p))
     tables = json.load(open(tables_p))
     ranges = json.load(open(ranges_p))
@@ -72,7 +73,8 @@ def main():
                                                              'type': mlay['param']['type']}},
         'property': {'table': play['table'], 'stride': play['stride'], 'rows': play['rows'],
                      'mask': play['mask'], 'columns': play['columns']},
-        'unresolved': ['field table (name/type/attrs)', 'method slot/slot column',
+        'field': (json.load(open(field_p)) if field_p else None),
+        'unresolved': ['field type/attrs columns', 'method slot/slot column',
                        'typeDef flags/bitfield/parent/nested ranges',
                        'generic tables', 'param default values', 'usage/literal tables'],
         'counts': {

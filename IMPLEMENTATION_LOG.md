@@ -5443,3 +5443,20 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
 4. unresolved：字段表（name/type/attrs）、方法 slot 列、typeDef flags/bitfield/parent/nested 区间、
    泛型表、参数默认值表、usage/literal 表。
 5. 复现：profile_draft.py <版本目录> <out> <derive> <tables> <typedefs> <ranges> <method-layout> <property-layout>。
+
+## 107. R36 7.0 字段表：调用图定位 + 掩码解码（2026-10-18）
+
+1. 新增 mhydump 子命令 str-cols（--base/--stride/--rows）：用派生密码对给定 (base,stride)
+   跑两族字符串列搜索。Purpose: 发现没有 start/count 对的表（字段表）。
+2. 负结果：105 个候选基址 × stride 10 无掩码扫描 **0 命中** ⇒ 7.0 字段列是逐行掩码的。
+3. 改用调用图：名字解析器 0x1404E0110 的 52 个调用者中，0x1404EDB50 是惰性字段名访问器：
+   - base = hdr[0x1D0] + 0xB98BE77F（0x17A2444），stride 8；
+   - mask = (((i*0x1147E475DFA9)>>0x12) * 0x2CD0F4EE + 0xC16316113B52) >> 0x10（i 为绝对字段索引）；
+   - name = (raw32[+4] ^ 0x6040B64C) - mask；
+   - 访问器里 row = fieldStart_encoded + local + 0xDF8B643E，与 R30 解出的 fieldStart 常数
+     0xDF8B643E 一致（互证）。
+4. 新工具 tools/version-triage/field_rows.py + docs/re/artifacts-7.0.0/field-layout.json。
+   7.0 全表验证：430,290 行；名字 429,297 标识符（99.77%）、793 其它、200 哨兵；typeDef 字段区间
+   覆盖 429,297 行、993 行不可解码（恰为其它+哨兵），区间与表行数完全对齐。
+5. profile 草稿已并入 field 块（profile-draft.json），unresolved 更新为 field type/attrs 列等。
+6. 复现：str-cols 子命令；field_rows.py <版本目录> <derive> <field-layout> <typedefs JSONL>。

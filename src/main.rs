@@ -67,6 +67,22 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
+    /// Find string-index columns of the row table at (base, stride) using the derived
+    /// cipher. Used to discover tables that have no start/count pair (field definitions
+    /// in some builds), which the IndexTable predicate cannot see.
+    StrCols {
+        #[arg(short, long)]
+        exe: String,
+        #[arg(long)]
+        metadata: String,
+        #[arg(long, value_parser = parse_u64_hex)]
+        base: u64,
+        #[arg(long, value_parser = parse_u64_hex)]
+        stride: u64,
+        /// Row count override (default: everything from base to end of body).
+        #[arg(long)]
+        rows: Option<usize>,
+    },
     /// Milestone (a): parse a PE image, print its section table, ImageBase, and flag BSS globals.
     PeValidate {
         /// Path to GenshinImpact.exe (or any PE32+ image).
@@ -186,6 +202,7 @@ fn main() -> Result<()> {
         Cmd::Cipher { exe, metadata, json } => cipher_cmd(&exe, &metadata, json),
         Cmd::Strings { exe, metadata, out, head } => strings_cmd(&exe, &metadata, out.as_deref(), head),
         Cmd::Tables { exe, metadata, base, json } => tables_cmd(&exe, &metadata, base, json),
+        Cmd::StrCols { exe, metadata, base, stride, rows } => strcols_cmd(&exe, &metadata, base, stride, rows),
         Cmd::PeValidate { exe } => pe_validate(&exe),
         Cmd::DecodeOne { exe, metadata, idx } => decode_one(&exe, &metadata, idx),
         Cmd::HeaderDump { exe, metadata } => header_dump(&exe, &metadata),
@@ -543,6 +560,48 @@ fn anchors_cmd(exe: &str, metadata: Option<&str>, json: bool, site: Option<u64>)
             );
         }
     }
+    Ok(())
+}
+
+/// String-column scan of one (base, stride) candidate: the discovery path for tables
+/// without a start/count pair. Both transform families are tried.
+fn strcols_cmd(exe: &str, metadata: &str, base: u64, stride: u64, rows_override: Option<usize>) -> Result<()> {
+    let ga = std::fs::read(exe)?;
+    let gm = std::fs::read(metadata)?;
+    let body = gm.get(0x210..).unwrap_or(&[]);
+    let build = static_mhy_dumper::derive::cipher::derive_build(&ga, &gm)?
+        .ok_or_else(|| anyhow::anyhow!("no embedded MHY header located"))?;
+    let c = build.cipher.as_ref().ok_or_else(|| anyhow::anyhow!("no string cipher derived"))?;
+    let b = base as usize;
+    if b >= body.len() {
+        anyhow::bail!("base 0x{base:X} outside the metadata body");
+    }
+    let rows = rows_override.unwrap_or_else(|| (body.len() - b) / stride as usize);
+    let mut cols = static_mhy_dumper::derive::tables::find_additive_string_columns(
+        body, c.strsec as usize, &c.schedule, b, stride as u32, rows,
+    );
+    cols.extend(static_mhy_dumper::derive::tables::find_xor_string_columns(
+        body, c.strsec as usize, &c.schedule, b, stride as u32, rows,
+    ));
+    cols.sort_by(|a, b| b.rows_ok.cmp(&a.rows_ok));
+    let rows_json: Vec<_> = cols
+        .iter()
+        .map(|c| {
+            serde_json::json!({
+                "off": c.off,
+                "transform": c.transform,
+                "c": format!("0x{:08X}", c.c),
+                "rows_ok": c.rows_ok,
+                "rows_tested": c.rows_tested,
+            })
+        })
+        .collect();
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "base": base, "stride": stride, "rows": rows, "columns": rows_json,
+        }))?
+    );
     Ok(())
 }
 

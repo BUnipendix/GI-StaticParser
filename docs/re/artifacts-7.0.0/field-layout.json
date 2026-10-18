@@ -1,0 +1,31 @@
+{
+  "artifact": "field-row-layout",
+  "artifact_version": 1,
+  "note": "7.0.0 field table (8-byte rows) located from the lazy field-name accessor 0x1404EDB50 (found as a caller of the name resolver 0x1404E0110): base = hdr[0x1D0] + 0xB98BE77F, stride 8, per-row mask chain read from the same function. Row index used by the mask is the ABSOLUTE field index (typeDef fieldStart + local index), which matches the data-solved fieldStart column.",
+  "provenance": {
+    "accessor_fn": "0x1404edb50",
+    "name_resolver": "0x1404e0110",
+    "name_column_source": "code: (raw32[+4] ^ 0x6040B64C) - mask"
+  },
+  "table": {
+    "slot": "0x1D0",
+    "op": "add",
+    "imm": "0xB98BE77F"
+  },
+  "stride": 8,
+  "rows": 430290,
+  "mask": {
+    "mul1": "0x1147E475DFA9",
+    "shr1": 18,
+    "mul2": "0x2CD0F4EE",
+    "add1": "0xC16316113B52",
+    "shr2": 16
+  },
+  "columns": {
+    "name": {
+      "off": 4,
+      "kind": "XorCSubMask32",
+      "c": "0x6040B64C"
+    }
+  }
+}

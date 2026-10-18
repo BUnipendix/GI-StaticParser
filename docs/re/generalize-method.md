@@ -360,6 +360,27 @@ corelib 方法序列在两个相邻版本间一致，说明方法表的 name 列
 仍未解（草稿里显式列出）：字段表（name/type/attrs）、方法 slot 列、typeDef flags/bitfield/parent/
 nested 区间、泛型表、参数默认值表、usage/literal 表。
 
+### 3.2j 7.0 字段表：调用图定位 + 掩码解码（2026-10-18）
+
+字段表没有 start/count 对，IndexTable 谓词找不到；先用新增的 mhydump str-cols 子命令在
+105 个候选基址 × stride 10 上做无掩码字符串列扫描，**0 命中**（字段列是逐行掩码的）。
+改用调用图：名字解析器 0x1404E0110 有 52 个调用者，其中 0x1404EDB50 是一个惰性字段名访问器：
+
+- 字段表基址 = hdr[0x1D0] + 0xB98BE77F（7.0：0x17A2444），stride 8；
+- 逐行掩码（行号是**绝对字段索引** = typeDef fieldStart + 局部序号）：
+  mask = (((i * 0x1147E475DFA9) >> 0x12) * 0x2CD0F4EE + 0xC16316113B52) >> 0x10；
+- name = (raw32[+4] ^ 0x6040B64C) - mask；
+- 访问器里 row = fieldStart_encoded + local + 0xDF8B643E，与 R30 纯数据解出的 fieldStart 列
+  常数 0xDF8B643E 完全一致（互相印证）。
+
+全表验收（tools/version-triage/field_rows.py，7.0.0）：
+
+| 检查 | 结果 |
+|---|---|
+| 字段行数 | 430,290（与 typeDef sum fieldCount 一致） |
+| 字段名 | 429,297 标识符 + 793 其它 + 200 哨兵 = **99.77% 标识符** |
+| typeDef 字段区间覆盖 | 429,297 行可解码；993 行不可解码（恰为 793 其它 + 200 哨兵），区间与表行数完全对齐 |
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。
