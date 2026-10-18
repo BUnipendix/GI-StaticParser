@@ -855,6 +855,25 @@ docs/re/artifacts-6.4.0/method-param-layout-candidate.json
 等不可能值，说明全局方法索引到该编码索引的映射仍未确定。因此 6.4 方法与参数列继续标注为
 CANDIDATE - NOT VALIDATED，未作为已解写入 profile。
 
+
+### 3.2ag 6.4.0 索引映射尝试：一个精确的代数关系，但表语义仍未定（2026-10-18）
+
+本轮先解开了一个常数关系：类初始化里的加数 0x8A76E6C5 正好是 typeDef methodStart 列
+Add 常数 0x7589193B 的补数（两者相加 = 2^32），所以类初始化循环起点就是
+plain methodStart（不是额外的编码域）。但继续验证仍失败：
+
+- 以 plain 方法索引取 hdr[0x1FC]^0x22414276 + 26*i 行，按类初始化的
+  name = cipher(raw32[+0] ^ mask ^ 0x0834AA45) 解码，前 12 个方法全部返回 None；
+- 用 7.1 dump 前 11 个方法的参数个数（0,1,2,2,0,0,0,0,0,0,0）做约束，对方法行 0..25 的
+  u8/u16 列 × 256 个 xor 常数做穷举：没有任何 (offset, constant) 组合成立。
+
+因此当前有两个可能，且都未验证：
+1. slot 0x1FC 的表不是“方法表”而是别的 26 字节行表（类初始化循环用它做的可能不是方法枚举）；
+2. 6.4 的方法表 base/mask 与 7.0/6.7 不同（例如需要额外的 base 偏移或不同的掩码常量）。
+
+这些负结果写入 docs/re/artifacts-6.4.0/method-param-layout-candidate.json 与
+constants-index.md 的 2b 节；6.4 方法与参数仍 CANDIDATE - NOT VALIDATED。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。

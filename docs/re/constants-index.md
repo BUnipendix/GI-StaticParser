@@ -78,6 +78,18 @@
 | 属性列 | name off 0 (raw^mask^0x2BFBE794)；getter off 8 ((raw^mask16)^0x5D18)；setter off 4 ((raw^mask16)^0xD662) | get_ 56,483 / set_ 8,584 |
 | 端到端清单 | dump67_partial.py -> dump67-partial.txt（83,775/413,644/687,467） | R53/R54 |
 
+## 2b. 6.4.0（进行中：typeDef 已验收，方法/参数为候选）
+
+| 项 | 值 | 状态 |
+|---|---|---|
+| typeDef 表 | base 15,161,244 stride 70 rows 77,262 | 已验收（R28/R30） |
+| typeDef name 列 | off 24 Add 0xE169AC15 | 256/256 |
+| typeDef ns 列 | off 32 Xor 0x468CB988 | 59/256（无命名空间类型多） |
+| typeDef start/count 对 | off20 Add 0x7589193B + off40 Add 0xE8D4；off62 Xor 0x6FE9B568 + off120 Xor 0xD846（跨行） | R30 |
+| 类型清单 vs 7.1 dump | Jaccard 0.961（差异为编译器生成泛型显示名） | R29 oracle |
+| 方法/参数表 | hdr[0x1FC]^0x22414276 stride 26、mask 链、参数表 hdr[0x2C]+0x934F4900 stride 8 | **CANDIDATE - NOT VALIDATED** |
+| 已知负结果 | 名字解码 (raw^mask^0x0834AA45) 返回 None；线性全局索引代入 paramCount/paramStart 均不可能值 | 见 §3.2af / §3.2ag |
+
 ## 3. 7.1.0（早期参考，已固化）
 
 | 项 | 位置 |

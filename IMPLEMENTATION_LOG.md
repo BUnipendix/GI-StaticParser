@@ -5732,3 +5732,14 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
    paramCount 读 word[row+0x16]（非 6.7 的 byte +0x18）。
 3. 未决：index 是类初始化器的编码索引；线性全局方法索引代入解出 22/85/88 等不可能值 ⇒ 全局索引到
    编码索引的映射未定。6.4 方法与参数列继续 CANDIDATE-NOT VALIDATED。
+
+## 130. R59 6.4 索引映射尝试（代数关系解开，表语义仍未定）+ 索引补 6.4 节（2026-10-18）
+
+1. 解开常数关系：类初始化的 +0x8A76E6C5 是 typeDef methodStart Add 常数 0x7589193B 的补数
+   （和 = 2^32），故循环起点 = plain methodStart，不存在额外编码域。
+2. 但继续验证仍失败：name = cipher(raw32[+0] ^ mask ^ 0x0834AA45) 前 12 个方法全 None；
+   以 7.1 dump 前 11 方法参数个数为约束，对方法行 0..25 的 u8/u16 列 x 256 个 xor 常数穷举，
+   无任何 (offset, constant) 成立。
+3. 可能原因（均未验证）：slot 0x1FC 不是方法表；或 6.4 方法表 base/mask 与 7.0/6.7 不同。
+   6.4 方法/参数继续 CANDIDATE - NOT VALIDATED。
+4. constants-index.md 新增 2b 节（6.4 typeDef 已验收、方法/参数候选、负结果）；build_index.py 同步更新。
