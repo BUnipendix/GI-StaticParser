@@ -5460,3 +5460,13 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
    覆盖 429,297 行、993 行不可解码（恰为其它+哨兵），区间与表行数完全对齐。
 5. profile 草稿已并入 field 块（profile-draft.json），unresolved 更新为 field type/attrs 列等。
 6. 复现：str-cols 子命令；field_rows.py <版本目录> <derive> <field-layout> <typedefs JSONL>。
+
+## 108. R37 7.0 字段表 type 列（窗口性质）+ 参数 type 列未决（2026-10-18）
+
+1. 字段表 +0 列（type 索引）无已知明文，用窗口性质解：value = (raw - mask) + C，对 430,290 行
+   求 A = raw - mask，环形窗口 232,881 ⇒ C = -min(A) = 0xA90E9923，解码 type 索引
+   0..232,880、68,305 种不同取值、25% < 1000、top 取值各覆盖 7k–20k 字段（基础类型集中）。
+   field-layout.json 增列 type（AddCSubMask32），field_rows.py 增加 type 列验收输出。
+2. 参数 type 列同法检查三族窗口：add 4.29e9 / sub 1.32e6 / xor 2.41e9 —— 均不收敛到可解释
+   type 索引范围，判断可能叠加 mask2/打包位或另一条掩码链，本轮不定案并显式记录。
+3. 结论：7.0 字段表 {type,name} 两列均可解码；参数 type 列留待后续。
