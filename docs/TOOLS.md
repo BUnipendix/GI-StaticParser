@@ -125,3 +125,5 @@
 - [2026-10-18] 真实属性表（propertyDefs）静态解码：`hdr[0x158]−0x1D545CCC` 的 10B 行表 = 属性表；typeDef propStart=u32@0x24+0xCE2141CC、propCount=u8@0x43^0x86。7.1 解出 **115,596 条属性 / 30,226 类型**（getter 112,107 / setter 19,907），dump.cs Properties 段由合成 63,117 换成真实 115,596。证据/公式：IMPLEMENTATION_LOG §83、docs/re/metadata-loading-flow-7.1.0.md §3/§4；校验：`python3 tools/validate_properties.py`（vs 6.4 oracle：corelib shared 类型 1,272/1,318 序列全等）。
 
 - [2026-10-18] DummyDll 属性表：dump-gen --dummy-out 的新 P 记录（name/get/set）由 tools/dummygen 生成 Property + PropertyMap + MethodSemantics；7.1 实测 Property 115,596 / PropertyMap 30,226 / MethodSemantics 132,014，DummyDll.dll 96,367,616 B。独立校验：SRM 程序读回 DateTimeFormatInfo 属性与 accessor 正确（日志 §84）。
+
+- [2026-10-18] 事件表（eventDefs）：hdr[0x64]+0xE6130C67、stride 14、mask 含 64-bit 乘数；typeDef eventStart=u16@0x38+0xFFFFD6AB、eventCount=u8@0x44^0xB5。7.1 解出 628 行/225 类型，已接入 DummyDll（Event 628 / EventMap 225 / MethodSemantics 总计 133,270）。证据/公式：IMPLEMENTATION_LOG §85、metadata-loading-flow §4b；dump.cs 按 Il2CppDumper 参考格式不含 Events 段。

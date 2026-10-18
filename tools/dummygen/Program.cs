@@ -40,6 +40,15 @@ public sealed class PropRec
     public int Set = -1;
 }
 
+public sealed class EventRec
+{
+    public string Name = "";
+    public string Type = "obj";
+    public int Add = -1;
+    public int Remove = -1;
+    public int Raise = -1;
+}
+
 public sealed class TypeRec
 {
     public int Id;
@@ -51,6 +60,7 @@ public sealed class TypeRec
     public List<FieldRec> Fields = new();
     public List<MethodRec> Methods = new();
     public List<PropRec> Props = new();
+    public List<EventRec> Events = new();
     public List<int> Ifaces = new();
 }
 
@@ -66,7 +76,7 @@ public static class Program
         string input = args[0];
         string output = args[1];
         var types = Load(input);
-        Console.WriteLine($"loaded {types.Count} types, {types.Sum(t => t.Fields.Count)} fields, {types.Sum(t => t.Methods.Count)} methods, {types.Sum(t => t.Props.Count)} properties");
+        Console.WriteLine($"loaded {types.Count} types, {types.Sum(t => t.Fields.Count)} fields, {types.Sum(t => t.Methods.Count)} methods, {types.Sum(t => t.Props.Count)} properties, {types.Sum(t => t.Events.Count)} events");
         Emit(types, output);
         Verify(output, types);
         return 0;
@@ -137,6 +147,17 @@ public static class Program
                         Name = r.GetProperty("name").GetString() ?? "",
                         Get = r.GetProperty("get").GetInt32(),
                         Set = r.GetProperty("set").GetInt32(),
+                    });
+                    break;
+                case "E":
+                    cur!.Events.Add(new EventRec
+                    {
+                        Name = r.GetProperty("name").GetString() ?? "",
+                        Type = r.TryGetProperty("type", out var ety) && ety.ValueKind == JsonValueKind.String
+                            ? (ety.GetString() ?? "obj") : "obj",
+                        Add = r.GetProperty("add").GetInt32(),
+                        Remove = r.GetProperty("remove").GetInt32(),
+                        Raise = r.GetProperty("raise").GetInt32(),
                     });
                     break;
                 case "I":
@@ -411,6 +432,49 @@ public static class Program
             }
         }
 
+        // ---- Event table + EventMap + MethodSemantics (real metadata events) ----
+        // The event type is a TypeDefOrRef coded index, so resolve it to a TypeDefinition handle
+        // (core types fall back to their in-module System.* definitions).
+        EntityHandle EventTypeHandle(string enc)
+        {
+            if (enc.StartsWith("t") && int.TryParse(enc.Substring(1), out int tid) && tid >= 0 && tid < types.Count)
+                return MetadataTokens.TypeDefinitionHandle(tid + 1);
+            string core = enc switch
+            {
+                "obj" => "Object", "str" => "String", "v" => "Void", "b" => "Boolean", "c" => "Char",
+                "s8" => "SByte", "u8" => "Byte", "s16" => "Int16", "u16" => "UInt16",
+                "s32" => "Int32", "u32" => "UInt32", "s64" => "Int64", "u64" => "UInt64",
+                "f4" => "Single", "f8" => "Double", "ip" => "IntPtr", "up" => "UIntPtr",
+                _ => "Object",
+            };
+            int cid = FindType("System", core);
+            if (cid < 0) cid = objId;
+            return MetadataTokens.TypeDefinitionHandle(cid + 1);
+        }
+        int eventRowsEmitted = 0, eventMapRowsEmitted = 0;
+        foreach (var t in types)
+        {
+            if (t.Events.Count == 0) continue;
+            EventDefinitionHandle firstEvent = default;
+            foreach (var ev in t.Events)
+            {
+                var eh = mb.AddEvent(EventAttributes.None, mb.GetOrAddString(ev.Name), EventTypeHandle(ev.Type));
+                if (firstEvent.IsNil) firstEvent = eh;
+                if (ev.Add >= 0 && ev.Add < methodHandles.Length)
+                    mb.AddMethodSemantics(eh, MethodSemanticsAttributes.Adder, methodHandles[ev.Add]);
+                if (ev.Remove >= 0 && ev.Remove < methodHandles.Length)
+                    mb.AddMethodSemantics(eh, MethodSemanticsAttributes.Remover, methodHandles[ev.Remove]);
+                if (ev.Raise >= 0 && ev.Raise < methodHandles.Length)
+                    mb.AddMethodSemantics(eh, MethodSemanticsAttributes.Raiser, methodHandles[ev.Raise]);
+                eventRowsEmitted++;
+            }
+            if (!firstEvent.IsNil)
+            {
+                mb.AddEventMap(MetadataTokens.TypeDefinitionHandle(t.Id + 1), firstEvent);
+                eventMapRowsEmitted++;
+            }
+        }
+
         // ---- Il2CppDummyDll-style custom attributes (Address / FieldOffset) ----
         int attrBaseId = FindType("System", "Attribute");
         EntityHandle attrBaseHandle = attrBaseId >= 0
@@ -598,7 +662,8 @@ public static class Program
         int semanticsRows = md.GetTableRowCount(TableIndex.MethodSemantics);
         int expProps = expected.Sum(t => t.Props.Count);
         int expPropMaps = expected.Count(t => t.Props.Count > 0);
-        int expSemantics = expected.Sum(t => t.Props.Sum(p => (p.Get >= 0 ? 1 : 0) + (p.Set >= 0 ? 1 : 0)));
+        int expSemantics = expected.Sum(t => t.Props.Sum(p => (p.Get >= 0 ? 1 : 0) + (p.Set >= 0 ? 1 : 0)))
+            + expected.Sum(t => t.Events.Sum(e => (e.Add >= 0 ? 1 : 0) + (e.Remove >= 0 ? 1 : 0) + (e.Raise >= 0 ? 1 : 0)));
         Console.WriteLine($"verify: properties={propRows} propertyMaps={propMapRows} methodSemantics={semanticsRows}");
         if (propRows != expProps) throw new Exception($"property count mismatch {propRows} vs {expProps}");
         if (propMapRows != expPropMaps) throw new Exception($"property map count mismatch {propMapRows} vs {expPropMaps}");
@@ -620,6 +685,30 @@ public static class Program
                 checkedProps++;
             }
             Console.WriteLine($"verify: property table decoded OK ({checkedProps} rows, all have a signature and an accessor)");
+        }
+        // ---- event table check ----
+        int eventRowsOut = md.GetTableRowCount(TableIndex.Event);
+        int eventMapRowsOut = md.GetTableRowCount(TableIndex.EventMap);
+        int expEvents = expected.Sum(t => t.Events.Count);
+        int expEventMaps = expected.Count(t => t.Events.Count > 0);
+        Console.WriteLine($"verify: events={eventRowsOut} eventMaps={eventMapRowsOut}");
+        if (eventRowsOut != expEvents) throw new Exception($"event count mismatch {eventRowsOut} vs {expEvents}");
+        if (eventMapRowsOut != expEventMaps) throw new Exception($"event map count mismatch {eventMapRowsOut} vs {expEventMaps}");
+        {
+            int checkedEvents = 0;
+            foreach (var eh in md.EventDefinitions)
+            {
+                var ed = md.GetEventDefinition(eh);
+                if (ed.Type.IsNil) throw new Exception($"event {md.GetString(ed.Name)} has no type");
+                var eacc = ed.GetAccessors();
+                if (eacc.Adder.IsNil && eacc.Remover.IsNil && eacc.Raiser.IsNil)
+                    throw new Exception($"event {md.GetString(ed.Name)} has no accessor");
+                if (checkedEvents < 3)
+                    Console.WriteLine($"  event sample: {md.GetString(ed.Name)} add={(eacc.Adder.IsNil ? "-" : "yes")} " +
+                                      $"remove={(eacc.Remover.IsNil ? "-" : "yes")} raise={(eacc.Raiser.IsNil ? "-" : "yes")}");
+                checkedEvents++;
+            }
+            Console.WriteLine($"verify: event table decoded OK ({checkedEvents} rows, all have a type and an accessor)");
         }
         if (attrRowCount == 0) throw new Exception("no custom attributes emitted");
         // targeted custom-attribute validation: decode a sample of blobs and resolve their ctor type

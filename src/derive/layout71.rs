@@ -6,7 +6,9 @@
 //! `discover` (constant-pool re-derivation); a layout change surfaces as a
 //! validator failure naming the broken step.
 
-use super::profile::{ColKind, Column, FieldMaskChain, MaskChain, ParamMaskChain, Profile, TableBase};
+use super::profile::{
+    ColKind, Column, EventMaskChain, FieldMaskChain, MaskChain, ParamMaskChain, Profile, TableBase,
+};
 
 /// The 7.1 layout with its measured constants.
 pub fn gen71() -> Profile {
@@ -81,6 +83,33 @@ pub fn gen71() -> Profile {
         property_name_add: 0xEE88_95EA,
         property_get_sub: 0x238F,
         property_set_xor: 0x0DB1,
+        // Event-definition table: body + (hdr[0x64] + 0xE6130C67), 14-byte rows
+        // {name u32, type u32, remove u16, raise u16, add u16}.
+        // Decoded from the runtime EventInfo cache builder 0x140515AE0 (klass->events at +0x38,
+        // element size 0x30):
+        //   mask(i) = ((i*0x9C54 ^ 0x1F0DA79F) * 0x1BF89D8B64959BB7 + 0x295EE0EBA6CAFAEA) >> 15
+        //   name = (raw ^ mask) ^ 0x05C273ED;  type = (raw + 0x979C7DA9) ^ mask
+        //   remove = ((raw + 0x38EB) ^ mask) & 0xFFFF; raise = ((raw + 0xFFFFE40A) ^ mask) & 0xFFFF
+        //   add = ((raw ^ mask) ^ 0x7D45) & 0xFFFF
+        // typeDef eventStart = u16@0x38 + 0xFFFFD6AB; eventCount = u8@0x44 ^ 0xB5.
+        // Full-table validation: 628 rows tile exactly over all 88,902 typeDefs; add/remove
+        // resolve to add_*/remove_* methods on un-obfuscated types.
+        event_defs: Some(TableBase { hdr_off: 0x64, sub: None, xor: None, add: Some(0xE613_0C67) }),
+        event_stride: 14,
+        td_event_start: Some(Column { offset: 0x38, kind: ColKind::AddC, c: 0xFFFF_D6AB }),
+        td_event_count: Some(Column { offset: 0x44, kind: ColKind::XorC, c: 0xB5 }),
+        event_mask: Some(EventMaskChain {
+            mul1: 0x9C54,
+            xor1: 0x1F0D_A79F,
+            mul2: 0x1BF8_9D8B_6495_9BB7,
+            add1: 0x295E_E0EB_A6CA_FAEA,
+            shift: 15,
+        }),
+        event_name_xor: 0x05C2_73ED,
+        event_type_add: 0x979C_7DA9,
+        event_remove_add: 0x38EB,
+        event_raise_add: 0xE40A,
+        event_add_xor: 0x7D45,
         // Generic-class rows live in startup-metadata.dat (loader 0x1405365BE..0x140536660):
         //   base = startup + (i32(hdr[0x120]) ^ 0x1C3F68EA); rows = {defTdi u32, genericInstIndex i32}
         // GenericInst structs: registration+0x28 -> 16B {argc, pad, Il2CppType** argv}.

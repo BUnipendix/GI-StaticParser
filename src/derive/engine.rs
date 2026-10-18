@@ -48,6 +48,8 @@ pub struct Meta<'a> {
     pub nested_base: usize,
     /// Property-definition table base (10-byte rows in 7.1; 0 when the profile lacks it).
     pub property_base: usize,
+    /// Event-definition table base (14-byte rows in 7.1; 0 when the profile lacks it).
+    pub event_base: usize,
     /// Field default values: field-table index -> (value byte offset in the shared blob, value Il2CppType index).
     pub field_defaults: std::collections::HashMap<u32, (i32, u32)>,
     /// Body offset of the shared default-value data blob.
@@ -162,6 +164,7 @@ impl<'a> Meta<'a> {
             param_def_base: profile.param_defs.as_ref().map(|t| t.resolve(&header_bytes)).unwrap_or(0),
             nested_base: profile.nested_types.as_ref().map(|t| t.resolve(&header_bytes)).unwrap_or(0),
             property_base: profile.property_defs.as_ref().map(|t| t.resolve(&header_bytes)).unwrap_or(0),
+            event_base: profile.event_defs.as_ref().map(|t| t.resolve(&header_bytes)).unwrap_or(0),
             field_defaults,
             default_values,
             profile,
@@ -597,6 +600,64 @@ impl<'a> Meta<'a> {
             name,
             if get == 0xFFFF { None } else { Some(get) },
             if set == 0xFFFF { None } else { Some(set) },
+        ))
+    }
+
+    /// typeDef eventStart (u16 column, `raw + c`; 0xFFFF = none). None without the event table.
+    pub fn td_event_start(&self, i: usize) -> Option<u16> {
+        let col = self.profile.td_event_start.as_ref()?;
+        self.profile.event_defs.as_ref()?;
+        let rec = self.td_base + self.profile.td_stride as usize * i;
+        let raw = self.body.read_u16(rec + col.offset as usize);
+        let v = raw.wrapping_add(col.c as u16);
+        if v == 0xFFFF { None } else { Some(v) }
+    }
+
+    /// typeDef eventCount (u8 column, `raw ^ (c & 0xFF)`). None without the event table.
+    pub fn td_event_count(&self, i: usize) -> Option<u32> {
+        let col = self.profile.td_event_count.as_ref()?;
+        self.profile.event_defs.as_ref()?;
+        let rec = self.td_base + self.profile.td_stride as usize * i;
+        let raw = *self.body.read_slice(rec + col.offset as usize, 1)?.first()? as u32;
+        Some(match col.kind {
+            ColKind::XorC => (raw ^ (col.c & 0xFF)) & 0xFF,
+            _ => raw.wrapping_add(col.c) & 0xFF,
+        })
+    }
+
+    /// One event-definition row: (name packed index, event type typearr index, add, remove,
+    /// raise). Accessor fields are per-type method indexes (None for the 0xFFFF sentinel); the
+    /// type is None for 0xFFFFFFFF. Row format (14 bytes):
+    /// {u32 name, u32 type, u16 remove, u16 raise, u16 add}.
+    pub fn event_row(
+        &self,
+        row: u32,
+    ) -> Option<(u32, Option<u32>, Option<u16>, Option<u16>, Option<u16>)> {
+        let mask_chain = self.profile.event_mask.as_ref()?;
+        let stride = self.profile.event_stride as usize;
+        if stride < 14 {
+            return None;
+        }
+        let at = self.event_base + stride * row as usize;
+        let b = self.body.read_slice(at, 14)?;
+        let raw_name = u32::from_le_bytes(b[0..4].try_into().ok()?);
+        let raw_type = u32::from_le_bytes(b[4..8].try_into().ok()?);
+        let raw_remove = u16::from_le_bytes(b[8..10].try_into().ok()?);
+        let raw_raise = u16::from_le_bytes(b[10..12].try_into().ok()?);
+        let raw_add = u16::from_le_bytes(b[12..14].try_into().ok()?);
+        let mask = mask_chain.eval(row);
+        let m16 = mask as u16;
+        let name = (raw_name ^ mask) ^ self.profile.event_name_xor;
+        let type_idx = raw_type.wrapping_add(self.profile.event_type_add) ^ mask;
+        let remove = ((raw_remove as u32).wrapping_add(self.profile.event_remove_add as u32) ^ mask) & 0xFFFF;
+        let raise = ((raw_raise as u32).wrapping_add(self.profile.event_raise_add as u32) ^ mask) & 0xFFFF;
+        let add = (((raw_add ^ m16) as u32) ^ self.profile.event_add_xor as u32) & 0xFFFF;
+        Some((
+            name,
+            if type_idx == 0xFFFF_FFFF { None } else { Some(type_idx) },
+            if add == 0xFFFF { None } else { Some(add as u16) },
+            if remove == 0xFFFF { None } else { Some(remove as u16) },
+            if raise == 0xFFFF { None } else { Some(raise as u16) },
         ))
     }
 

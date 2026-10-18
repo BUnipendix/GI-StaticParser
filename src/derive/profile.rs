@@ -46,6 +46,28 @@ impl FieldMaskChain {
     }
 }
 
+/// Event-table row mask (disassembled from 0x140515E5F..0x140515E88): the second multiplier is
+/// a **64-bit** constant, so this cannot reuse FieldMaskChain. 7.1 chain:
+/// ((i*mul1 ^ xor1) * mul2 + add1) >> shift, low 32 bits.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct EventMaskChain {
+    pub mul1: u32,
+    pub xor1: u32,
+    pub mul2: u64,
+    pub add1: u64,
+    pub shift: u32,
+}
+
+impl EventMaskChain {
+    #[inline]
+    pub fn eval(&self, i: u32) -> u32 {
+        let mut v = ((i as u64) * self.mul1 as u64) ^ self.xor1 as u64;
+        v = v.wrapping_mul(self.mul2);
+        v = v.wrapping_add(self.add1);
+        (v >> self.shift) as u32
+    }
+}
+
 /// Parameter-table row mask (disassembled from 0x140529819):
 /// `v = ((i*mul1) ^ xor1) * mul2 >> shift`, truncated to u32, then
 /// `((v ^ xor2) + add).wrapping_add(xor3)` — both columns subtract the same mask.
@@ -340,6 +362,40 @@ pub struct Profile {
     pub property_get_sub: u16,
     #[serde(default)]
     pub property_set_xor: u16,
+
+    /// EVENT-definition table (7.1.0: body + (hdr[0x64] + 0xE6130C67), 14-byte rows).
+    /// Located 2026-10-18 from the runtime EventInfo cache builder at 0x140515AE0 (the .text
+    /// function that fills klass->events for a typeDef row; element size 0x30, stored at
+    /// klass+0x38). Row layout:
+    ///   +0x00 u32 name: (raw ^ mask(row)) ^ event_name_xor (packed string index)
+    ///   +0x04 u32 type: (raw + event_type_add) ^ mask (typearr index; 0xFFFFFFFF = none)
+    ///   +0x08 u16 remove: ((raw + event_remove_add) ^ mask) & 0xFFFF (0xFFFF = none)
+    ///   +0x0A u16 raise:  ((raw + event_raise_add) ^ mask) & 0xFFFF (0xFFFF = none)
+    ///   +0x0C u16 add:    ((raw ^ mask) ^ event_add_xor) & 0xFFFF (0xFFFF = none)
+    /// Per-type range: typeDef eventStart = u16@0x38 + 0xFFFFD6AB (0xFFFF = none),
+    /// eventCount = u8@0x44 ^ 0xB5. Validated over the full table: 628 rows tile exactly over
+    /// all 88,902 typeDefs (0 irregularities); every type index < typearr length; for
+    /// un-obfuscated types the add/remove columns resolve to methods named add_*/remove_*.
+    #[serde(default)]
+    pub event_defs: Option<TableBase>,
+    #[serde(default)]
+    pub event_stride: u32,
+    #[serde(default)]
+    pub td_event_start: Option<Column>,
+    #[serde(default)]
+    pub td_event_count: Option<Column>,
+    #[serde(default)]
+    pub event_mask: Option<EventMaskChain>,
+    #[serde(default)]
+    pub event_name_xor: u32,
+    #[serde(default)]
+    pub event_type_add: u32,
+    #[serde(default)]
+    pub event_remove_add: u16,
+    #[serde(default)]
+    pub event_raise_add: u16,
+    #[serde(default)]
+    pub event_add_xor: u16,
 
     /// Generic-class row table: 8-byte rows `{defTypeDefIndex u32, genericInstIndex i32}`.
     /// The table lives in the sibling **`startup-metadata.dat`** (loaded at the same time as

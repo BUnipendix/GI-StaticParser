@@ -55,6 +55,7 @@
 |---|---|---|---|---|
 | 0x5C | ^ | 0x6B2B3963 | 3 | 导出类型索引 u32（-1=无）|
 | 0x60 | ^ | 0x15335474 | 4 | typeDef 表字节数（÷0x46=行数）|
+| 0x64 | + | 0xE6130C67 | 1 | **eventDefs 表（14B 行）**；运行时 EventInfo 构建器 0x140515AE0 读它（§85）|
 | 0x74 | ^ | 0x245177E0 | 3 | 泛型方法索引表 stride 6 {i32,u16}，大小=hdr[0x110]^0x1AB6109A ÷6 |
 | 0x98 | ^ | 0x76A06155 | 203 | 打包表 (类别3位|索引29位)；类别=6 → 查 0x188 |
 | 0xA4 | ^ | 0x1496B860 | 2 | image 表偏移（÷0x28=行数，88B/行）|
@@ -98,9 +99,25 @@
 | 0x45 | u8 | ^0xAB | nestedTypesCount | sub_14051e390+加载器 |
 | 0x24 | u32 | +0xCE2141CC | **propertyStart**（propertyDefs 行号）| 0x1405162B0（PropertyInfo 构建器），2026-10-18 |
 | 0x43 | u8 | ^0x86 | **propertyCount** | 0x1405161A4 同上（全量铺瓦 115,596 行，0 不规则）|
+| 0x38 | u16 | +0xFFFFD6AB | **eventStart**（eventDefs 行号；0xFFFF=无）| 0x140515E0F（EventInfo 构建器），2026-10-18 |
+| 0x44 | u8 | ^0xB5 | **eventCount** | 0x140515B42 同上（全量铺瓦 628 行，0 不规则）|
 | 0x2C | u32 | ^0x8177D738 混 tag | parent | layout71（旧）|
 | 0x3A | u16 | ^0x4BCE | ？（与 0x20 冲突，待重验）| layout71（旧）|
 | ? | u32 | ? | bitfield / token（未定位）| |
+
+## 4b. eventDefs 行（stride 14，base=hdr[0x64]+0xE6130C67+body）
+
+| 偏移 | 宽 | 解码 | 列 |
+|---|---|---|---|
+| 0x00 | u32 | ^mask ^0x05C273ED | nameIndex（packed 字符串索引）|
+| 0x04 | u32 | (+0x979C7DA9) ^mask | typeIndex（typearr；0xFFFFFFFF=无）|
+| 0x08 | u16 | ((raw+0x38EB) ^mask)&0xFFFF | remove（0xFFFF=无）|
+| 0x0A | u16 | ((raw+0xFFFFE40A) ^mask)&0xFFFF | raise（0xFFFF=无）|
+| 0x0C | u16 | ((raw^mask)^0x7D45)&0xFFFF | add（0xFFFF=无）|
+
+mask(i) = ((i*0x9C54 ^ 0x1F0DA79F) * 0x1BF89D8B64959BB7 + 0x295EE0EBA6CAFAEA) >> 15（64-bit 乘法）。
+来源：0x140515AE0 的 EventInfo 缓存构建器（写入 klass+0x38，元素 0x30）。全量 628 行精确铺瓦 [0,628)，
+type 索引全部合法，未混淆类型的 add/remove 落到 add_*/remove_* 方法（详见 IMPLEMENTATION_LOG §85）。
 
 ## 5. 方法行（stride 0x1A，base=hdr[0x1E0]^0x2EE480FB+body）
 

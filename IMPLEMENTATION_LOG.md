@@ -4956,3 +4956,37 @@ cache 构建函数，确认其语义是 **propertyDefs**：
 - `cargo build --release` / `cargo test --release`：17 passed；
 - 下一步候选：事件表、attribute 参数 blob、il2cpp.h。
 
+
+## 85. 真实 eventDefs 表定位 + DummyDll 事件（2026-10-18）
+
+> 不是需求，是执行记录。目标第 2 轮。
+
+### 85.1 定位（运行时 EventInfo 缓存构建器反汇编）
+- 0x140515AE0 = EventInfo 缓存构建器（结果写 klass+0x38，元素 0x30）；邻近 0x1405163B0 等为同类迭代器；
+- 表锚点 hdr[0x64] + 0xE6130C67 -> body 0x43A8；行 stride **14**；
+- 行布局 {u32 name, u32 type, u16 remove, u16 raise, u16 add}；
+  mask(i) = ((i*0x9C54 ^ 0x1F0DA79F) * 0x1BF89D8B64959BB7 + 0x295EE0EBA6CAFAEA) >> 15；
+  name = (raw ^ mask) ^ 0x05C273ED；type = (raw + 0x979C7DA9) ^ mask；
+  remove = ((raw + 0x38EB) ^ mask) & 0xFFFF；raise = ((raw + 0xFFFFE40A) ^ mask) & 0xFFFF；
+  add = ((raw ^ mask) ^ 0x7D45) & 0xFFFF；
+- typeDef eventStart = u16@0x38 + 0xFFFFD6AB；eventCount = u8@0x44 ^ 0xB5。
+
+### 85.2 全量验证
+- **628 行 / 225 类型**：eventStart/eventCount 在全部 88,902 个 typeDef 上精确铺瓦 [0,628)，0 处不规则；
+- 行内 type 索引全部 < typearr 长度 683,568（0 非法）；名称经字符串 cipher 解码（AssemblyLoad / DomainUnload /
+  ProcessExit / Elapsed / KeyGenerated / afterScriptRunDelayedDynamicFrameRate …）；
+- add/remove 列在未混淆类型上落到 add_*/remove_* 方法（AppDomain：add_AssemblyLoad idx 30、remove_AssemblyLoad idx 31，
+  与 typeDef methodCount=36 的运行时方法数组顺序一致）；混淆类型无法按名字复核，但索引均 < methodCount；
+- raise 列 628/628 全为 0xFFFF（7.1 元数据未保留 raise，与参考 DummyDll 的 Fire 语义一致——无 raise 就只发 add/remove）；
+- 独立 SRM 程序读回 DummyDll：Event 628 / EventMap 225 / MethodSemantics 133,270（属性 132,014 + 事件 1,256），
+  事件类型解析为真实委托类型（AssemblyLoadEventHandler / EventHandler / ElapsedEventHandler …）。
+
+### 85.3 接线与产物
+- profile：新增 EventMaskChain（64-bit 乘数，不能复用 FieldMaskChain）+ event_defs/event_stride/td_event_start/
+  td_event_count/event_name_xor/event_type_add/event_remove_add/event_raise_add/event_add_xor（7.1 常量见 layout71.rs）；
+- engine：td_event_start / td_event_count / event_row；
+- dummy_export：新增 E 记录；tools/dummygen：Event + EventMap + MethodSemantics(Adder/Remover/Raiser)；
+- dump.cs **不输出 Events 段**（与 Il2CppDumper StructGenerator 参考格式一致；参考实现的 events 只出现在 DummyDll 中）；
+- 产物：DummyDll.dll 96,367,616 -> **96,388,096 B**；dummy.jsonl 186,487,969 -> **186,550,006 B**；dump.cs 不变（127,953,647 B）；
+- cargo test：17 passed / 0 failed。
+

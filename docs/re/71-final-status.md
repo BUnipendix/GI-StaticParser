@@ -16,8 +16,8 @@
 | attributes.json | 10,025,050 B | 74,864 条属性实例，Recovered 70,693 |
 | literals.json | 6,287,449 B | 86,108 条字符串字面量（静态解密） |
 | images.json | 14,326 B | 75 images / 75 assemblies |
-| DummyDll.dll | 96,367,616 B | 88,904 TypeDef / 733,444 Method / 440,177 Field / **115,596 Property / 30,226 PropertyMap / 132,014 MethodSemantics** / 1,041,595 CustomAttribute / 1,195 GenericParam |
-| dummy.jsonl | 186,487,969 B | DummyDll 生成器输入（结构化导出，含 115,596 条 P 记录） |
+| DummyDll.dll | 96,388,096 B | 88,904 TypeDef / 733,444 Method / 440,177 Field / **115,596 Property / 30,226 PropertyMap / 628 Event / 225 EventMap / 133,270 MethodSemantics** / 1,041,595 CustomAttribute / 1,195 GenericParam |
+| dummy.jsonl | 186,550,006 B | DummyDll 生成器输入（结构化导出，含 115,596 条 P + 628 条 E 记录） |
 
 ## 3. 逐项状态
 
@@ -33,7 +33,7 @@
 | 接口继承（interface 的基接口） | 未保留 | 7.1 metadata 1,580 个 interface 的基接口行 = 0（全量），6.4 oracle 有 270 个（日志 §75） |
 | property 表 | **已恢复（真实表，2026-10-18）** | metadata body 的 10B 行表（hdr[0x158]−0x1D545CCC）即 propertyDefs：115,596 条 / 30,226 类型，getter 112,107 / setter 19,907 全部索引合法；属性名经字符串 cipher 解码；与 6.4 oracle corelib shared 类型属性序列全等 1,272/1,318=96.5%、名称 Jaccard 0.9899（tools/validate_properties.py；日志 §83）。dump.cs 由合成 63,117 换成真实 115,596 |
 | metadataUsage / ScriptString / ScriptMetadata | 未解（需运行时/加密） | script.json 对应字段为空；metadataUsage 槽在运行时 BSS（历史轮次已证） |
-| DummyDll | 已生成 | 单程序集自包含（96MB）；Address(RVA/Offset/VA)/FieldOffset 特性 1,041,595 条；GenericParam 1,195；**Property 115,596 + PropertyMap 30,226 + MethodSemantics 132,014（真实属性表，2026-10-18）** |
+| DummyDll | 已生成 | 单程序集自包含（96MB）；Address(RVA/Offset/VA)/FieldOffset 特性 1,041,595 条；GenericParam 1,195；**Property 115,596 + PropertyMap 30,226 + Event 628 + EventMap 225 + MethodSemantics 133,270（真实属性表/事件表，2026-10-18）** |
 | DummyDll 75 程序集划分 | 不可得 | startup image 表解列后无 typeStart/typeCount（反汇编 loader，日志 §78） |
 | 方法泛型参数 / 泛型约束 | 不可得 | method 泛型容器信息未从 metadata 解出；约束未保留 |
 

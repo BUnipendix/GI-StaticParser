@@ -1,7 +1,7 @@
 //! Structured export for the DummyDll generator (tools/dummygen).
 //!
 //! One JSON object per line. Record kinds:
-//!   T type / I interface impl / F field / M method / P property
+//!   T type / I interface impl / F field / M method / P property / E event
 //! Types are referenced by typeDef index; the generator defines all of them in one assembly, so
 //! no cross-assembly references are needed for v1. `P` carries the real metadata property name
 //! plus getter/setter method indexes (global method-table indexes, -1 = no accessor).
@@ -92,7 +92,7 @@ fn rva_to_file(m: &Meta, rva: u32) -> Option<u32> {
     None
 }
 
-pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize, usize)> {
+pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize, usize, usize)> {
     let (tds, mds) = collect(m);
     let inst_offsets = super::dump_gen::instance_offsets(m, &tds);
     let mut per_type: Vec<Vec<usize>> = vec![Vec::new(); tds.len()];
@@ -126,6 +126,7 @@ pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize
     let mut n_fields = 0usize;
     let mut n_methods = 0usize;
     let mut n_props = 0usize;
+    let mut n_events = 0usize;
 
     for (i, td) in tds.iter().enumerate() {
         let kind = type_kind(m, &tds, td);
@@ -231,6 +232,31 @@ pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize
             }
         }
 
+        // Event definitions (real metadata table; accessor indices are per-type method indexes).
+        if let (Some(ev_start), Some(ev_count)) = (m.td_event_start(i), m.td_event_count(i)) {
+            for row in ev_start as u32..ev_start as u32 + ev_count {
+                let Some((name_idx, etype, add, remove, raise)) = m.event_row(row) else { continue };
+                let gmi_of = |k: Option<u16>| -> i64 {
+                    k.and_then(|k| per_type[i].get(k as usize).copied())
+                        .map(|g| g as i64)
+                        .unwrap_or(-1)
+                };
+                let ename = m.decode_str(name_idx);
+                let ty = etype.map(|ti| enc_type(m, ti, 0));
+                writeln!(
+                    w,
+                    "{{\"k\":\"E\",\"id\":{},\"name\":{},\"type\":{},\"add\":{},\"remove\":{},\"raise\":{}}}",
+                    i,
+                    serde_json::to_string(&ename)?,
+                    serde_json::to_string(&ty)?,
+                    gmi_of(add),
+                    gmi_of(remove),
+                    gmi_of(raise)
+                )?;
+                n_events += 1;
+            }
+        }
+
         for &gmi in &per_type[i] {
             let md = &mds[gmi];
             let ret = enc_type(m, md.ret_type, 0);
@@ -274,7 +300,7 @@ pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize
         }
     }
     w.flush()?;
-    Ok((n_types, n_fields, n_methods, n_props))
+    Ok((n_types, n_fields, n_methods, n_props, n_events))
 }
 
 fn td_parent_tdi(m: &Meta, tds: &[Td], td: &Td) -> i64 {
