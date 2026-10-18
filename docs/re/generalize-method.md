@@ -961,6 +961,24 @@ PARTIALLY VALIDATED。
 用途：只要有目标版本的 dump.cs（6.1–6.5 的 rar、6.0 zip 里都有），同一套流程可以把列常数
 自动重新发现，而不需要人工读汇编——这是“可自动化 profile 管线”的第一个成型组件。
 
+
+### 3.2am 各版本 profile 状态矩阵（自动生成）（2026-10-18）
+
+新增 tools/version-triage/status_matrix.py，扫描 ~/gire/out/cross 与 docs/re/artifacts-*/，
+生成 docs/re/version-status.md：26 个版本 ×（derive/sites/tables/ranges/typedefs/shape/
+method/param/prop/field/event/typearr/typeDef 行数）。当前覆盖：
+
+- **完整 profile + oracle 端到端验证**：7.0.0、6.7.0（方法/参数/字段/属性/事件/typearr 全解，
+  与 7.1 dump 的 corelib 逐类型对照：7.0 返回 99.6%/参数 98.1%/字段 99.0%/属性 91.9%；
+  6.7 字段 100%/返回 100%/参数 100%/属性 96.3%）；
+- **部分验证**：6.4.0（typeDef 已验收；方法表 base/stride/mask + paramCount 已对 6.4Dump 60/60
+  验证；paramStart/name 未解）；
+- **typeDef 级**：7.1.0（表/行数）、6.0.0、5.4.0（typeDef+ranges+typedefs）；
+- **仅基础产物**：4.8.0（derive/sites/shape）、5.0–5.3/5.5–5.8/6.1–6.3/6.5–6.6（derive）；
+- **未开始**：4.2–4.7（按目标最后处理，代码在主 exe 外）。
+
+这张矩阵就是“泛化到历史版本”的进度面板：结构可跨版继承，常数逐版重导，oracle 反推可自动化。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。

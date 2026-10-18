@@ -1,6 +1,7 @@
 # 关键常数与算法索引（跨版本）
 
 本文件是"每个关键常数/算法在哪里、怎么解出来的、验证数字是多少"的快速索引。
+各版本的覆盖状态见 `version-status.md`（自动生成）。
 详细推导与证据在 `generalize-method.md` 的 §3.2x 小节；每轮实现细节在 `IMPLEMENTATION_LOG.md`。
 所有布局都是**纯数据 JSON**（`docs/re/artifacts-*/`），工具不硬编码版本常数。
 
@@ -78,7 +79,7 @@
 | 属性列 | name off 0 (raw^mask^0x2BFBE794)；getter off 8 ((raw^mask16)^0x5D18)；setter off 4 ((raw^mask16)^0xD662) | get_ 56,483 / set_ 8,584 |
 | 端到端清单 | dump67_partial.py -> dump67-partial.txt（83,775/413,644/687,467） | R53/R54 |
 
-## 2b. 6.4.0（进行中：typeDef 已验收，方法/参数为候选）
+## 2b. 6.4.0（typeDef 已验收；方法表 base/stride/mask + paramCount 已验证；paramStart/name 未解）
 
 | 项 | 值 | 状态 |
 |---|---|---|
@@ -87,8 +88,8 @@
 | typeDef ns 列 | off 32 Xor 0x468CB988 | 59/256（无命名空间类型多） |
 | typeDef start/count 对 | off20 Add 0x7589193B + off40 Add 0xE8D4；off62 Xor 0x6FE9B568 + off120 Xor 0xD846（跨行） | R30 |
 | 类型清单 vs 7.1 dump | Jaccard 0.961（差异为编译器生成泛型显示名） | R29 oracle |
-| 方法/参数表 | hdr[0x1FC]^0x22414276 stride 26、mask 链、参数表 hdr[0x2C]+0x934F4900 stride 8 | **CANDIDATE - NOT VALIDATED** |
-| 已知负结果 | 名字解码 (raw^mask^0x0834AA45) 返回 None；线性全局索引代入 paramCount/paramStart 均不可能值 | 见 §3.2af / §3.2ag |
+| 方法/参数表 | hdr[0x1FC]^0x22414276 stride 26、mask 链；**paramCount = row+0x10 u8 (raw^mask^0x63) 已对 6.4Dump 60/60 验证**；paramStart/name 未解 | **PARTIALLY VALIDATED** |
+| 已知负结果 | name 列（多族穷举最佳 16/30 标识符，疑二次变换链）；paramStart 列（累计和约束无候选） | 见 §3.2ak / §3.2al |
 
 ## 3. 7.1.0（早期参考，已固化）
 

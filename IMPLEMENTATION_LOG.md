@@ -5795,3 +5795,13 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
    60/60；param_start NO MATCH（与人工穷举一致）。
 3. 该工具把“oracle 反推列常数”流程化：6.1–6.5 的 rar、6.0 zip 里都有 dump，可对每个历史版本
    自动重新发现列常数，是可自动化 profile 管线的第一个成形组件。
+
+## 136. R65 各版本 profile 状态矩阵（自动生成）+ 进度面板（2026-10-18）
+
+1. 新增 tools/version-triage/status_matrix.py：扫描 cross 与 artifacts 目录，生成
+   docs/re/version-status.md（26 版本 x derive/sites/tables/ranges/typedefs/shape/
+   method/param/prop/field/event/typearr/typeDef 行数）。
+2. 当前覆盖：完整 profile+oracle 验证 = 7.0.0、6.7.0；部分验证 = 6.4.0（typeDef 验收、
+   paramCount 60/60，paramStart/name 未解）；typeDef 级 = 7.1.0、6.0.0、5.4.0；
+   仅基础产物 = 4.8.0 与 5.x/6.x 若干；未开始 = 4.2-4.7（按目标最后处理）。
+3. constants-index.md 同步更新 6.4 状态（PARTIALLY VALIDATED）并引用 version-status.md。
