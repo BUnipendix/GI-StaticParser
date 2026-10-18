@@ -537,6 +537,39 @@ corelib 前 60 个类型对照（字段按名字匹配，属性按名字匹配�
 setter 是 XorCSubMask16（(raw ^ 0xFFFFC45A) − mask_low16），最后都 &0xFFFF；用错成 32 位 xor
 会解出 5 万级“索引”，与“访问器是每类型相对方法索引”矛盾。method_rows.col_value 已补此 kind。
 
+### 3.2r 7.0 第一份端到端类型清单（dump70-partial）（2026-10-18）
+
+新增 tools/version-triage/dump70_partial.py，用已解布局输出 7.0 全量类型清单
+（~/gire/out/cross/dump70-partial.txt，63.8 MB）：
+
+- 类型 86,932；字段 430,290；属性 112,949；方法 713,956；
+- 每个类型带 TypeDefIndex 与字段/方法/属性计数；字段/属性/方法都渲染了真实类型名
+  （类/值类型/基础类型/指针/数组/byref），泛型仍是 genericinst#N、!n、!!n 占位。
+
+样例（与 7.1 dump 的 corelib 开头一致）：
+
+    type Locale
+    {
+      System.Void .ctor()
+      System.String GetText(System.String msg)
+      System.String GetText(System.String fmt, System.Object[] args)
+    }
+
+这份清单还不是可编译的 dump.cs：typeDef flags（class/struct/interface/enum）、属性、
+RVA/Token/Slot、泛型实例名都还没有；但“表 → 名字/类型”的端到端通路已经打通，后续
+每补一个表（flags、slot、泛型）就可以直接注入。
+
+### 3.2r.1 GENERICINST 表的负结果（2026-10-18）
+
+为定位泛型实例表又做了三轮扫描，全部 0 候选：
+
+1. exe 内 16 字节 {argc, pad, argv_ptr} 记录（argv 需指向 typearr 内 VA 数组）；
+2. exe 内 24/32 字节 generic-class 记录（首列 typeDefIndex，第二列 0）；
+3. metadata body 内任意列 <86,932 的规则表（stride 8/12/16/20/24/32/40/48/64，命中率 >0.97）。
+
+结论：泛型实例表很可能在加密指针区域（7.0 的 .data 全局指针是密文，如 0x35125d183ea8b34e），
+需要找到运行时全局指针解密例程才能静态还原；这条线索下一轮再挖。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。

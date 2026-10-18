@@ -5553,3 +5553,15 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
 3. 负结果：GENERICINST 泛型实例表三种结构扫描全 0 命中（16B {argc,pad,argv_ptr}、
    24/32B generic-class 记录、metadata body generic class 表 stride 8..24）⇒ 指针可能加密或布局不同。
 4. 新增 tools/version-triage/validate_fields_props.py（字段/属性对照验收）。
+
+## 115. R44 7.0 第一份端到端类型清单（dump70-partial）+ 泛型表负结果（2026-10-18）
+
+1. 新增 tools/version-triage/dump70_partial.py，输出 7.0 全量类型清单 dump70-partial.txt
+   （63.8 MB）：类型 86,932、字段 430,290、属性 112,949、方法 713,956；字段/属性/方法均渲染
+   真实类型名（类/值类型/基础类型/指针/数组/byref），泛型仍占位 genericinst#N、!n、!!n。
+   样例与 7.1 dump corelib 开头一致（Locale.GetText 等）。
+2. 该清单还不是可编译 dump.cs：typeDef flags（class/struct/interface/enum）、属性、RVA/Token/Slot、
+   泛型实例名未解；但“表→名字/类型”通路已打通。
+3. GENERICINST 表三轮扫描全部 0 候选：exe 16B {argc,pad,argv_ptr}、24/32B generic-class 记录、
+   metadata body 任意列<86,932 的规则表（stride 8..64）。判断泛型实例表在加密指针区域
+   （7.0 .data 全局指针为密文），需先找运行时全局指针解密例程。
