@@ -838,6 +838,23 @@ docs/re/artifacts-6.4.0/method-param-layout-candidate.json
 （status: CANDIDATE - NOT VALIDATED）记录，不当作已解；下一步读清 r8 的来源（类初始化路径）
 或找真正的方法元数据解码器。
 
+
+### 3.2af 6.4.0 补充事实与未决点（2026-10-18）
+
+本轮把 6.4 能确证的事实补进 candidate JSON：
+
+- 6.4 typeDef 表（来自 cross/tables-6.4.0.json，R28/R30 已验收）：base 15,161,244，stride 70，
+  rows 77,262；name 列 off 24 Add 0xE169AC15；namespace 列 off 32 Xor 0x468CB988；
+  两组 start/count 对：off20 Add 0x7589193B + off40 Add 0xE8D4；off62 Xor 0x6FE9B568 +
+  off120 Xor 0xD846（cnt_off 越过 70 字节行，正是之前记录的 IndexTable 跨行模型）。
+- 6.4 类初始化函数 0x140479C80 的方法行公式：循环起点 = dword[typeDefish+0x1C] + 0x8A76E6C5，
+  行地址 = 方法表 base + 26*index，掩码 = (index*0x11D36B90D36A8EDD + 0x68C1F6C86562CBFC)>>0x13，
+  随后在 row+0x16 读 word 作为 paramCount（不是 6.7 的 byte +0x18）。
+
+未决：该 index 是类初始化器使用的编码索引；用线性全局方法索引代入时 paramCount 解出 22/85/88
+等不可能值，说明全局方法索引到该编码索引的映射仍未确定。因此 6.4 方法与参数列继续标注为
+CANDIDATE - NOT VALIDATED，未作为已解写入 profile。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。

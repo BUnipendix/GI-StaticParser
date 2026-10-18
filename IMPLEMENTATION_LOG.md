@@ -5721,3 +5721,14 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
    (r8=[rdi+0x18])，语义与 6.7 不同（疑编码 methodStart）。
 3. 常数写入 docs/re/artifacts-6.4.0/method-param-layout-candidate.json（status CANDIDATE - NOT
    VALIDATED），不当作已解；下一步读清 r8 来源或找真正方法元数据解码器。
+
+## 129. R58 6.4.0 补充事实（typeDef 布局、类初始化行公式）与未决点（2026-10-18）
+
+1. candidate JSON 补齐 6.4 typeDef 布局（cross/tables-6.4.0.json，R28/R30 已验收）：base 15,161,244、
+   stride 70、rows 77,262、name off24 Add 0xE169AC15、ns off32 Xor 0x468CB988、两组 start/count 对
+   （off20/off40 与 off62/off120，后者跨行属已知 IndexTable 跨行模型）。
+2. 6.4 类初始化 0x140479C80 的方法行公式：起点 = dword[typeDefish+0x1C] + 0x8A76E6C5；
+   行 = 方法表 base + 26*index；掩码 = (index*0x11D36B90D36A8EDD+0x68C1F6C86562CBFC)>>0x13；
+   paramCount 读 word[row+0x16]（非 6.7 的 byte +0x18）。
+3. 未决：index 是类初始化器的编码索引；线性全局方法索引代入解出 22/85/88 等不可能值 ⇒ 全局索引到
+   编码索引的映射未定。6.4 方法与参数列继续 CANDIDATE-NOT VALIDATED。

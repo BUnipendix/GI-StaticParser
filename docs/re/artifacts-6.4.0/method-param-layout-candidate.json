@@ -1,56 +1,96 @@
 {
-  "artifact": "method-param-layout-candidate",
-  "artifact_version": 0,
-  "status": "CANDIDATE - NOT VALIDATED",
-  "version": "6.4.0",
-  "provenance": {
-    "method": "shape-transfer seed 6.7 method metadata decoder -> 6.4 sites; best hit fn 0x140479C80, then its cipher-caller fn 0x14048D770 was disassembled (this is the 6.4 param/default-value decoder)",
-    "function": "0x14048D770"
+ "artifact": "method-param-layout-candidate",
+ "artifact_version": 0,
+ "status": "CANDIDATE - NOT VALIDATED",
+ "version": "6.4.0",
+ "provenance": {
+  "method": "shape-transfer seed 6.7 method metadata decoder -> 6.4 sites; best hit fn 0x140479C80, then its cipher-caller fn 0x14048D770 was disassembled (this is the 6.4 param/default-value decoder)",
+  "function": "0x14048D770"
+ },
+ "method_table": {
+  "slot": "0x1FC",
+  "op": "xor",
+  "imm": "0x22414276"
+ },
+ "method_stride": 26,
+ "method_mask": {
+  "mul": "0x11D36B90D36A8EDD",
+  "add": "0x68C1F6C86562CBFC",
+  "shr": 19
+ },
+ "method_columns": {
+  "param_count": {
+   "off": 24,
+   "formula": "(raw8 ^ (mask8) ^ 0x63) & 0xFF"
   },
-  "method_table": {
-    "slot": "0x1FC",
-    "op": "xor",
-    "imm": "0x22414276"
-  },
-  "method_stride": 26,
-  "method_mask": {
-    "mul": "0x11D36B90D36A8EDD",
-    "add": "0x68C1F6C86562CBFC",
-    "shr": 19
-  },
-  "method_columns": {
-    "param_count": {
-      "off": 24,
-      "formula": "(raw8 ^ (mask8) ^ 0x63) & 0xFF"
-    },
-    "param_start": {
-      "off": 8,
-      "formula": "(((raw32 + 0xEE6D5044) & 0xFFFFFFFF) ^ mask32) then + local index"
-    }
-  },
-  "param_table": {
-    "slot": "0x2C",
-    "op": "add",
-    "imm": "0x934F4900"
-  },
-  "param_stride": 8,
-  "param_mask": {
-    "mul1": "0x227BBC409D01",
-    "shr1": 14,
-    "xor0": "0x224F51C3",
-    "mul2": "0x25E50B2E",
-    "shr2": 12
-  },
-  "param_columns": {
-    "name": {
-      "off": 0,
-      "formula": "(((raw32 + 0xE7B06DEA) & 0xFFFFFFFF) ^ mask32)"
-    }
-  },
-  "validation_attempt": {
-    "result": "FAILED",
-    "detail": "decoding paramStart with the global method index produced out-of-range values (~15e9), so the row index used by the method mask is NOT the linear global method index in 6.4; it is likely an encoded methodStart (the function takes r8 from a class field [rdi+0x18]). Data validation therefore could not be completed this round.",
-    "next": "read how r8 is derived in the class-init caller (0x140479C80 / its init path) and re-run validation; or find the 6.4 method metadata decoder that exposes name/retType columns"
-  },
-  "notes": "Method table slot/stride, mask chain, paramCount and param table base/mask/name formula are read from code and recorded as constants; they are NOT certified by data validation yet."
+  "param_start": {
+   "off": 8,
+   "formula": "(((raw32 + 0xEE6D5044) & 0xFFFFFFFF) ^ mask32) then + local index"
+  }
+ },
+ "param_table": {
+  "slot": "0x2C",
+  "op": "add",
+  "imm": "0x934F4900"
+ },
+ "param_stride": 8,
+ "param_mask": {
+  "mul1": "0x227BBC409D01",
+  "shr1": 14,
+  "xor0": "0x224F51C3",
+  "mul2": "0x25E50B2E",
+  "shr2": 12
+ },
+ "param_columns": {
+  "name": {
+   "off": 0,
+   "formula": "(((raw32 + 0xE7B06DEA) & 0xFFFFFFFF) ^ mask32)"
+  }
+ },
+ "validation_attempt": {
+  "result": "FAILED",
+  "detail": "decoding paramStart with the global method index produced out-of-range values (~15e9), so the row index used by the method mask is NOT the linear global method index in 6.4; it is likely an encoded methodStart (the function takes r8 from a class field [rdi+0x18]). Data validation therefore could not be completed this round.",
+  "next": "read how r8 is derived in the class-init caller (0x140479C80 / its init path) and re-run validation; or find the 6.4 method metadata decoder that exposes name/retType columns"
+ },
+ "notes": "Method table slot/stride, mask chain, paramCount and param table base/mask/name formula are read from code and recorded as constants; they are NOT certified by data validation yet.",
+ "type_defs": {
+  "base": 15161244,
+  "stride": 70,
+  "rows": 77262,
+  "source": "cross/tables-6.4.0.json",
+  "columns": {
+   "name": {
+    "off": 24,
+    "transform": "Add",
+    "c": "0xE169AC15"
+   },
+   "namespace": {
+    "off": 32,
+    "transform": "Xor",
+    "c": "0x468CB988"
+   },
+   "pair_a": {
+    "idx_off": 20,
+    "idx_transform": "Add",
+    "idx_c": "0x7589193B",
+    "cnt_off": 40,
+    "cnt_transform": "Add",
+    "cnt_c": "0xE8D4"
+   },
+   "pair_b": {
+    "idx_off": 62,
+    "idx_transform": "Xor",
+    "idx_c": "0x6FE9B568",
+    "cnt_off": 120,
+    "cnt_transform": "Xor",
+    "cnt_c": "0xD846",
+    "note": "cnt_off crosses the 70-byte row (IndexTable cross-row model)"
+   }
+  }
+ },
+ "class_init_row_formula": {
+  "function": "0x140479C80",
+  "detail": "loop start = dword[typeDefish_ptr + 0x1C] + 0x8A76E6C5; row = method_base + 26*index; mask = (index*0x11D36B90D36A8EDD + 0x68C1F6C86562CBFC)>>0x13; then paramCount read as word at row+0x16 (NOT byte +0x18)",
+  "status": "row index domain is the encoded one used by the class initialiser; decoding with a linear global method index yields implausible counts (22/85/88...), so the mapping from global method index to this encoded index is still unresolved"
+ }
 }
