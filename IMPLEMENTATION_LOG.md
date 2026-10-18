@@ -5502,3 +5502,16 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
    检查全部 PASS（新增 return type column 检查：50k 抽样 25,021 个 Void 且全部在界内）。
 4. 未完成：GENERICINST/PTR/SZARRAY 的 data 语义（索引还是指针）与泛型实例表解码；
    参数 type 列用 typearr 复核在界内（max 662,533=N-1）。
+
+## 111. R40 Il2CppType 渲染 + 与 7.1 dump 方法级对照（2026-10-18）
+
+1. typearr data 语义确认：VALUETYPE/CLASS data=typeDefIndex；VAR/MVAR data=泛型参数位置；
+   PTR/SZARRAY/ARRAY data=元素类型在 typearr 的 VA（换算索引后递归）；GENERICINST data=泛型实例
+   表索引（表未定位，暂 genericinst#N）。
+2. 新工具 tools/version-triage/type_render.py：输出 7.0 全部 713,956 个方法行（声明类型+方法名+
+   渲染返回类型），例 Locale.GetText : System.String、Runtime.mono_runtime_install_handlers :
+   System.Void、Runtime.LoadBinData : System.Byte[]。
+3. 与 7.1 dump.cs 逐类型对照（corelib 60 类型）：方法名交集 5,166；返回类型逐项一致
+   5,164/5,166 = 99.96%；2 个不一致均为泛型方法 MVAR 返回（!!1895 vs public T）⇒ 需要泛型参数名映射。
+4. 结论：方法表的声明类型/方法名/返回类型在本版本已端到端可用；剩余 GENERICINST 表定位、
+   VAR/MVAR 名字映射，然后渲染字段/参数/属性并生成 dump.cs。

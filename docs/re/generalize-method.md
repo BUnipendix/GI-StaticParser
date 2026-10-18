@@ -444,6 +444,28 @@ value = (raw ^ 0x215FCCB1) − mask。验证：
 新增 docs/re/artifacts-7.0.0/typearr.json；tools/version-triage/method_rows.py 输出
 return_type 的解析样本/void 比例/越界数；verify_70.py 增加到 13 项检查，全部 PASS。
 
+### 3.2n Il2CppType 渲染 + 与 7.1 dump 的方法级对照（2026-10-18）
+
+Il2CppType data 语义已确认（7.0）：VALUETYPE/CLASS 的 data = typeDefIndex；VAR/MVAR 的 data =
+泛型参数位置；PTR/SZARRAY/ARRAY 的 data = 元素类型在 typearr 里的 VA（可换算成索引后递归）；
+GENERICINST 的 data 是尚未定位的泛型实例表索引（暂渲染为 genericinst#N）。
+
+新增 tools/version-triage/type_render.py，用 7.0 布局输出全部 713,956 个方法行：
+声明类型 + 方法名 + 渲染后的返回类型（例：Locale.GetText : System.String、
+Runtime.mono_runtime_install_handlers : System.Void、Runtime.LoadBinData : System.Byte[]）。
+
+与 7.1 dump.cs 的逐类型对照（corelib 60 个类型；方法名按类型对齐）：
+
+| 指标 | 结果 |
+|---|---|
+| 方法名交集 | 5,166 |
+| 返回类型逐项一致 | **5,164 / 5,166 = 99.96%** |
+| 不一致项 | 2 个，均为泛型方法的 MVAR 返回（我们显示 !!1895，dump 显示 public T）⇒ 需要泛型参数名映射 |
+
+这说明方法表的声明类型归属、方法名、返回类型在这个版本上已经端到端可用；剩余工作是把
+GENERICINST 表定位、VAR/MVAR 映射成真实泛型参数名，然后同样渲染字段/参数/属性类型并生成
+dump.cs。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。
