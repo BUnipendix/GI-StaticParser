@@ -13,7 +13,7 @@
 | metadataUsage（script.json Addresses/ScriptMetadata 基础）| 扫 body 无 `{start,count}` 连续表（两种列序、双相位、≥32 行连续）；该表在运行时由 code registration 写入 BSS |
 | stringLiterals 数据 | exe `il2cpp` 段（306MB）无 ASCII 文本池（64KB 块密度>0.8 且零率<2% 的块数 = 0）；metadata body 只有 ~45KB 明文字符串（默认值用的 UI 路径），非 689,799 条字面量 |
 | ~~属性表本体（propertyDefs）~~ | **已推翻（2026-10-18，§83）**：不是标准 20B 行，而是 `hdr[0x158]−0x1D545CCC` 的 **10B 行**（name/getter/未知/setter），运行时 PropertyInfo 构建器 0x140515FC0 直接读它；全量解出 115,596 条属性（详见 gap-inventory #3、71-final-status）|
-| 泛型参数名（genericParameters）| 29 个字符串解码调用点逐一分析、startup/body 明文 packed 索引扫、`{nameIdx,owner}` 8B 扫、16B container 扫 均无命中 |
+| 泛型参数名 / 约束（genericParameters）| 2026-10-18 复核：全字符串池解码后 TKey/TValue/TResult 计数 = 0；数据区/startup 按 12/14/16B stride 全位置扫描（名称可解码 + owner 单调 + 约束列合理，连续 ≥50 行）0 命中；旧 29 个字符串解码调用点 0 命中。结论：7.1 已剥离（6.4 oracle 仍有真实名字）|
 | 属性参数（22,146 条含参属性）| attributeTypes 数组后仅 769 个小整数；0xA03E64–0xC00000 无明文串；无 74,864 长度的偏移/单调数组 |
 
 > 这些项的 oracle 值要么来自运行时内存（Il2CppDumper 参考 dump 是运行时辅助产生的），要么 GI 构建期 strip。
@@ -32,7 +32,7 @@
 | 项 | 说明 |
 |---|---|
 | DummyDll | 用现有类型/字段/方法数据生成 .NET 桩程序集（需写 PE+CLI 元数据，1–2k 行）|
-| il2cpp.h | Il2CppDumper 的运行时结构头（版本固定模板 + 指针宽度）|
+| il2cpp.h | **未产出（有理由）**：GI 运行时结构经 VMP 改造（实测 klass+0x10=tdi、+0x38 events、+0x48 props、+0x58 methods、+0x60 typeDef 行等），与 Il2CppDumper 标准 V27/V29 模板不一致；标准模板会误导，而 GI 实测结构只覆盖 metadata-cache 部分，不足以生成完整头文件 |
 | script.json 的 Signature/TypeSignature | 可从已解类型/参数渲染（仅格式约定待定）|
 | 多版本通用化（R9）| 用 26 个样本跑 version-triage + .upx0 常数读取 SOP |
 

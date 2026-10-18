@@ -133,3 +133,5 @@
 - [2026-10-18] DummyDll v5：字段默认值接入 Constant（74,632 行；kind 不支持时写 MetadataOffsetAttribute，916 条），字段 flags 保留 Literal/HasDefault；F 记录带 cv/mo。验证：Int32.MaxValue/Boolean.TrueLiteral/DayOfWeek.Monday/enum 常量与 <PrivateImplementationDetails> MetadataOffset 均正确（日志 §87）。
 
 - [2026-10-18] 参数默认值表：hdr[0x1D0]^0x07D0BBF9、stride 12、rows=(hdr[0x18]+0xA1C835BE)/12；行 {全局参数索引(升序), valueTypeIndex, dataOffset(-1=无值)}，值在共享 blob (hdr[0x128]^0x371354A2)。7.1 解出 25,374 行（15,595 有值），DummyDll Constant 90,224（字段+参数），HasDefault 与 Constant 严格一致。证据/公式：IMPLEMENTATION_LOG §88、metadata-loading-flow §4c。
+
+- [2026-10-18] 最终校验：tools/final_verify.sh [out]（重建全部工件并断言计数/大小；WITH_LITERALS=1 重跑字面量工具）+ tools/final_verify.py（仅校验现有工件）。7.1 实测全 PASS、端到端 31.7s。泛型参数名负结果与最终差距清单见 docs/re/71-final-status.md、IMPLEMENTATION_LOG §89。

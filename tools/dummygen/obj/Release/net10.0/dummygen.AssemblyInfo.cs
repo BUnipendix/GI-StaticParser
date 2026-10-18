@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("dummygen")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ae397209fe37e7ee22cc3b6539a1767461afa227")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8893bfde0c4f8469eafbd253f1a2210672c85483")]
 [assembly: System.Reflection.AssemblyProductAttribute("dummygen")]
 [assembly: System.Reflection.AssemblyTitleAttribute("dummygen")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

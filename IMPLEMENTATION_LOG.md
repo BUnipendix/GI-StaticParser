@@ -5087,3 +5087,27 @@ property/event）、AttributeAttribute（无法还原的属性实例；RVA/Offse
   dump.cs 不变（127,953,647 B）；
 - cargo test：17 passed / 0 failed。
 
+
+## 89. 最终审计：泛型参数名负结果 + 全量可复现校验（2026-10-18）
+
+> 不是需求，是执行记录。目标第 6 轮（收尾）。
+
+### 89.1 泛型参数名 / 约束（最后一次尝试，负结果）
+- 6.4 oracle 类型头显示真实泛型参数名（List<T> / Tuple<T1,T2> / Lazy<T>），说明 6.4 metadata 保留；
+- 7.1 侧检查：
+  1) 字符串池：全池解码后 TKey / TValue / TResult 出现次数 = **0**（T/U/V 单字母大量存在，属普通标识符）；
+  2) 数据区结构扫描：对 12/14/16B stride、所有字节对齐位置，要求「名称可解码为标识符 + owner 单调 +
+     约束列合理」连续 ≥50 行 -> **0 命中**（startup-metadata 同样 0 命中）；
+  3) 旧笔记 29 个字符串解码调用点逐一分析 = 0（§69 遗留）。
+- 结论：7.1 的泛型参数名/约束与接口基接口一样**被剥离**；dump.cs 只能对 VAR/MVAR 以 object/*k0x13*/ 占位、
+  类型头保持 List`1 形式。不是"没找到"，是元数据无此数据。
+
+### 89.2 全量可复现校验（tools/final_verify.sh + tools/final_verify.py）
+- 一条命令重建全部工件：mhydump dump-gen（dump.cs/script.json/attributes/images/dummy.jsonl）
+  + dummygen（DummyDll），可选 WITH_LITERALS=1 重跑 gi-stringliteral；
+- 断言：7 个文件大小 + dump.cs 类型/方法/属性计数 + dummy.jsonl 六类记录数 + attributes/images/literals 计数；
+- 2026-10-18 实测：**全部 PASS，端到端 31.7s**（dump.cs 127,953,647 B、DummyDll 146,666,496 B、
+  dummy.jsonl 217,786,835 B 等，与 71-final-status §2 完全一致）。
+- 结论：静态可解数据已全部恢复且可从干净构建复现；剩余项均为已证不可得 / 需运行时数据，
+  详见 docs/re/71-final-status.md §3.2。
+
