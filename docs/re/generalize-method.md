@@ -908,6 +908,24 @@ constants-index.md 的 2b 节；6.4 方法与参数仍 CANDIDATE - NOT VALIDATED
 继续 CANDIDATE - NOT VALIDATED；下一步应改从 6.4 的 typeDef methodStart/paramCount 数据反查真实表，
 或用 6.4 的字段/属性构建器旁路定位。
 
+
+### 3.2aj 6.4.0 方法解码器找到：表身份被支持，但列索引仍对不上（2026-10-18）
+
+顺着 R61 的否定结果继续查，在调用图里找到 6.4 的方法元数据解码器 **fn 0x1404799E2**：
+它确实用 hdr[0x1FC]^0x22414276 + 26*index 的行，并按同一掩码链取列——即 R61 否定的
+“0x1FC 不是方法表”是过强的结论，表身份其实是对的。该函数从方法行读出：
+
+- param_count：row+0x18 的 u8，(raw ^ mask8 ^ 0x63)；
+- flags：row+0x16 的 u16，(raw + 0xFFFFE182) ^ mask16；
+- token 类：row+0x0C 的 u16，(raw + 0x1B9E) ^ mask16，符号扩展成 dword；
+- row+0x0E 的一个 dword（两个 u16，SIMD paddw 后 pxor 掩码）；
+- row+0x19 的位域：(raw ^ mask8 ^ 0x27) 再拼标志位。
+
+但用 plain 全局方法索引代入仍解不出合理 paramCount（方法 0 期望 0，公式给 22），名字公式
+（类初始化里 (raw32[+0] ^ mask ^ 0x0834AA45)）解码也仍返回 None；用 4 个已知方法名
+（.ctor/GetText/GetText/Format）与堆里候选偏移做 K 交集求解（80/46/333 个候选）也无解。
+因此仍判定为 CANDIDATE - NOT VALIDATED：表基址/stride/掩码链可信，行索引或列公式仍需修正。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。

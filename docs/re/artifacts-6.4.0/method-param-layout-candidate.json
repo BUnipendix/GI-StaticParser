@@ -1,7 +1,7 @@
 {
  "artifact": "method-param-layout-candidate",
  "artifact_version": 0,
- "status": "CANDIDATE - NOT VALIDATED (hypothesis 0x1FC-as-method-table rejected)",
+ "status": "CANDIDATE - NOT VALIDATED (table identity supported by decoder 0x1404799E2, but column validation still fails and name formula is unknown)",
  "version": "6.4.0",
  "provenance": {
   "method": "shape-transfer seed 6.7 method metadata decoder -> 6.4 sites; best hit fn 0x140479C80, then its cipher-caller fn 0x14048D770 was disassembled (this is the 6.4 param/default-value decoder)",
@@ -108,6 +108,30 @@
    "method": ".ctor plaintext: 80 candidate .ctor offsets from the decoded heap, 4 formula families (xorC / addCsub / addC_xor / xorThenAdd), identifier count over 200 rows",
    "best_ids": 7,
    "verdict": "name formula rejected for this base/mask"
+  },
+  "r62_update": "R61 rejection revisited: fn 0x1404799E2 is a method metadata decoder that uses the same hdr[0x1FC]^0x22414276 + 26*index rows and reads paramCount/flags/token columns from them, so the table identity is likely correct; the failing part is the row-index/column formula mapping, not the table base."
+ },
+ "method_decoder_function": "0x1404799E2",
+ "method_columns_from_decoder": {
+  "param_count": {
+   "off": 24,
+   "formula": "(raw8 ^ mask8 ^ 0x63) & 0xFF"
+  },
+  "flags": {
+   "off": 22,
+   "formula": "((raw16 + 0xFFFFE182) ^ mask16) & 0xFFFF"
+  },
+  "token_like": {
+   "off": 12,
+   "formula": "((raw16 + 0x1B9E) ^ mask16) sign-extended to dword"
+  },
+  "pair_at_0e": {
+   "off": 14,
+   "formula": "two u16 at +0x0E/+0x10, SIMD paddw then pxor mask16"
+  },
+  "bitfield": {
+   "off": 25,
+   "formula": "(raw8 ^ mask8 ^ 0x27) with flag-bit assembly"
   }
  }
 }

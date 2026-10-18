@@ -5763,3 +5763,14 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
 3. flags 合理性：(raw16[row+0x16]+2)^mask16 的 static 位占 22.1%（6.7 为 11.8%），分布可疑。
 结论：slot 0x1FC 不是 6.4 方法表（或类初始化用法与方法行无关）。6.4 方法/参数继续
 CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反查真实表，或借字段/属性构建器旁路。
+
+## 133. R62 6.4 方法解码器 fn 0x1404799E2：表身份被支持，列索引仍对不上（2026-10-18）
+
+1. 找到 6.4 方法元数据解码器 0x1404799E2：用 hdr[0x1FC]^0x22414276 + 26*index 行与同一掩码链，
+   读出列：param_count row+0x18 (raw^mask8^0x63)；flags row+0x16 ((raw+0xFFFFE182)^mask16)；
+   token 类 row+0x0C ((raw+0x1B9E)^mask16) 符号扩展；row+0x0E dword（两 u16 SIMD paddw/pxor）；
+   row+0x19 位域 ((raw^mask8^0x27) 拼标志)。
+2. 因此 R61 的“0x1FC 不是方法表”过强：表身份其实对，问题在行索引/列公式。用 plain 全局索引
+   仍解出 paramCount 22（期望 0）；名字公式 (raw32[0]^mask^0x0834AA45) 仍 None；以 .ctor/GetText/
+   GetText/Format 四个已知方法名与堆候选偏移做 K 交集（80/46/333 候选）无解。
+3. 结论保持 CANDIDATE - NOT VALIDATED：基址/stride/掩码链可信，行索引/列公式待修正。
