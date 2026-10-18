@@ -626,6 +626,24 @@ dump70_partial.py 已接入 enum 规则，清单现在输出 class/struct/interf
 
 这证明：种子函数形态在 7.0→6.7 之间稳定，布局常数可以每版重新提取而不改工具代码。
 
+### 3.2v 6.7.0 方法 name/flags 列（2026-10-18）
+
+在 6.7 的方法缓存初始化函数 0x1404BFD90 里读出方法行的另两列：
+
+- name：行 +8 的 u32, name = (raw ^ 0x06BBF48D) - mask（mask 与 paramStart 同一条链）；
+- flags：行 +0x14 的 u16, flags = (raw ^ 3) - mask，代码里用 bit 0x10 判断 Static。
+
+验证（6.7 全表 687,452 行）：
+
+| 检查 | 结果 |
+|---|---|
+| 方法名 | 686,183 个标识符（99.82%），989 个 0xFFFFFFFF 哨兵，280 其它 |
+| 前 200 个方法与 7.1 dump 逐位对照 | 199 / 200 相同（GetText/Format/GetNativeStackTrace/SetGCAllowSynchronousMajor/Equals/GetTypeFromClass 等） |
+| flags 中 static 位 | 80,860 个方法（11.8%） |
+
+flags 的完整 MethodAttributes 语义仍是暂定的：distinct 992、部分值高位不符合标准 MethodAttributes
+范围（如 0x9266），需要拿 dump 的修饰符做进一步交叉验证，先按“static 位可用、其余待定”记录。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。

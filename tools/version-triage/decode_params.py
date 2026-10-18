@@ -34,6 +34,10 @@ def main():
     def m32(a): return struct.unpack_from('<I', body, a)[0]
     def m8(a): return body[a]
     col = lay['method_columns']
+    def mname(i):
+        c = col['name']
+        raw = m32(mb + i * ms + c['off'])
+        return cipher.dec(body, ((raw ^ h(c['c'])) - mask(i)) & 0xFFFFFFFF)
     def mval(name, i):
         c = col[name]
         if name == 'param_start':
@@ -66,7 +70,7 @@ def main():
             names.append(n)
             if n is None: bad += 1
         if shown < 8:
-            print(f'  method {i}: start {ps} count {pc} params {names}')
+            print(f'  method {i}: {mname(i)!r} start {ps} count {pc} params {names}')
             shown += 1
     print(f'paramStart sentinels {sent}, bad rows {bad}')
 

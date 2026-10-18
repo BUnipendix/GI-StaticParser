@@ -5602,3 +5602,13 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
    前 8 方法参数名 msg/fmt,args/resourceFormat,p1/exception/flag/obj/klass/ptr 与 7.1 dump 一致。
 4. 与 7.1 dump 前 1200 方法位置对齐：参数个数 1050/1200、参数名 1495/1542；残余为版本间方法
    增删导致的顺序错位。
+
+## 119. R48 6.7.0 方法 name/flags 列（2026-10-18）
+
+1. 在 6.7 方法缓存初始化函数 0x1404BFD90 读出方法行另两列：name 行 +8 u32
+   ((raw ^ 0x06BBF48D) - mask)，flags 行 +0x14 u16 ((raw ^ 3) - mask)，代码用 bit 0x10 判 Static。
+2. 验证（687,452 行）：方法名 686,183 标识符（99.82%）、989 哨兵、280 其它；前 200 个方法与
+   7.1 dump 逐位对照 199/200 相同（GetText/Format/GetNativeStackTrace/...）；static 位 80,860 个。
+3. flags 完整语义暂定：distinct 992、部分高位超出标准 MethodAttributes 范围（如 0x9266），
+   先记“static 位可用、其余待交叉验证”。
+4. 更新 docs/re/artifacts-6.7.0/method-param-layout.json 与 decode_params.py（输出方法名）。
