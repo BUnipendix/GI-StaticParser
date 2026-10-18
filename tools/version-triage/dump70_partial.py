@@ -72,6 +72,16 @@ def main():
         return mr.col_value(kind, c, raw, pmask2(i))
     out = io.open(OUT, 'w', encoding='utf-8')
     kinds = tk.classify(sites['exe'], body)
+    # enum: a valuetype whose field list contains value__ (validated 5/5 enums, 0/18 structs wrong)
+    enum_like = set()
+    for typ in types:
+        if typ['i'] < len(kinds) and kinds[typ['i']] == 'struct' and typ['fieldCount']:
+            for j in range(typ['fieldCount']):
+                if fname_of(typ['fieldStart'] + j) == 'value__':
+                    enum_like.add(typ['i'])
+                    break
+    for i in enum_like:
+        kinds[i] = 'enum' 
     cur_ns = None
     nf = nm_ = np_ = 0
     for typ in types:

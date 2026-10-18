@@ -5579,3 +5579,12 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
    （同簇都解出 0x4A），显式记为未完成。
 5. 新增 tools/version-triage/type_kinds.py；dump70_partial.py 接入分类，清单输出
    class/struct/interface 关键字（72,632 / 12,649 / 1,624）。
+
+## 117. R46 enum 检测（value__）+ 四类分类 100% 对照（2026-10-18）
+
+1. enum 与 struct 都是 valuetype，parent 列无法区分。改用字段签名：enum 必有 value__ 字段。
+   对 byval kind=0x11 的 12,649 个 valuetype 解码字段名检查 value__，有则 enum、否则 struct。
+2. 与 7.1 dump corelib 114 类型对照：**114/114 = 100%**（class 88、struct 18、interface 3、enum 5，
+   无假阳性）。
+3. 全量分类（86,905 有效 typeDef）：class 72,632、struct 4,690、interface 1,624、enum 7,959。
+   dump70_partial.py 接入 enum 规则，清单输出四种关键字（样例 enum Mono.Security.UriPartial 等）。

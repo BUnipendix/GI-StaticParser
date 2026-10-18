@@ -591,6 +591,21 @@ enum 与 struct 目前不可区分：需要 System.Enum 父类信息，而 paren
 dump70_partial.py 已接入该分类，类型清单现在输出 class/struct/interface 关键字
 （72,632 class / 12,649 struct / 1,624 interface）。
 
+### 3.2t enum 检测（value__ 字段）+ 四类分类 100% 对照（2026-10-18）
+
+enum 与 struct 都是 valuetype，靠 parent 列区分失败（valuetype 的 parent 值不可解释）。改用
+**字段签名**：enum 的值类型根字段固定叫 value__。对 byval kind=0x11 的 12,649 个 valuetype，
+解码字段名并检查是否含 value__：
+
+- 有 value__ → enum；否则 struct。
+- 与 7.1 dump corelib 114 个类型对照：**114/114 = 100%**
+  （class 88、struct 18、interface 3、enum 5，全部正确，无假阳性）。
+
+全量分类结果（86,905 个有效 typeDef）：class 72,632、struct 4,690、interface 1,624、enum 7,959。
+
+dump70_partial.py 已接入 enum 规则，清单现在输出 class/struct/interface/enum 四种关键字；
+样例：enum Mono.Security.UriPartial、enum Sign、enum ExtenderType 等。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。
