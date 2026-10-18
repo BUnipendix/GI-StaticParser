@@ -5805,3 +5805,13 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
    paramCount 60/60，paramStart/name 未解）；typeDef 级 = 7.1.0、6.0.0、5.4.0；
    仅基础产物 = 4.8.0 与 5.x/6.x 若干；未开始 = 4.2-4.7（按目标最后处理）。
 3. constants-index.md 同步更新 6.4 状态（PARTIALLY VALIDATED）并引用 version-status.md。
+
+## 137. R66 6.4 字段/属性访问器公式（候选未验证）（2026-10-18）
+
+1. 从 6.4 cipher 解码调用点 0x14047A735 反推 10 字节行访问器（函数 0x14047A400）：base =
+   hdr[0x98]^0x2FEB120C、stride 10；mask(n)=((((n*0x6E84+0x133D8A7A)^0x238CC4C0)*0x67F700C3)>>8
+   +0x439ECF62)^0x1D01444C；name=(raw32[0]^0x0492A370)-mask；getter=((raw16[8]^0x581C)-mask)&0xFFFF；
+   setter=((raw16[4]-mask)+0xFFFF8C73)&0xFFFF；+6 另有 attrs 类列。
+2. 数据验收失败：99,320 行只有 300 个名字是标识符（0.3%），getter/setter 值越界 ⇒ 行索引或表身份
+   （属性 vs 字段）仍不对。常数写入 candidate JSON 的 field_or_property_accessor_candidate 段，
+   标记 CANDIDATE - NOT VALIDATED。

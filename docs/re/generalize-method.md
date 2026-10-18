@@ -979,6 +979,23 @@ method/param/prop/field/event/typearr/typeDef 行数）。当前覆盖：
 
 这张矩阵就是“泛化到历史版本”的进度面板：结构可跨版继承，常数逐版重导，oracle 反推可自动化。
 
+
+### 3.2an 6.4.0 字段/属性访问器：公式已读、表身份仍未定（2026-10-18）
+
+从 6.4 cipher 解码调用点 0x14047A735 反推出一组 10 字节行访问器（函数 0x14047A400）：
+
+- base = hdr[0x98] ^ 0x2FEB120C，stride 10；
+- mask(n) = ((((n*0x6E84 + 0x133D8A7A) ^ 0x238CC4C0) * 0x67F700C3) >> 8 + 0x439ECF62) ^ 0x1D01444C；
+- name = (raw32[+0] ^ 0x0492A370) - mask；
+- getter = ((raw16[+8] ^ 0x581C) - mask) & 0xFFFF；
+- setter = ((raw16[+4] - mask) + 0xFFFF8C73) & 0xFFFF；
+- +6 另有 attrs 类列 ((raw16 ^ 0x18BA) - mask) ^ 0xC8ED6CD。
+
+数据验收失败：按线性行索引解码 99,320 行，只有 300 个名字是标识符（0.3%），getter/setter 值也
+明显越界。说明行索引或表的身份（属性 vs 字段）仍不对。该组常数已写入
+docs/re/artifacts-6.4.0/method-param-layout-candidate.json 的
+field_or_property_accessor_candidate 段，标记 CANDIDATE - NOT VALIDATED。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。

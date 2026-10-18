@@ -158,5 +158,46 @@
    "formula": "(raw8 ^ (mask & 0xFF) ^ 0x63) & 0xFF",
    "validation": "matches 6.4Dump.cs first 60 methods param counts exactly (60/60)"
   }
+ },
+ "field_or_property_accessor_candidate": {
+  "function": "0x14047A400 (call site 0x14047A735)",
+  "table": {
+   "slot": "0x98",
+   "op": "xor",
+   "imm": "0x2FEB120C"
+  },
+  "stride": 10,
+  "mask": {
+   "mul": "0x6E84",
+   "add": "0x133D8A7A",
+   "xor0": "0x238CC4C0",
+   "mul2": "0x67F700C3",
+   "shr": 8,
+   "add1": "0x439ECF62",
+   "xor1": "0x1D01444C"
+  },
+  "columns": {
+   "name": {
+    "off": 0,
+    "formula": "((raw32 ^ 0x0492A370) - mask32)"
+   },
+   "getter": {
+    "off": 8,
+    "formula": "((raw16 ^ 0x581C) - mask32) & 0xFFFF"
+   },
+   "setter": {
+    "off": 4,
+    "formula": "((raw16 - mask32) + 0xFFFF8C73) & 0xFFFF"
+   },
+   "attrs_like": {
+    "off": 6,
+    "formula": "((raw16 ^ 0x18BA) - mask32) ^ 0xC8ED6CD"
+   }
+  },
+  "validation": {
+   "result": "FAILED",
+   "detail": "99,320 rows with the assumed linear index: only 300 name identifiers (0.3%); getter/setter values look out of range. The row index (or the table identity: property vs field) is still wrong.",
+   "verdict": "CANDIDATE - NOT VALIDATED"
+  }
  }
 }
