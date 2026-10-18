@@ -83,6 +83,7 @@ public sealed class TypeRec
     public List<PropRec> Props = new();
     public List<EventRec> Events = new();
     public List<int> Ifaces = new();
+    public List<string> Gp = new();
 }
 
 public static class Program
@@ -127,6 +128,9 @@ public static class Program
                         Kind = r.GetProperty("kind").GetString() ?? "class",
                         Parent = r.GetProperty("parent").GetInt32(),
                         Flags = r.GetProperty("flags").GetUInt32(),
+                        Gp = r.TryGetProperty("gp", out var gpEl) && gpEl.ValueKind == JsonValueKind.Array
+                            ? gpEl.EnumerateArray().Select(x => x.GetString() ?? "").ToList()
+                            : new List<string>(),
                     };
                     types.Add(cur);
                     break;
@@ -306,17 +310,20 @@ public static class Program
                 MetadataTokens.MethodDefinitionHandle(methodStart[i]));
         }
 
-        // ---- GenericParam rows (arity from the metadata type name suffix) ----
+        // ---- GenericParam rows (arity from the metadata type name suffix; real names from R23) ----
         int genericParamRows = 0;
         foreach (var t in types)
         {
             int arity = ArityOf(t.Name);
             if (arity == 0) continue;
             var ownerTd = MetadataTokens.TypeDefinitionHandle(t.Id + 1);
+            // t.Gp carries the decoded generic-parameter names (R23 table). It can be shorter
+            // when a name is an obfuscated control char; fall back to positional T1..Tn there.
             for (int k = 0; k < arity; k++)
             {
+                string name = k < t.Gp.Count && t.Gp[k].Length > 0 ? t.Gp[k] : "T" + (k + 1);
                 mb.AddGenericParameter(ownerTd, GenericParameterAttributes.None,
-                    mb.GetOrAddString("T" + (k + 1)), k);
+                    mb.GetOrAddString(name), k);
                 genericParamRows++;
             }
         }
@@ -841,6 +848,16 @@ public static class Program
         enc.Type(MetadataTokens.TypeDefinitionHandle(types.FindIndex(t => t.Ns == "System" && t.Name == "Object") + 1), false);
     }
 
+    static List<string> ReadGenericParamNames(MetadataReader md, TypeRec t)
+    {
+        var th = MetadataTokens.TypeDefinitionHandle(t.Id + 1);
+        var td = md.GetTypeDefinition(th);
+        var names = new List<string>();
+        foreach (var gh in td.GetGenericParameters())
+            names.Add(md.GetString(md.GetGenericParameter(gh).Name));
+        return names;
+    }
+
     static void Verify(string path, List<TypeRec> expected, List<AttrRec> attrs, int expectedCustomAttrs)
     {
         using var fs = File.OpenRead(path);
@@ -867,6 +884,21 @@ public static class Program
         Console.WriteLine($"verify: types={typeCount} fields={fieldCount} methods={methodCount} " +
                           $"params={paramCount} ifaces={ifaceCount} bodies={bodyCount} customAttrs={attrRowCount} genericParams={genericParamRows}");
         if (genericParamRows != expGenericParams) throw new Exception($"generic param count mismatch {genericParamRows} vs {expGenericParams}");
+        // R23: names come from the metadata generic-parameter table; spot-check two known cases.
+        var vt8 = expected.FirstOrDefault(t => t.Ns == "System" && t.Name == "ValueTuple`8");
+        if (vt8 != null)
+        {
+            var names = ReadGenericParamNames(md, vt8);
+            if (names.Count != 8 || names[7] != "TRest")
+                throw new Exception("ValueTuple`8 generic names wrong: " + string.Join(",", names));
+        }
+        var dict = expected.FirstOrDefault(t => t.Ns == "System.Collections.Generic" && t.Name == "Dictionary`2");
+        if (dict != null)
+        {
+            var names = ReadGenericParamNames(md, dict);
+            if (names.Count != 2 || names[0] != "TKey" || names[1] != "TValue")
+                throw new Exception("Dictionary`2 generic names wrong: " + string.Join(",", names));
+        }
         // +5 marker types (Address/Attribute/FieldOffset/MetadataOffset/Token) with 10 fields and 5 ctors
         if (typeCount != expected.Count + 5) throw new Exception($"type count mismatch {typeCount} vs {expected.Count + 5}");
         int expFields = expected.Sum(t => t.Fields.Count) + 10;

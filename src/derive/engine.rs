@@ -31,6 +31,9 @@ pub struct Meta<'a> {
     /// Generic-parameter count (derived from the highest VAR/MVAR index used in typearr;
     /// 7.1: 5,796, matching the contiguous encrypted table at `gp_base`).
     pub gp_count: usize,
+    /// typeDef index -> global generic-parameter indexes (type owners only; the encrypted
+    /// 16-byte container table at slot 0xC8 marks type owners with `data == mask2`).
+    pub generic_params_by_type: std::collections::HashMap<u32, Vec<u32>>,
     pub methodptrs: usize,
     pub methodptrs_len: usize,
     pub rdata: (u64, usize, usize),
@@ -135,6 +138,42 @@ impl<'a> Meta<'a> {
                 gp_count = gp_count.max(data + 1);
             }
         }
+        // Encrypted 16-byte generic-container table (7.1: slot 0xC8 = body+0x3C479D8).
+        // container(V).data + 0x8EDEA6E9 == mask2(V) marks a *type* owner; then
+        // ownerTdi = container(V).attrs ^ (data+0x8EDEA6E9) ^ 0x5C56350B.
+        let gc_base = {
+            let h = i32::from_le_bytes(header_bytes[0xC8..0xCC].try_into().unwrap());
+            (h ^ 0x8D70_1A3) as u32 as usize
+        };
+        let gp_mask = |gpi: u32| -> u32 {
+            ((gpi as u64)
+                .wrapping_mul(0x6F1C_0337_A089_7415)
+                .wrapping_add(0x3106_1C42_12D6_0D89)
+                >> 22) as u32
+        };
+        let container_mask2 = |v: u32| -> u32 {
+            let mut r = (v.wrapping_mul(0x8187) ^ 0x42D5_A190).wrapping_mul(0x7B2D_0E18);
+            r = r.wrapping_add(0xB6F0_0C08);
+            r ^= 0x7A3E_254D;
+            r.wrapping_add(0x7155_5646)
+        };
+        let mut generic_params_by_type: std::collections::HashMap<u32, Vec<u32>> =
+            std::collections::HashMap::new();
+        for gpi in 0..gp_count as u32 {
+            let at = gp_base + 14 * gpi as usize + 0xC;
+            let Some(row) = body_buf.get(at..at + 2) else { break };
+            let raw = u16::from_le_bytes([row[0], row[1]]);
+            let v = raw.wrapping_add(0xA8E2) ^ (gp_mask(gpi) as u16);
+            let entry = gc_base + 16 * v as usize;
+            let Some(ent) = body_buf.get(entry..entry + 16) else { continue };
+            let data = u32::from_le_bytes([ent[0], ent[1], ent[2], ent[3]]);
+            let attrs = u32::from_le_bytes([ent[12], ent[13], ent[14], ent[15]]);
+            let x = data.wrapping_add(0x8EDE_A6E9);
+            if x == container_mask2(v as u32) {
+                let owner = attrs ^ x ^ 0x5C56_350B;
+                generic_params_by_type.entry(owner).or_default().push(gpi);
+            }
+        }
         let (methodptrs, methodptrs_len) =
             locate_methodptrs(exe, image_base).ok_or_else(|| anyhow!("method pointers not located"))?;
 
@@ -213,6 +252,7 @@ impl<'a> Meta<'a> {
             typearr_len,
             gp_base,
             gp_count,
+            generic_params_by_type,
             methodptrs,
             methodptrs_len,
             rdata,
@@ -253,6 +293,21 @@ impl<'a> Meta<'a> {
     }
 
     #[inline]
+    /// Names of a generic type definition's parameters (type owners only; method generic
+    /// parameters are not attached here). One slot per parameter is kept so the generator's
+    /// positional fallback stays aligned; control-character names come back as empty strings.
+    pub fn type_generic_param_names(&self, tdi: u32) -> Vec<String> {
+        let Some(list) = self.generic_params_by_type.get(&tdi) else {
+            return Vec::new();
+        };
+        list.iter()
+            .map(|g| match self.generic_param_name(*g) {
+                Some(n) if !n.chars().any(char::is_control) => n,
+                _ => String::new(),
+            })
+            .collect()
+    }
+
     pub fn generic_param_mask(gpi: u32) -> u32 {
         ((gpi as u64)
             .wrapping_mul(0x6F1C_0337_A089_7415)

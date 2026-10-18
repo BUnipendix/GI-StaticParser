@@ -19,8 +19,8 @@ DummyDll 的 Token/Attribute/Constant/MetadataOffset 全量接线，以及两个
 | attributes.json | 10,025,050 B | 74,864 条属性实例，Recovered 70,693 |
 | literals.json | 6,287,449 B | 86,108 条字符串字面量（静态解密） |
 | images.json | 14,326 B | 75 images / 75 assemblies |
-| DummyDll.dll | 146,666,496 B | 88,907 TypeDef / 733,447 Method / 440,182 Field / 115,596 Property / 628 Event / 133,270 MethodSemantics / 90,224 Constant（74,632 字段 + 15,592 参数）/ 2,491,946 CustomAttribute / 1,195 GenericParam |
-| dummy.jsonl | 217,786,835 B | DummyDll 生成器输入（115,596 P + 628 E + 70,692 A 记录；字段/参数带 cv/mo 常量数据） |
+| DummyDll.dll | 146,667,520 B | 88,907 TypeDef / 733,447 Method / 440,182 Field / 115,596 Property / 628 Event / 133,270 MethodSemantics / 90,224 Constant（74,632 字段 + 15,592 参数）/ 2,491,946 CustomAttribute / 1,195 GenericParam（**类型级名字已接真实表**：TKey/TValue/TRest…） |
+| dummy.jsonl | 218,514,639 B | DummyDll 生成器输入（115,596 P + 628 E + 70,692 A；字段/参数 cv/mo；T 记录带 `gp` 泛型参数名） |
 
 ## 3. 逐项状态
 

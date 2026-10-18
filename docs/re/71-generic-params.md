@@ -42,8 +42,14 @@ case VAR(0x13)/MVAR(0x1E) @0x14050E897/0x14050E986:
 
 - 泛型**约束**：该 accessor 不读取约束字段；标准布局 genericParameterConstraints 表在 body/startup 扫描 0 命中，
   约束仍是未解项（且运行时可能同样不使用）。
-- owner 的容器语义：u16 owner 值 = 4,425 个分组，尚未映射回 typeDef/method 的 genericContainer 表。
-- DummyDll 的 GenericParam 行仍由类型名 arity 合成（未接真实名字）。
+- ~~owner 容器语义未映射~~ **已解（R24）**：参数行 +0xC 即 genericContainerIndex；容器表 = body+(hdr[0xC8]^0x8D701A3)
+  的 16B 加密行（4,425 行）。`data == mask2(V)+0xE276AF5D` ⇒ VAR（owner=typeDefIndex），否则 MVAR（owner=methodIndex）；
+  `owner = attrs ^ (mask2(V)+0x71555646) ^ 0x5C56350B`。已验证 `ValueTuple`1..`8`→T1..T7/TRest、
+  `Dictionary`2`→TKey/TValue、`List`1`→T。
+- DummyDll 的 GenericParam 名字**已接真实表（R24）**：`dummy.jsonl` T 记录新增 `"gp"`（按 arity 对齐，控制字符名→空串），
+  dummygen 用它 `AddGenericParameter`，并在 Verify 中断言 ValueTuple`8/Dictionary`2；
+  泛型**方法**的参数尚未加进 DummyDll（GenericParam 行仍 1,195 = 类型级；metadata 总数 5,796，方法级约 4,601）。
+- 工件变化：dummy.jsonl 217,786,835 → **218,514,639 B**；DummyDll.dll 146,666,496 → **146,667,520 B**；final_verify 全 PASS。
 
 ## 4. 复现
 

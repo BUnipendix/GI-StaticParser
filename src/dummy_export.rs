@@ -176,16 +176,20 @@ pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize
         let joined = super::dump_gen::joined_type_name(&tds, &parents, i as u32, 0);
         let (ns, name) = split_name(td, &joined);
         let parent = td_parent_tdi(m, &tds, td);
+        // Real generic-parameter names for generic type definitions (R23 table); the generator
+        // falls back to positional T1..Tn when this is empty (obfuscated control-char names).
+        let gps = m.type_generic_param_names(i as u32);
         writeln!(
             w,
-            "{{\"k\":\"T\",\"id\":{},\"ns\":{},\"name\":{},\"kind\":\"{}\",\"parent\":{},\"flags\":{},\"bitfield\":{}}}",
+            "{{\"k\":\"T\",\"id\":{},\"ns\":{},\"name\":{},\"kind\":\"{}\",\"parent\":{},\"flags\":{},\"bitfield\":{},\"gp\":{}}}",
             i,
             serde_json::to_string(&ns)?,
             serde_json::to_string(&name)?,
             kind,
             parent,
             td.flags,
-            td.bitfield
+            td.bitfield,
+            serde_json::to_string(&gps)?
         )?;
         n_types += 1;
 

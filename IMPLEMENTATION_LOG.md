@@ -5201,3 +5201,18 @@ property/event）、AttributeAttribute（无法还原的属性实例；RVA/Offse
 5. 验证：新增 sample-gated test generic_param_names_sample（5,796 / T / TKey / TValue / TRest）；
    final_verify.py 更新 dump.cs 尺寸后全 PASS。
 6. 未解：泛型约束（accessor 不读；标准约束表 0 命中）、owner 容器语义、DummyDll GenericParam 名字接线。
+## 95. R24：泛型容器表解码 + DummyDll GenericParam 真实名字（2026-10-18）
+
+1. 容器表：参数行 +0xC = genericContainerIndex；容器表 = body+(hdr[0xC8]^0x8D701A3)，16B 加密行，4,425 行。
+   解码（Class::FromGenericParameter 0x14050EDF0）：
+     mask2(V) = ((V*0x8187 ^ 0x42D5A190)*0x7B2D0E18 + 0xB6F00C08) ^ 0x7A3E254D
+     data == mask2(V)+0xE276AF5D  ⇒ VAR（owner=typeDefIndex），否则 MVAR（owner=methodIndex）
+     owner = attrs ^ (mask2(V)+0x71555646) ^ 0x5C56350B
+   验证：ValueTuple`1..`8 → T1..T7/TRest；Dictionary`2 → TKey/TValue；List`1 → T；前 8 个 MVAR 容器
+   分别对应 ValueTuple.Create<T1..T7> 方法（method 800..806），V0 = method 769。
+2. DummyDll 接线：dummy_export T 记录新增 "gp" 数组（按 arity 对齐，控制字符名→空串）；dummygen 用真实名字
+   AddGenericParameter，并在 Verify 中断言 ValueTuple`8（第 8 个=TRest）与 Dictionary`2（TKey,TValue）。
+3. 工件：dummy.jsonl 217,786,835 → 218,514,639 B；DummyDll.dll 146,666,496 → 146,667,520 B；
+   dump.cs/script.json 不变；tools/final_verify.sh 全 PASS。
+4. 未接线：泛型**方法**的参数（DummyDll GenericParam 行仍 1,195 类型级；metadata 总 5,796，方法级约 4,601）；
+   泛型约束仍未解；下一轮可接方法级 GenericParam 与约束 accessor。
