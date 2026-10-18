@@ -40,8 +40,18 @@ case VAR(0x13)/MVAR(0x1E) @0x14050E897/0x14050E986:
 
 ## 3. 剩余（不在本轮范围）
 
-- 泛型**约束**：该 accessor 不读取约束字段；标准布局 genericParameterConstraints 表在 body/startup 扫描 0 命中，
-  约束仍是未解项（且运行时可能同样不使用）。
+- 泛型**约束**：**未发现任何读取路径（强负结果，R26 复核）**：
+  - 读取泛型参数表锚点（hdr[0x174]）的全部 8 个不同函数都已反编译：`Class::FromIl2CppType`(0x14050E7A0)、
+    `Class::FromGenericParameter`(0x14050EDF0)、类型名构建(0x1404B8990/0x1404C7E90)、类型对象解析(0x1404E4A90)、
+    接口变体判定(0x140512880/0x14051A330)、泛型定义解析(0x1405472D0/0x140547410)；
+  - `FromGenericParameter` 只读行内 `+0`（name）与 `+0xC`（owner container）；变体判定只读 `+6` 的低 2 位（variance）；
+    类型对象解析只读 `+0xA`（参数位置索引）；无任何函数读 `+4/+8` 作为约束 start/count；
+  - 标准布局 genericParameterConstraints 表在 body/startup 结构扫描 0 命中。
+  ⇒ 判断：7.1 构建期丢弃了约束（与接口基接口同类），运行时不做泛型约束校验。仍保留很小不确定性：
+    若存在尚未发现的独立校验路径，结论可能被推翻（需运行时 oracle）。
+- **容器行字段（R26 补全，供方法级参数校验用）**：容器表行 16B = `{+0 ownerKind/data, +4 paramStart, +8 argc, +0xC ownerAttrs}`，
+  mask 用 `container_mask2(V)`：`start = u32[+4] ^ m2 ^ 0x2BAD4D8C`、`argc = u32[+8] ^ m2 ^ 0x07F8A45C`
+  （反编译 0x1404B8990/0x1404E4A90 确认）；与参数行 +0xC 的分组结果一致（5,796 参数 = 类型级 2,697 + 方法级 3,099）。
 - ~~owner 容器语义未映射~~ **已解（R24）**：参数行 +0xC 即 genericContainerIndex；容器表 = body+(hdr[0xC8]^0x8D701A3)
   的 16B 加密行（4,425 行）。`data == mask2(V)+0xE276AF5D` ⇒ VAR（owner=typeDefIndex），否则 MVAR（owner=methodIndex）；
   `owner = attrs ^ (mask2(V)+0x71555646) ^ 0x5C56350B`。已验证 `ValueTuple`1..`8`→T1..T7/TRest、

@@ -5231,3 +5231,14 @@ property/event）、AttributeAttribute（无法还原的属性实例；RVA/Offse
 4. 验证：tools/final_verify.sh 全 PASS；spot checks 通过。
 5. 仍未解：泛型约束（参数行 +4/+6/+8 未找到约束表读取路径；+6 已确认是 variance 位，
    被 0x140512880/0x14051A330 的接口变体判定使用）。
+## 97. R26：泛型约束负结果复核 + 容器行字段补全（2026-10-18）
+
+1. 读取泛型参数锚点（hdr[0x174]）的 8 个函数全部反编译完毕（kuna，/tmp 下 ASCII 样本路径）：
+   0x14050E7A0/0x14050EDF0/0x1404B8990/0x1404C7E90/0x1404E4A90/0x140512880/0x14051A330/0x1405472D0/0x140547410。
+   结论：没有任何路径把参数行 +4/+8 当约束 start/count 读取；FromGenericParameter 只读 name 与 owner container；
+   变体判定用 +6 低 2 位（variance）；类型对象解析用 +0xA（参数位置）。标准约束表扫描 0 命中。
+   ⇒ 判断 7.1 构建期丢弃泛型约束（同接口基接口），保留极小不确定性（未发现的独立校验路径）。
+2. 容器行 16B 字段补全：{+0 kind/data, +4 paramStart, +8 argc, +0xC ownerAttrs}；
+   start=u32[+4]^m2^0x2BAD4D8C、argc=u32[+8]^m2^0x07F8A45C（0x1404B8990/0x1404E4A90 反编译确认）。
+   与 R25 的 5,796 = 类型级 2,697 + 方法级 3,099 分组一致，方法级泛型参数接线得到二次验证。
+3. 本轮无工件变化；final_verify 仍应 PASS（未改代码）。文档 71-generic-params.md §3 已更新。
