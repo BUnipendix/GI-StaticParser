@@ -5683,3 +5683,18 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
    UInt32 26,469 / Single 22,398 / String 18,914 / SZARRAY 11,875）。
 3. field-name-layout.json 增加 type 列与验收数据；dump67_partial.py 字段行从 “?” 升级为真实类型，
    dump67-partial.txt 已重新生成。
+
+## 126. R55 6.7 属性表定案 + 常数/算法索引 + 记录审计（2026-10-18）
+
+1. 在函数 0x1404C0020 的第二条分支找到 6.7 属性构建器（行数 108,747 与属性数一致、名字为 corelib
+   属性名）：base=hdr[0x1E8]+0xE9FF5F7F（0x1F10840）、stride 10；
+   行掩码 idx*0x137D ^ 0x70B05CB7 * 0x42639239 >>13 * 0x525521B3 >>13 + 0x5F17108D；
+   name=(raw32[0]^mask^0x2BFBE794)；getter=(raw16[8]^mask16^0x5D18)；
+   setter=(raw16[4]^mask16^0xD662)；+6 列不是访问器（全部越界），公式未定。
+2. 全表 108,747 行：名字 108,464 标识符（99.74%）、221 哨兵、62 其它；getter 列 56,483 个 get_、
+   setter 列 8,584 个 set_；样例 Constraints/Attributes/Length/Item/Value 与 7.1 dump corelib 一致。
+   新增 docs/re/artifacts-6.7.0/property-layout.json。
+3. 新增 docs/re/constants-index.md：按版本索引每个关键常数/算法（从 7.0/6.7/7.1 表基址、stride、
+   掩码链、列常数、索引语义、类型分类到负结果），含方法、验证数字、出处小节、JSON 路径与复现命令。
+4. 记录审计：逐常数 grep docs/re/generalize-method.md、IMPLEMENTATION_LOG.md、MEMORY.md——除本轮新
+   发现的 0xE9FF5F7F 外全部已有记录；已补入并建立索引，常数清单唯一入口 = constants-index.md。

@@ -1,0 +1,60 @@
+{
+  "artifact": "property-row-layout",
+  "artifact_version": 1,
+  "version": "6.7.0",
+  "provenance": {
+    "function": "0x1404C0020 (second branch of the same function whose first branch is the event builder)",
+    "method": "shape transfer seed from the 7.0 property builder (site 0x1404E6455) landed on this function family; the property branch was identified by row count == 108,747 and by decoded corelib property names"
+  },
+  "table": {
+    "slot": "0x1E8",
+    "op": "add",
+    "imm": "0xE9FF5F7F"
+  },
+  "stride": 10,
+  "rows": 108747,
+  "mask": {
+    "mul1": "0x137D",
+    "xor0": "0x70B05CB7",
+    "mul2": "0x42639239",
+    "shr1": 13,
+    "mul3": "0x525521B3",
+    "shr2": 13,
+    "add1": "0x5F17108D"
+  },
+  "columns": {
+    "name": {
+      "off": 0,
+      "formula": "((raw32 ^ mask32) ^ 0x2BFBE794) & 0xFFFFFFFF"
+    },
+    "getter": {
+      "off": 8,
+      "formula": "((raw16 ^ (mask32 & 0xFFFF)) ^ 0x5D18) & 0xFFFF"
+    },
+    "setter": {
+      "off": 4,
+      "formula": "((raw16 ^ (mask32 & 0xFFFF)) ^ 0xD662) & 0xFFFF"
+    },
+    "unknown_6": {
+      "off": 6,
+      "note": "not an accessor: every one of the 108,747 values falls outside the declaring type's method range; the code mixes extra mask state before storing it, formula unresolved"
+    }
+  },
+  "validation": {
+    "rows": 108747,
+    "name_identifiers": 108464,
+    "name_none": 221,
+    "name_other": 62,
+    "name_rate": 0.9974,
+    "getter_prefix_get": 56483,
+    "setter_prefix_set": 8584,
+    "sample_names": [
+      "Constraints",
+      "Attributes",
+      "Length",
+      "Item",
+      "Value"
+    ],
+    "note": "accessor values are per-type relative method indexes; global method index = typeDef.methodStart + value"
+  }
+}
