@@ -5310,3 +5310,26 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
    （方法/字段/参数/属性/事件/泛型）与 .upx0 常量（flags/bitfield）。
 5. 验证命令：cargo test --release = 18 passed / 13 ignored；tools/version-triage/loadsites.py +
    shape_transfer.py 供表基址迁移；docs/re/generalize-method.md §3.2b 记录方法+表格。
+
+## 100. R29 跨版本 typeDef 清单生成（数据驱动，7.1 逐字一致 / 6.4 与 oracle 吻合）（2026-10-18）
+
+1. 新工具 tools/version-triage/type_defs_dump.py：输入 版本目录 + derive 工件 + tables --base JSON，
+   输出 JSONL {i, ns, name, fieldStart, fieldCount, methodStart, methodCount}。解码规则严格按
+   IndexTable 语义（Add: raw = plain + C；Xor: raw = plain ^ C；raw == sentinel_raw 表示无字段/方法；
+   行号超过该模型拟合行数的尾部 padding 不读列，否则列偏移会越过行栅格读到下一表的数据）。
+2. 六个版本全部产出（~/gire/out/cross/typedefs/<ver>.jsonl）：7.1.0 88,904 / 7.0.0 86,932 /
+   6.7.0 83,775 / 6.4.0 77,262 / 6.0.0 59,631 / 5.4.0 58,938 行；每版 field 链与 method 链均为
+   0 断裂，链尾分别等于 sum(fieldCount)/sum(methodCount)。
+3. 验证：
+   - 7.1：产出 (ns,name) 与既有 ~/gire/out/71/dump.cs 完全一致（85,709/85,709，Jaccard 1.0）；
+     field 链尾 440,172、method 链尾 733,442 与 dump.cs 统计一致。
+   - 6.4：type pairs 74,483 vs oracle 74,555（Jaccard 0.961）。差异全部是编译器生成泛型类的
+     显示格式（metadata 名是 <>c__0 + arity，6.4Dump.cs 用 GenericParam 表重建为 <>c<T>），
+     不是解码错误；字段行 sum = 384,411 与 6.4Dump.cs 字段行完全一致；方法 sum = 631,108 vs
+     6.4Dump.cs 631,107（1 行 padding）。
+   - 版本间 namespace 数 376/373/376/376/376/363，量级一致。
+4. 意义：第一条跨版本数据产物，不依赖任何版本常数——布局来自 R28 的数据自解，基址来自 derive/
+   形态迁移。仍未覆盖：typeDef 的 flags/bitfield/parent/接口/property/event/nested 范围列，
+   方法/字段/参数表行布局与掩码，所以尚未到完整 dump.cs。
+5. 复现：mhydump tables --base <类型表基址> --json → tools/version-triage/type_defs_dump.py →
+   （校验脚本在 ~/gire/out/cross/validate_typedefs.py）。
