@@ -789,8 +789,8 @@ fn dump_gen_cmd(
         println!("wrote {p}: {n} attribute instances");
     }
     if let Some(p) = dummy_out {
-        let (nt, nf, nm) = static_mhy_dumper::dummy_export::export_dummy(&m, p)?;
-        println!("wrote {p}: {nt} types, {nf} fields, {nm} methods (DummyDll input)");
+        let (nt, nf, nm, np) = static_mhy_dumper::dummy_export::export_dummy(&m, p)?;
+        println!("wrote {p}: {nt} types, {nf} fields, {nm} methods, {np} properties (DummyDll input)");
     }
     let json_path = match out.rfind('/') {
         Some(p) => format!("{}script.json", &out[..=p]),

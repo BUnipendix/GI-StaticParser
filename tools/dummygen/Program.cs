@@ -33,6 +33,13 @@ public sealed class MethodRec
     public List<ParamRec> Params = new();
 }
 
+public sealed class PropRec
+{
+    public string Name = "";
+    public int Get = -1;
+    public int Set = -1;
+}
+
 public sealed class TypeRec
 {
     public int Id;
@@ -43,6 +50,7 @@ public sealed class TypeRec
     public uint Flags;
     public List<FieldRec> Fields = new();
     public List<MethodRec> Methods = new();
+    public List<PropRec> Props = new();
     public List<int> Ifaces = new();
 }
 
@@ -58,7 +66,7 @@ public static class Program
         string input = args[0];
         string output = args[1];
         var types = Load(input);
-        Console.WriteLine($"loaded {types.Count} types, {types.Sum(t => t.Fields.Count)} fields, {types.Sum(t => t.Methods.Count)} methods");
+        Console.WriteLine($"loaded {types.Count} types, {types.Sum(t => t.Fields.Count)} fields, {types.Sum(t => t.Methods.Count)} methods, {types.Sum(t => t.Props.Count)} properties");
         Emit(types, output);
         Verify(output, types);
         return 0;
@@ -122,6 +130,14 @@ public static class Program
                             Type = p.GetProperty("t").GetString() ?? "obj",
                         });
                     cur!.Methods.Add(m);
+                    break;
+                case "P":
+                    cur!.Props.Add(new PropRec
+                    {
+                        Name = r.GetProperty("name").GetString() ?? "",
+                        Get = r.GetProperty("get").GetInt32(),
+                        Set = r.GetProperty("set").GetInt32(),
+                    });
                     break;
                 case "I":
                     cur!.Ifaces.Add(r.GetProperty("iface").GetInt32());
@@ -260,6 +276,9 @@ public static class Program
         // ---- MethodDef rows + params ----
         var ilBuilder = new BlobBuilder();
         var bodyStream = new MethodBodyStreamEncoder(ilBuilder);
+        int methodTotal = types.Sum(t => t.Methods.Count);
+        var methodHandles = new MethodDefinitionHandle[methodTotal];
+        int gmiCursor = 0;
         foreach (var t in types)
         {
             bool isIface = t.Kind == "interface";
@@ -315,7 +334,7 @@ public static class Program
                     }
                     bodyOffset = bodyStream.AddMethodBody(enc, maxStack: 1);
                 }
-                mb.AddMethodDefinition(ma, impl, mb.GetOrAddString(me.Name),
+                methodHandles[gmiCursor++] = mb.AddMethodDefinition(ma, impl, mb.GetOrAddString(me.Name),
                     mb.GetOrAddBlob(sigBlob!), bodyOffset,
                     MetadataTokens.ParameterHandle(paramRows));
                 foreach (var p in me.Params)
@@ -323,6 +342,72 @@ public static class Program
                     mb.AddParameter(0, mb.GetOrAddString(p.Name), paramRows == 0 ? 1 : 1);
                     paramRows++;
                 }
+            }
+        }
+
+        // ---- Property table + PropertyMap + MethodSemantics (real metadata properties) ----
+        // A property signature mirrors its accessor: getter -> (return type, index params);
+        // set-only -> (last setter param type, remaining index params). Accessors are linked with
+        // MethodSemantics rows, so PropertyDefinition.GetAccessors() resolves in decompilers.
+        var allMethods = types.SelectMany(t => t.Methods).ToList();
+        BlobHandle BuildPropertySig(MethodRec? get, MethodRec? set)
+        {
+            var acc = get ?? set!;
+            bool instance = (acc.Flags & 0x10) == 0;
+            string ret;
+            List<string> pars;
+            if (get != null)
+            {
+                ret = get.Ret;
+                pars = get.Params.Select(p => p.Type).ToList();
+            }
+            else
+            {
+                var sp = set!.Params;
+                ret = sp.Count > 0 ? sp[^1].Type : "obj";
+                pars = sp.Take(Math.Max(0, sp.Count - 1)).Select(p => p.Type).ToList();
+            }
+            var bb = new BlobBuilder();
+            var sig = new BlobEncoder(bb).PropertySignature(instance);
+            sig.Parameters(pars.Count, out var retEnc, out var parsEnc);
+            if (ret == "v")
+            {
+                WriteSigType(retEnc.Type(false), "obj", types);
+            }
+            else
+            {
+                var re = retEnc.Type(ret.StartsWith("&"));
+                WriteSigType(re, ret.TrimStart('&'), types);
+            }
+            foreach (var pt in pars)
+            {
+                var pe = parsEnc.AddParameter();
+                var enc = pe.Type(pt.StartsWith("&"));
+                WriteSigType(enc, pt.TrimStart('&'), types);
+            }
+            return mb.GetOrAddBlob(bb);
+        }
+        int propRowsEmitted = 0, propMapRowsEmitted = 0;
+        foreach (var t in types)
+        {
+            if (t.Props.Count == 0) continue;
+            PropertyDefinitionHandle firstProp = default;
+            foreach (var p in t.Props)
+            {
+                MethodRec? getM = p.Get >= 0 && p.Get < allMethods.Count ? allMethods[p.Get] : null;
+                MethodRec? setM = p.Set >= 0 && p.Set < allMethods.Count ? allMethods[p.Set] : null;
+                if (getM == null && setM == null) continue;
+                var ph = mb.AddProperty(PropertyAttributes.None, mb.GetOrAddString(p.Name),
+                    BuildPropertySig(getM, setM));
+                if (firstProp.IsNil) firstProp = ph;
+                if (getM != null) mb.AddMethodSemantics(ph, MethodSemanticsAttributes.Getter, methodHandles[p.Get]);
+                if (setM != null) mb.AddMethodSemantics(ph, MethodSemanticsAttributes.Setter, methodHandles[p.Set]);
+                propRowsEmitted++;
+            }
+            if (!firstProp.IsNil)
+            {
+                mb.AddPropertyMap(MetadataTokens.TypeDefinitionHandle(t.Id + 1), firstProp);
+                propMapRowsEmitted++;
             }
         }
 
@@ -507,6 +592,35 @@ public static class Program
         if (fieldCount != expFields) throw new Exception($"field count mismatch {fieldCount} vs {expFields}");
         if (methodCount != expMethods) throw new Exception($"method count mismatch {methodCount} vs {expMethods}");
         if (paramCount != expParams) throw new Exception($"param count mismatch {paramCount} vs {expParams}");
+        // ---- property table check ----
+        int propRows = md.GetTableRowCount(TableIndex.Property);
+        int propMapRows = md.GetTableRowCount(TableIndex.PropertyMap);
+        int semanticsRows = md.GetTableRowCount(TableIndex.MethodSemantics);
+        int expProps = expected.Sum(t => t.Props.Count);
+        int expPropMaps = expected.Count(t => t.Props.Count > 0);
+        int expSemantics = expected.Sum(t => t.Props.Sum(p => (p.Get >= 0 ? 1 : 0) + (p.Set >= 0 ? 1 : 0)));
+        Console.WriteLine($"verify: properties={propRows} propertyMaps={propMapRows} methodSemantics={semanticsRows}");
+        if (propRows != expProps) throw new Exception($"property count mismatch {propRows} vs {expProps}");
+        if (propMapRows != expPropMaps) throw new Exception($"property map count mismatch {propMapRows} vs {expPropMaps}");
+        if (semanticsRows != expSemantics) throw new Exception($"method semantics count mismatch {semanticsRows} vs {expSemantics}");
+        {
+            int checkedProps = 0;
+            foreach (var ph in md.PropertyDefinitions)
+            {
+                var pd = md.GetPropertyDefinition(ph);
+                var sig = md.GetBlobBytes(pd.Signature);
+                if (sig.Length < 2 || (sig[0] & 0x08) == 0)
+                    throw new Exception($"bad property signature for {md.GetString(pd.Name)}");
+                var acc = pd.GetAccessors();
+                if (acc.Getter.IsNil && acc.Setter.IsNil)
+                    throw new Exception($"property {md.GetString(pd.Name)} has no accessor");
+                if (checkedProps < 3)
+                    Console.WriteLine($"  property sample: {md.GetString(pd.Name)} sig={sig.Length}B " +
+                                      $"getter={(acc.Getter.IsNil ? "-" : "yes")} setter={(acc.Setter.IsNil ? "-" : "yes")}");
+                checkedProps++;
+            }
+            Console.WriteLine($"verify: property table decoded OK ({checkedProps} rows, all have a signature and an accessor)");
+        }
         if (attrRowCount == 0) throw new Exception("no custom attributes emitted");
         // targeted custom-attribute validation: decode a sample of blobs and resolve their ctor type
         var ctorNames = new System.Collections.Generic.Dictionary<EntityHandle, string>();

@@ -4926,3 +4926,33 @@ cache 构建函数，确认其语义是 **propertyDefs**：
 - 中间 u16@+6 列语义未定（疑似 attrs/token），不影响 Il2CppDumper 兼容输出；
 - 下一步候选：propertyDefs 接入 DummyDll/JSONL（PropertyDefinition 行）、事件表（若 metadata 保留）、attribute 参数。
 
+
+## 84. DummyDll 属性表接入：Property / PropertyMap / MethodSemantics（2026-10-18）
+
+> 不是需求，是执行记录。目标第 2 轮。
+
+### 84.1 导出侧（src/dummy_export.rs）
+- 新增 P 记录（每类型、metadata 顺序）：`{k:"P", id, name, get, set}`；
+  get/set 是**全局方法表索引**（propertyDefs 的每类型方法索引经 per_type 解析；-1 = 无 accessor）；
+- 7.1 实测 **115,596 条 P**（与 dump.cs 属性行一致）；dummy.jsonl 178,907,427 -> **186,487,969 B**；
+- main.rs 的 `dump-gen --dummy-out` 汇总行同步打印 properties 计数。
+
+### 84.2 生成器侧（tools/dummygen）
+- Property 表：签名按 accessor 重建（getter -> 返回类型 + 索引参数；set-only -> setter 末参类型 + 其余参数），
+  calling convention 0x08（`BlobEncoder.PropertySignature`，实例属性带 HASTHIS）；
+- PropertyMap：每类型一行，FirstProperty = 该类型首个 Property 行（类型按 tdi 顺序、属性按 metadata 顺序 ⇒ 行连续）；
+- MethodSemantics：getter -> Getter、setter -> Setter，共 **132,014** 行（112,107 + 19,907，与 propertyDefs 完全一致）；
+- 内置校验：Property=115,596 / PropertyMap=30,226 / MethodSemantics=132,014；逐行检查签名首字节含 0x08 且至少一个 accessor。
+
+### 84.3 独立验证
+- 用独立 System.Reflection.Metadata 程序（不复用生成器代码）读回：表计数一致；
+  DateTimeFormatInfo 属性依次为 CultureName / Culture / LanguageName / InvariantInfo / CurrentInfo /
+  AMDesignator / Calendar / OptionalCalendars，accessor 解析为 get_CultureName、get_AMDesignator + set_AMDesignator 等；
+- CLR `Assembly.LoadFrom` 失败（TypeLoadException: System.Object 必须来自 corlib）——这是"单程序集自包含"
+  设计（我们自建 System.Object 等 core 类型）的既有性质，不是本轮回归；metadata/表结构层验证通过。
+
+### 84.4 产物
+- DummyDll.dll 93,113,344 -> **96,367,616 B**（+Property 115,596 / PropertyMap 30,226 / MethodSemantics 132,014）；
+- `cargo build --release` / `cargo test --release`：17 passed；
+- 下一步候选：事件表、attribute 参数 blob、il2cpp.h。
+

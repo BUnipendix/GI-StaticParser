@@ -1,7 +1,10 @@
 //! Structured export for the DummyDll generator (tools/dummygen).
 //!
-//! One JSON object per line. Types are referenced by typeDef index; the generator defines all
-//! of them in one assembly, so no cross-assembly references are needed for v1.
+//! One JSON object per line. Record kinds:
+//!   T type / I interface impl / F field / M method / P property
+//! Types are referenced by typeDef index; the generator defines all of them in one assembly, so
+//! no cross-assembly references are needed for v1. `P` carries the real metadata property name
+//! plus getter/setter method indexes (global method-table indexes, -1 = no accessor).
 //!
 //! Type encoding (compact string):
 //!   primitives: v b c s8 u8 s16 u16 s32 u32 s64 u64 f4 f8 str ip up obj tr
@@ -89,7 +92,7 @@ fn rva_to_file(m: &Meta, rva: u32) -> Option<u32> {
     None
 }
 
-pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize)> {
+pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize, usize)> {
     let (tds, mds) = collect(m);
     let inst_offsets = super::dump_gen::instance_offsets(m, &tds);
     let mut per_type: Vec<Vec<usize>> = vec![Vec::new(); tds.len()];
@@ -122,6 +125,7 @@ pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize
     let mut n_types = 0usize;
     let mut n_fields = 0usize;
     let mut n_methods = 0usize;
+    let mut n_props = 0usize;
 
     for (i, td) in tds.iter().enumerate() {
         let kind = type_kind(m, &tds, td);
@@ -198,6 +202,35 @@ pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize
             }
         }
 
+        // Property definitions (real metadata table; getter/setter are per-type method indexes
+        // that resolve to global method indexes through per_type).
+        if let (Some(prop_start), Some(prop_count)) = (m.td_prop_start(i), m.td_prop_count(i)) {
+            for row in prop_start..prop_start + prop_count {
+                let Some((name_idx, getter, setter)) = m.property_row(row) else { continue };
+                let get = getter
+                    .and_then(|k| per_type[i].get(k as usize).copied())
+                    .map(|g| g as i64)
+                    .unwrap_or(-1);
+                let set = setter
+                    .and_then(|k| per_type[i].get(k as usize).copied())
+                    .map(|g| g as i64)
+                    .unwrap_or(-1);
+                if get < 0 && set < 0 {
+                    continue;
+                }
+                let pname = m.decode_str(name_idx);
+                writeln!(
+                    w,
+                    "{{\"k\":\"P\",\"id\":{},\"name\":{},\"get\":{},\"set\":{}}}",
+                    i,
+                    serde_json::to_string(&pname)?,
+                    get,
+                    set
+                )?;
+                n_props += 1;
+            }
+        }
+
         for &gmi in &per_type[i] {
             let md = &mds[gmi];
             let ret = enc_type(m, md.ret_type, 0);
@@ -241,7 +274,7 @@ pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize
         }
     }
     w.flush()?;
-    Ok((n_types, n_fields, n_methods))
+    Ok((n_types, n_fields, n_methods, n_props))
 }
 
 fn td_parent_tdi(m: &Meta, tds: &[Td], td: &Td) -> i64 {
