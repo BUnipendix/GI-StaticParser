@@ -5529,3 +5529,16 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
 3. verify_70.py 字段 type 检查改为 primitive-kind>=100k 且越界<=100（实测 149,852 / 64）；
    13 项检查全部 PASS。
 4. field-layout.json type 常数更新为 0xA9152807；field_rows.py 输出越界计数。
+
+## 113. R42 方法签名端到端渲染 + 逐参数对照（2026-10-18）
+
+1. type_render.py 升级为完整签名输出：声明类型 + 方法名 + 渲染返回类型 + 每参数 (名字:类型)；
+   Il2CppType flags 字节 bit6=byref，渲染加 &（修正了同索引递归导致 &&&&&& 的 bug）。
+2. 样例：Locale.GetText : System.String (fmt:System.String, args:System.Object[])；
+   SR.Format : System.String (resourceFormat:System.String, p1:System.Object)；
+   Mono.Runtime.GetNativeStackTrace : System.String (exception:System.Exception)。
+3. 与 7.1 dump.cs 逐类型逐参数对照（corelib 60 类型）：返回类型 990/994=99.6%；
+   参数类型按位置 **1,457/1,485=98.11%**；剩余 = genericinst#N 占位（泛型表未定位）
+   + 少量跨版本混淆改名（JAAJEOLDNPH vs FPBCFBKKCFG）。
+4. 结论：参数名 name 列、参数 type 列、参数顺序（paramStart 链）、byref 标志在 7.0 均验证；
+   只差泛型实例表即可完整渲染签名。

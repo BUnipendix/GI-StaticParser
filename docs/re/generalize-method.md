@@ -493,6 +493,26 @@ R37 用窗口性质得到的字段 type 常数 0xA90E9923 是错的（解码后 
 其余全部可解析。verify_70.py 的字段 type 检查更新为：primitive-kind 行 >= 100k 且越界 <= 100
 （实测 149,852 / 64），13 项检查全部 PASS。
 
+### 3.2p 方法签名端到端渲染 + 逐参数对照（2026-10-18）
+
+type_render.py 输出升级为完整签名：声明类型 + 方法名 + 渲染返回类型 + 每个参数的
+(名字:类型)；Il2CppType 的 flags 字节 bit6 = byref，渲染时在该类型后加 &。样例：
+
+- Locale.GetText : System.String (fmt:System.String, args:System.Object[])
+- SR.Format : System.String (resourceFormat:System.String, p1:System.Object)
+- Mono.Runtime.GetNativeStackTrace : System.String (exception:System.Exception)
+
+与 7.1 dump.cs 的逐类型逐参数对照（corelib 60 类型）：
+
+| 指标 | 结果 |
+|---|---|
+| 返回类型 | 990 / 994 = 99.6% |
+| 参数类型（按位置） | **1,457 / 1,485 = 98.11%** |
+| 剩余不一致 | genericinst#N 占位（泛型表未定位）+ 少量跨版本混淆改名（JAAJEOLDNPH vs FPBCFBKKCFG） |
+
+即：参数名的 name 列、参数 type 列、参数顺序（paramStart 链）、byref 标志在 7.0 上都已验证；
+现在只差泛型实例表就能把签名渲染完整。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。

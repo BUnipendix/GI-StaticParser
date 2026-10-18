@@ -41,6 +41,12 @@ class TypeTable:
         if i is None or i >= self.n or depth > 6:
             return '?'
         data, attrs, typ, flags = self.raw(i)
+        base = self.render_kind(data, typ, depth)
+        if flags & 0x40:  # byref flag lives on the type entry itself
+            base += '&'
+        return base
+
+    def render_kind(self, data, typ, depth):
         if typ in PRIM:
             return PRIM[typ]
         if typ in (0x11, 0x12):
@@ -58,7 +64,7 @@ class TypeTable:
             return self.render(elem, depth + 1) + suffix
         if typ == 0x15:
             return f'genericinst#{data}'
-        return f'kind0x{typ:02x}'
+        return f'kind0x{typ:02x}' 
 
 def h(s): return int(s, 16) if isinstance(s, str) else s
 
@@ -96,6 +102,18 @@ def main():
         width = 1 if name == 'param_count' else 2 if name == 'flags' else 4
         raw = struct.unpack_from('<H' if width == 2 else ('<B' if width == 1 else '<I'), body, ro + off)[0]
         return mr.col_value(kind, c, raw, mf(i))
+    # parameter table
+    pl = lay['param']
+    pb = tbase(pl['table']); pstride = pl['stride']
+    pm = mr.mask_fn(pl['mask'])
+    pname = pl['name']; ptype = pl['type']
+    def pcol(which, i):
+        ro = pb + i * pstride
+        if which == 'name':
+            raw = struct.unpack_from('<I', body, ro + pname['off'])[0]
+            return ((raw + h(pname['c'])) & 0xFFFFFFFF) ^ pm(i)
+        raw = struct.unpack_from('<I', body, ro + ptype['off'])[0]
+        return (((raw + h(ptype['c'])) & 0xFFFFFFFF) ^ pm(i)) & 0xFFFFFFFF
     types = tt.types
     # declaring type per method row
     owner = [None] * len(types)
@@ -110,12 +128,14 @@ def main():
             nm = cipher.dec(body, mcol('name', mi))
             ret = tt.render(mcol('return_type', mi))
             ps = mcol('param_start', mi); pc = mcol('param_count', mi)
-            assert type(tt.render(0)) is str
             plist = []
             if ps != 0xFFFFFFFF:
                 for j in range(pc):
-                    plist.append(f'param{j}:type#{0}')
-            lines.append(f'{tname}.{nm or "<noname>"} : {ret} ({pc} params)')
+                    pi = ps + j
+                    pnm = cipher.dec(body, pcol('name', pi))
+                    pty = tt.render(pcol('type', pi))
+                    plist.append(f'{pnm or "<p>"}:{pty}')
+            lines.append(f'{tname}.{nm or "<noname>"} : {ret} ({", ".join(plist)})')
     txt = '\n'.join(lines)
     if out_p:
         open(out_p, 'w', encoding='utf-8').write(txt + '\n')
