@@ -5612,3 +5612,15 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
 3. flags 完整语义暂定：distinct 992、部分高位超出标准 MethodAttributes 范围（如 0x9266），
    先记“static 位可用、其余待交叉验证”。
 4. 更新 docs/re/artifacts-6.7.0/method-param-layout.json 与 decode_params.py（输出方法名）。
+
+## 120. R49 6.7.0 Il2CppType 数组 + returnType 列（2026-10-18）
+
+1. 用 7.0 相同的 16 字节记录结构扫描定位 6.7 typearr：VA 0x1429FA400 / 文件 0x29F9200，
+   最长连续命中 404,360 条；再用参数 type 列反推表长：解码后最大值 633,861，取 count=633,862
+   时有效条目占 98.78%，条目 0/1/2/9 与 7.0 同构（genericinst#0 / System.Object / ... / System.Type）。
+2. 解 returnType 列：方法行 +4 u32，ret = (raw ^ 0x546F8F09) - mask（方法 0 .ctor 到 Void 已知明文，
+   15 族 x 偏移 0..22 唯一命中）。全表 687,452 行：越界 0、System.Void 420,731（61.2%）、
+   distinct 31,096；高频 Void 420,731 / Boolean 64,168 / Int32 29,859 / String 13,461 / UInt32 9,239，
+   与 7.0 分布一致。
+3. 新增 docs/re/artifacts-6.7.0/typearr.json；method-param-layout.json 增加 return_type 列；
+   decode_params.py 可打印 6.7 方法签名（GetText -> String、GetTypeFromClass -> IntPtr 等）。

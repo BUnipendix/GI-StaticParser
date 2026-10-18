@@ -644,6 +644,28 @@ dump70_partial.py 已接入 enum 规则，清单现在输出 class/struct/interf
 flags 的完整 MethodAttributes 语义仍是暂定的：distinct 992、部分值高位不符合标准 MethodAttributes
 范围（如 0x9266），需要拿 dump 的修饰符做进一步交叉验证，先按“static 位可用、其余待定”记录。
 
+### 3.2w 6.7.0 的 Il2CppType 数组 + returnType 列（2026-10-18）
+
+用与 7.0 完全相同的方法在 6.7 里定位 Il2CppType 数组：16 字节记录结构扫描，最长连续命中
+404,360 条（VA 0x1429FA400 / 文件 0x29F9200）。然后用参数 type 列反推表长：
+
+- 6.7 参数 type 列解码后最大值 = 633,861；取 count = 633,862 时该数组的有效条目
+  （type 枚举合法且 attrs 合理）占 98.78%，条目 0/1/2/9 与 7.0 的完全同构
+  （genericinst#0 / System.Object / ... / System.Type），故确认 6.7 typearr = 633,862 条。
+
+定位 typearr 后解 returnType 列：它是方法行 +4 的 u32, ret = (raw ^ 0x546F8F09) - mask
+（用方法 0 的 .ctor 到 Void 作为已知明文，15 种族 x 偏移 0..22 搜索唯一命中）。全表验证：
+
+| 检查 | 结果 |
+|---|---|
+| 越界 | 0 / 687,452 |
+| System.Void | 420,731（61.2%） |
+| distinct | 31,096 |
+| 高频 | Void 420,731、Boolean 64,168、Int32 29,859、String 13,461、UInt32 9,239 |
+
+61.2% 的 Void 比例与 7.0 完全一致，分布形状也一致。decode_params.py 现在可以直接打印
+6.7 的方法签名（GetText -> System.String、GetTypeFromClass -> System.IntPtr 等）。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。

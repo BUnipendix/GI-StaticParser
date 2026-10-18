@@ -56,6 +56,23 @@ def main():
         c = pcol[name]
         raw = m32(pb + i * pst + c['off'])
         return (raw ^ pmask(i) ^ h(c['c'])) & 0xFFFFFFFF
+    ta_path = sys.argv[5] if len(sys.argv) > 5 else None
+    ta = json.load(open(ta_path)) if ta_path else None
+    if ta:
+        tab = open(ta['file_off'] and sites['exe'], 'rb').read()
+        TA_OFF = int(ta['file_off'], 16); TA_N = ta['count']
+        def ret_name(i):
+            c = col['return_type']
+            raw = m32(mb + i * ms + c['off'])
+            v = ((raw ^ h(c['c'])) - mask(i)) & 0xFFFFFFFF
+            if v >= TA_N: return 'OOB'
+            off = TA_OFF + 16 * v
+            typ = tab[off + 10]; data = struct.unpack_from('<Q', tab, off)[0]
+            prim = ta['type_enum'].get(f'0x{typ:02x}')
+            if prim: return prim
+            if typ in (0x11, 0x12): return f'typedef#{data}'
+            if typ == 0x15: return f'genericinst#{data}'
+            return f'kind0x{typ:02x}'
     print(f'{vdir}: method base 0x{mb:X} param base 0x{pb:X} rows {rows}')
     sent = 0; bad = 0; shown = 0
     for i in range(rows):
@@ -70,7 +87,8 @@ def main():
             names.append(n)
             if n is None: bad += 1
         if shown < 8:
-            print(f'  method {i}: {mname(i)!r} start {ps} count {pc} params {names}')
+            ret = ret_name(i) if ta else '?'
+            print(f'  method {i}: {mname(i)!r} -> {ret} start {ps} count {pc} params {names}')
             shown += 1
     print(f'paramStart sentinels {sent}, bad rows {bad}')
 

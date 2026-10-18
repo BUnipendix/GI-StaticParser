@@ -1,0 +1,42 @@
+{
+  "artifact": "typearr",
+  "artifact_version": 1,
+  "version": "6.7.0",
+  "note": "Il2CppType array located by the same 16-byte structure scan used for 7.0 and validated by the param-type index bound: the decoded param type max (633,861) equals count-1 exactly.",
+  "file_off": "0x29F9200",
+  "va": "0x1429FA400",
+  "count": 633862,
+  "entry": {
+    "data_off": 0,
+    "attrs_off": 8,
+    "type_off": 10,
+    "flags_off": 11,
+    "size": 16
+  },
+  "type_enum": {
+    "0x01": "System.Void",
+    "0x02": "System.Boolean",
+    "0x03": "System.Char",
+    "0x04": "System.SByte",
+    "0x05": "System.Byte",
+    "0x06": "System.Int16",
+    "0x07": "System.UInt16",
+    "0x08": "System.Int32",
+    "0x09": "System.UInt32",
+    "0x0a": "System.Int64",
+    "0x0b": "System.UInt64",
+    "0x0c": "System.Single",
+    "0x0d": "System.Double",
+    "0x0e": "System.String",
+    "0x16": "System.TypedReference",
+    "0x18": "System.IntPtr",
+    "0x19": "System.UIntPtr",
+    "0x1c": "System.Object"
+  },
+  "validation": {
+    "param_type_max": 633861,
+    "count_minus_1": 633861,
+    "valid_entry_fraction": 0.9878,
+    "void_type_index": 396540
+  }
+}

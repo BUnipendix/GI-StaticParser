@@ -6,7 +6,8 @@
   "seed_version": "7.0.0",
   "seed_function": "0x1404F9750",
   "target_function": "0x1404D3990",
-  "match": "shape transfer over hdr load-site fingerprints (jaccard 0.3163), then code reading"
+  "match": "shape transfer over hdr load-site fingerprints (jaccard 0.3163), then code reading",
+  "typearr": "docs/re/artifacts-6.7.0/typearr.json"
  },
  "method_table": {
   "slot": "0x38",
@@ -44,7 +45,12 @@
    "kind": "XorCSubMask16",
    "c": "0x3"
   },
-  "flags_note": "decoded as ((raw16 ^ 3) - mask) & 0xFFFF; bit 0x10 = static (80,860 methods). Full MethodAttributes semantics still tentative: distinct values 992 with unexpected high bits, needs a cross-check against dump modifiers."
+  "flags_note": "decoded as ((raw16 ^ 3) - mask) & 0xFFFF; bit 0x10 = static (80,860 methods). Full MethodAttributes semantics still tentative: distinct values 992 with unexpected high bits, needs a cross-check against dump modifiers.",
+  "return_type": {
+   "off": 4,
+   "kind": "XorCSubMask32",
+   "c": "0x546F8F09"
+  }
  },
  "param_table": {
   "slot": "0x14C",
@@ -68,5 +74,5 @@
    "c": "0x5A301FB"
   }
  },
- "notes": "param index used by the row mask is the GLOBAL param index (paramStart + local). The type column decodes to an Il2CppType index; 6.7 typearr base is registration+0x78 (different offset from 7.0's +0x70)."
+ "notes": "param index used by the row mask is the GLOBAL param index (paramStart + local). The type column decodes to an Il2CppType index; 6.7 typearr base is registration+0x78 (different offset from 7.0's +0x70). Method return type is at row +4: (raw32 ^ 0x546F8F09) - mask; validated against the located 6.7 typearr: all 687,452 values in [0,633,862), 420,731 resolve to System.Void (61.2%), 0 out of range."
 }
