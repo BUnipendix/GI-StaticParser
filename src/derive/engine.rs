@@ -26,6 +26,11 @@ pub struct Meta<'a> {
     pub generic_insts: usize,
     pub typearr: usize,
     pub typearr_len: usize,
+    /// Generic-parameter table base (body offset; 7.1: hdr[0x174] + 0xCED1EDB1 = 0xDF8708).
+    pub gp_base: usize,
+    /// Generic-parameter count (derived from the highest VAR/MVAR index used in typearr;
+    /// 7.1: 5,796, matching the contiguous encrypted table at `gp_base`).
+    pub gp_count: usize,
     pub methodptrs: usize,
     pub methodptrs_len: usize,
     pub rdata: (u64, usize, usize),
@@ -112,6 +117,24 @@ impl<'a> Meta<'a> {
 
         let (typearr, typearr_len) =
             locate_typearr(exe, &rdata).ok_or_else(|| anyhow!("typearr not located"))?;
+        // Generic-parameter table (docs/re/71-generic-params.md):
+        //   base  = body + (hdr[0x174] + 0xCED1EDB1)   (14-byte rows, 7.1: 0xDF8708)
+        //   row i is XOR-masked with  ((i*0x6F1C0337A0897415 + 0x31061C4212D60D89) >> 22)
+        // Count is not stored in the header; the highest VAR/MVAR index referenced by typearr is
+        // 5,795, so the table holds 5,796 entries (the contiguous run ends exactly there).
+        let gp_base = {
+            let h = i32::from_le_bytes(header_bytes[0x174..0x178].try_into().unwrap());
+            h.wrapping_add(0xCED1_EDB1u32 as i32) as u32 as usize
+        };
+        let mut gp_count = 0usize;
+        for i in 0..typearr_len {
+            let Some(b) = exe.get(typearr + 16 * i..typearr + 16 * i + 16) else { break };
+            let kind = b[0xA];
+            if kind == 0x13 || kind == 0x1E {
+                let data = u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize;
+                gp_count = gp_count.max(data + 1);
+            }
+        }
         let (methodptrs, methodptrs_len) =
             locate_methodptrs(exe, image_base).ok_or_else(|| anyhow!("method pointers not located"))?;
 
@@ -188,6 +211,8 @@ impl<'a> Meta<'a> {
             generic_insts,
             typearr,
             typearr_len,
+            gp_base,
+            gp_count,
             methodptrs,
             methodptrs_len,
             rdata,
@@ -196,6 +221,45 @@ impl<'a> Meta<'a> {
     }
 
     #[inline]
+    /// Generic-parameter name for global index `gpi` (VAR/MVAR `Il2CppType.data` is this index).
+    /// The row's name index is masked per row; 7.1 stores real source names (TKey/TValue/TRest/…)
+    /// with a few single-control-char obfuscated names.
+    pub fn generic_param_name(&self, gpi: u32) -> Option<String> {
+        if gpi as usize >= self.gp_count {
+            return None;
+        }
+        let at = self.gp_base + 14 * gpi as usize;
+        let raw = self.body.read_u32_opt(at)?;
+        let idx = raw.wrapping_add(0x9E52_99B1) ^ Self::generic_param_mask(gpi);
+        let s = self.decode_str(idx);
+        if s.is_empty() {
+            None
+        } else {
+            Some(s)
+        }
+    }
+
+    /// Declaring generic-container index for `gpi` (the row's +0xC column).
+    pub fn generic_param_owner(&self, gpi: u32) -> Option<u16> {
+        if gpi as usize >= self.gp_count {
+            return None;
+        }
+        let at = self.gp_base + 14 * gpi as usize + 0xC;
+        if !self.body.readable(at, 2) {
+            return None;
+        }
+        let raw = self.body.read_u16(at);
+        Some(raw.wrapping_add(0xA8E2) ^ (Self::generic_param_mask(gpi) as u16))
+    }
+
+    #[inline]
+    pub fn generic_param_mask(gpi: u32) -> u32 {
+        ((gpi as u64)
+            .wrapping_mul(0x6F1C_0337_A089_7415)
+            .wrapping_add(0x3106_1C42_12D6_0D89)
+            >> 22) as u32
+    }
+
     pub fn decode_str(&self, idx: u32) -> String {
         crate::decode_str::decode_str_sched(&self.body, self.strsec, idx, &self.schedule)
     }
@@ -954,4 +1018,29 @@ fn locate_methodptrs(exe: &[u8], image_base: u64) -> Option<(usize, usize)> {
         return None;
     }
     Some((rd.raw_pointer as usize + best.1 * 8, best.0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Generic parameter table (R23): 5,796 masked 14-byte rows, real source names.
+    #[test]
+    #[ignore = "needs MHY_SAMPLE_EXE / MHY_SAMPLE_DAT"]
+    fn generic_param_names_sample() {
+        let exe = std::fs::read(std::env::var("MHY_SAMPLE_EXE").expect("MHY_SAMPLE_EXE")).unwrap();
+        let dat = std::fs::read(std::env::var("MHY_SAMPLE_DAT").expect("MHY_SAMPLE_DAT")).unwrap();
+        let m = Meta::load(&exe, &dat, crate::derive::layout71::gen71()).expect("load");
+        assert_eq!(m.gp_count, 5_796);
+        assert_eq!(m.generic_param_name(0).as_deref(), Some("T"));
+        let names: Vec<String> = (0..m.gp_count as u32)
+            .filter_map(|i| m.generic_param_name(i))
+            .collect();
+        assert!(names.iter().any(|n| n == "TKey"));
+        assert!(names.iter().any(|n| n == "TValue"));
+        assert!(names.iter().any(|n| n == "TRest"));
+        eprintln!("generic params: {} names, {} distinct", names.len(), {
+            let mut s = names.clone(); s.sort(); s.dedup(); s.len()
+        });
+    }
 }

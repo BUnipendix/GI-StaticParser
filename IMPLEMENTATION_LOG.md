@@ -5182,3 +5182,22 @@ property/event）、AttributeAttribute（无法还原的属性实例；RVA/Offse
    （6.4 oracle 泛型名 ~85%、接口基接口 131 条）。
 4. 唯一未证点：GI runtime 的 genericParameter 结构是否存在（可从 Il2CppType kind 0x13/0x1E 分派入口继续）。
 5. 验证：final_verify.py 仍全 PASS（工件未变）；docs 同步更新。
+## 94. R23：泛型参数表定位并接线（2026-10-18）
+
+> 本轮推翻 R18/R22 的"泛型参数名已剥离"结论：表存在，逐行加密。
+
+1. 定位：Class::FromIl2CppType 0x14050E7A0 的 30 项 type-kind 跳表中，VAR/MVAR 分支
+   (0x14050E897/0x14050E986) 计算
+     base = body + (i32(hdr[0x174]) + 0xCED1EDB1) = body 0xDF8708
+     mask(i) = ((i*0x6F1C0337A0897415 + 0x31061C4212D60D89) >> 22) & 0xFFFFFFFF
+     nameIndex = (u32[row+0] + 0x9E5299B1) ^ mask ; ownerTI = ((u16[row+0xC]+0xA8E2) ^ mask16)
+   然后调 0x14050EDF0（Class::FromGenericParameter，kuna 反编译确认只读这两列）。
+2. 计数：header 无 count；typearr 中 VAR/MVAR 最大 data=5,795 ⇒ 5,796 行，与连续可解区间一致。
+3. 全量结果：5,796 行；5708 个可打印名字 + 81 个单控制字符混淆名；distinct 47；
+   TKey 289 / TValue 305 / TResult 97 / T 2835 / TRest 1；owner 分组 4,425。
+4. 接线：Meta 新增 gp_base/gp_count/generic_param_name；dump_gen::render_kind 的 0x13/0x1E 改用真实名字
+   （控制字符名保留 object/*k0x13*/ 占位）。dump.cs 127,953,647 → 127,769,231 B；
+   Dictionary`2 字段/接口现为 TKey,TValue，ValueTuple`8 为 TRest。
+5. 验证：新增 sample-gated test generic_param_names_sample（5,796 / T / TKey / TValue / TRest）；
+   final_verify.py 更新 dump.cs 尺寸后全 PASS。
+6. 未解：泛型约束（accessor 不读；标准约束表 0 命中）、owner 容器语义、DummyDll GenericParam 名字接线。

@@ -13,7 +13,7 @@ import sys
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser('~/gire/out/71')
 
 EXPECT_SIZE = {
-    'dump.cs': 127_953_647,
+    'dump.cs': 127_769_231,
     'script.json': 176_764_249,
     'attributes.json': 10_025_050,
     'literals.json': 6_287_449,

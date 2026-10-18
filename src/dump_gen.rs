@@ -303,6 +303,10 @@ fn render_kind(m: &Meta, tds: &[Td], parents: &[Option<u32>], kind: u8, data: u3
             Some(e) => format!("{}&", e),
             None => "System.Object&".into(),
         },
+        0x13 | 0x1E => m
+            .generic_param_name(data)
+            .filter(|n| !n.chars().any(char::is_control))
+            .unwrap_or_else(|| format!("object/*k{kind:#x}*/")),
         _ => format!("object/*k{kind:#x}*/"),
     }
 }

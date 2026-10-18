@@ -1,12 +1,15 @@
 # 7.1 泛型参数名 / 接口基接口：运行时来源追查（R22）
 
 > 2026-10-18。证据记录。目标第二轮：沿用「反汇编解析器→表锚点」方法追查这两项的运行时来源。
+>
+> **重要更正（R23）**：本文件 §0/§1 对泛型参数名的"已剥离"结论**作废**——R23 已定位到逐行加密的泛型参数表
+> （body 0xDF8708，5,796 行，真实名字 TKey/TValue/TRest…），见 `docs/re/71-generic-params.md`。
+> 接口基接口部分（§1c/§1d）结论仍然成立。
 
 ## 0. 结论
 
-- **泛型参数名**：不是"藏在某张加密表里"。identifier 字符串堆（解密后）与 86,108 条 literal 表都 0 命中
-  `TKey/TValue/TResult`；标准布局的 genericContainers（16B）与 genericParameters（14B）表在
-  body(82,725,540B) 与 startup-metadata(4,060,728B) 的结构扫描均为 **0 个非退化候选**（§1b）。
+- ~~**泛型参数名**：不是"藏在某张加密表里"~~ **（R23 推翻）**：表确实存在且逐行加密，`body + (hdr[0x174]+0xCED1EDB1)`，
+  14B 行 × 5,796，mask 见 `docs/re/71-generic-params.md`；本节此前的"0 命中"是因为扫描未覆盖逐行加密布局。
 - **接口基接口**：7.1 的 interface 类型 `iface_start/count` 全哨兵；但实现类的接口列表是**预先扁平化**的
   （7.1 自身 `System.Resources.ResourceReader : IResourceReader, IEnumerable, IDisposable`；6.4 oracle 同），
   运行时类型/接口判定函数 `0x140513260` 直接遍历 `klass+0x20` 的接口指针数组，不做基接口递归（§1d）
