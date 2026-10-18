@@ -1,0 +1,235 @@
+{
+ "artifact": "profile-draft",
+ "artifact_version": 1,
+ "version_dir": "/home/yangsanyi/gire/sample/gi/7.0.0",
+ "cipher": {
+  "mask_site": 5373824886,
+  "schedule": {
+   "ops": [
+    {
+     "op": "And",
+     "v": 16777215
+    },
+    {
+     "op": "Mul",
+     "v": 4848395318344445252
+    },
+    {
+     "op": "Add",
+     "v": 17588639114185158490
+    },
+    {
+     "op": "Xor",
+     "v": 7499834982468201428
+    },
+    {
+     "op": "Mul",
+     "v": 1546143371936129445
+    },
+    {
+     "op": "Xor",
+     "v": 6769844366752281475
+    }
+   ],
+   "step": 2783651216561820726
+  },
+  "score": 15116,
+  "site": 5373825069,
+  "step_table": 5427355904,
+  "strsec": 63927424
+ },
+ "hdr_global": null,
+ "type_defs": {
+  "base": 17522200,
+  "stride": 70,
+  "rows": 86932,
+  "name_column": {
+   "off": 16,
+   "transform": "Xor",
+   "c": 1634427293
+  },
+  "namespace_column": {
+   "off": 24,
+   "transform": "Xor",
+   "c": 1934706954
+  },
+  "field_range": {
+   "base": 17522200,
+   "cnt_c": 27547,
+   "cnt_off": 50,
+   "cnt_transform": "Xor",
+   "hi_shift": 19,
+   "idx_c": 544512962,
+   "idx_off": 0,
+   "max_index": 430287,
+   "real_rows": 73626,
+   "rows": 86932,
+   "sentinel_raw": 544512961,
+   "stride": 70,
+   "transform": "Add",
+   "transitions": 64273
+  },
+  "method_range": {
+   "base": 17522200,
+   "cnt_c": 14309,
+   "cnt_off": 60,
+   "cnt_transform": "Xor",
+   "hi_shift": 20,
+   "idx_c": 866867960,
+   "idx_off": 32,
+   "max_index": 713952,
+   "real_rows": 76000,
+   "rows": 86932,
+   "sentinel_raw": 866867959,
+   "stride": 70,
+   "transform": "Add",
+   "transitions": 65536
+  },
+  "property_range": {
+   "start_off": 28,
+   "start_w": 4,
+   "start_fam": "add",
+   "start_c": 4136800354,
+   "cnt_off": 69,
+   "cnt_w": 1,
+   "cnt_fam": "add",
+   "cnt_c": 219,
+   "chain_rows": 29680,
+   "gaps": 0,
+   "end": 112949
+  },
+  "event_range": {
+   "start_off": 62,
+   "start_w": 2,
+   "start_fam": "xor",
+   "start_c": 26285,
+   "cnt_off": 68,
+   "cnt_w": 1,
+   "cnt_fam": "add",
+   "cnt_c": 58,
+   "chain_rows": 222,
+   "gaps": 0,
+   "end": 625
+  }
+ },
+ "method": {
+  "table": {
+   "slot": "0x138",
+   "op": "add",
+   "imm": "0xD37E9675"
+  },
+  "stride": 26,
+  "rows": 713956,
+  "mask": {
+   "mul1": "0x3639B538F896",
+   "add1": "0xCC49CF2E948F28F",
+   "shr": 13,
+   "mul2": "0x3209B9A2",
+   "add2": "0x066E3EE5EEBB7B78"
+  },
+  "columns": {
+   "param_start": {
+    "off": 4,
+    "kind": "AddCSubMask32",
+    "c": "0xAC706A39"
+   },
+   "name": {
+    "off": 8,
+    "kind": "SubMaskAddC32",
+    "c": "0x997E86CD"
+   },
+   "flags": {
+    "off": 14,
+    "kind": "SubMaskAddC16",
+    "c": "0x13"
+   },
+   "return_type": {
+    "off": 16,
+    "kind": "AddCSubMask32",
+    "c": "0xDF812A65"
+   },
+   "param_count": {
+    "off": 24,
+    "kind": "XorCSubMask8",
+    "c": "0x5B"
+   }
+  }
+ },
+ "param": {
+  "table": {
+   "slot": "0x1FC",
+   "op": "add",
+   "imm": "0xFC3EC0CE"
+  },
+  "stride": 8,
+  "mask": {
+   "mul1": "0x2F64C993DFFE",
+   "add1": "0xAB42C68E0D4A",
+   "shr": 17,
+   "mul2": "0x272E941C",
+   "xor2": "0x705880A8"
+  },
+  "columns": {
+   "name": {
+    "off": 4,
+    "kind": "AddCXorMask32",
+    "c": "0xDA14EDA6"
+   },
+   "type": {
+    "off": 0,
+    "kind": "AddCXorMask32",
+    "c": "0x8FE5701B"
+   }
+  }
+ },
+ "property": {
+  "table": {
+   "slot": "0x15C",
+   "op": "xor",
+   "imm": "0x368C9997"
+  },
+  "stride": 10,
+  "rows": 112949,
+  "mask": {
+   "mul1": "0xE0F8",
+   "xor1": "0x22F6DA00",
+   "mul2": "0x3AA8EE62",
+   "add1": "0x49880E3C",
+   "xor2": "0x3E17E98E",
+   "add2": "0x7EC31F32"
+  },
+  "columns": {
+   "name": {
+    "off": 0,
+    "kind": "XorCSubMask32",
+    "c": "0x5DC2119E"
+   },
+   "setter": {
+    "off": 6,
+    "kind": "XorCSubMask16",
+    "c": "0xFFFFC45A"
+   },
+   "getter": {
+    "off": 8,
+    "kind": "SubMaskAddC16",
+    "c": "0xFFFF945B"
+   }
+  }
+ },
+ "unresolved": [
+  "field table (name/type/attrs)",
+  "method slot/slot column",
+  "typeDef flags/bitfield/parent/nested ranges",
+  "generic tables",
+  "param default values",
+  "usage/literal tables"
+ ],
+ "counts": {
+  "types": 86932,
+  "types_named": 86900,
+  "field_rows": 430290,
+  "method_rows": 713956,
+  "property_rows": 112949,
+  "event_rows": 625
+ }
+}

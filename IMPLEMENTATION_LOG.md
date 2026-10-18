@@ -5429,3 +5429,17 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
    故只作参考）。
 3. 更正：shape-transfer 语义中的 fields（槽 0x15C）实际是属性表；7.0 字段表仍未定位。
 4. 复现：property_rows.py <版本目录> <derive> <sites> <property-layout> <typedefs JSONL> <method-layout>。
+
+## 106. R35 7.0 profile 草稿流水线 + 方法名跨版本对照（2026-10-18）
+
+1. 新工具 tools/version-triage/profile_draft.py：把 derive 密码、typeDef 布局+区间、方法/参数/
+   属性布局合成单一 profile 草稿 JSON（docs/re/artifacts-7.0.0/profile-draft.json）；缺块不静默，
+   写入 unresolved 列表。
+2. 7.0 草稿计数：类型行 86,932（有名字 86,900）、字段行 430,290、方法行 713,956（= md_size/26）、
+   属性行 112,949、事件行 625。
+3. 跨版本 oracle 性质对照：7.0 解码的前 200 个方法名 vs 7.1 dump.cs 前 200 个方法名，
+   **逐位相同 170/200**（差异主要是 dump 把 .ctor 写成 ctor 与少量顺序差异）。corelib 方法序列
+   相邻版本一致 ⇒ 方法 name 列、行序、掩码解码正确。
+4. unresolved：字段表（name/type/attrs）、方法 slot 列、typeDef flags/bitfield/parent/nested 区间、
+   泛型表、参数默认值表、usage/literal 表。
+5. 复现：profile_draft.py <版本目录> <out> <derive> <tables> <typedefs> <ranges> <method-layout> <property-layout>。

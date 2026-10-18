@@ -340,6 +340,26 @@ setter = (raw16[+6] ^ 0xFFFFC45A) - mask（0xFFFF = 无）。
 **更正**：之前 shape-transfer 语义里的 fields（槽 0x15C）其实是**属性表**，不是字段表；7.0 的字段表
 （stride 10，name/type/attrs）仍未定位。
 
+### 3.2i 7.0 profile 草稿与跨版本名字对照（2026-10-18）
+
+新增 tools/version-triage/profile_draft.py：把已解出的各块（derive 密码、typeDef 布局 +
+区间、方法/参数/属性布局）合成**单一 profile 草稿 JSON**；缺块不会被静默忽略，而是写进
+unresolved 列表。7.0.0 草稿（docs/re/artifacts-7.0.0/profile-draft.json）计数：
+
+| 项 | 值 |
+|---|---|
+| 类型行 / 有名字类型 | 86,932 / 86,900 |
+| 字段行（sum fieldCount） | 430,290 |
+| 方法行（sum methodCount） | 713,956（= md_size/26） |
+| 属性行 / 事件行 | 112,949 / 625 |
+
+**跨版本名字对照（独立 oracle 性质）**：7.0 解码出的前 200 个方法名与 7.1 dump.cs 的前 200 个
+方法名**逐位相同 170/200**（差异主要是 dump 把 ".ctor" 写成 "ctor"、以及少量方法顺序差异）。
+corelib 方法序列在两个相邻版本间一致，说明方法表的 name 列、行序与掩码解码正确。
+
+仍未解（草稿里显式列出）：字段表（name/type/attrs）、方法 slot 列、typeDef flags/bitfield/parent/
+nested 区间、泛型表、参数默认值表、usage/literal 表。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。
