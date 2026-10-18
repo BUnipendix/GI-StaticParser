@@ -1,0 +1,161 @@
+{
+ "artifact": "mhydump-shape-seed",
+ "artifact_version": 1,
+ "note": "7.1.0 semantic seed for the shape-transfer solver. Constants are DATA (R10); layout71.rs is the source of truth. op/imm use the anchor form: add with a wrapping immediate equals sub.",
+ "semantics": {
+  "type_defs": {
+   "slot": 220,
+   "op": "xor",
+   "imm": 1383647803,
+   "stride": 70
+  },
+  "td_size": {
+   "slot": 96,
+   "op": "xor",
+   "imm": 355685492,
+   "stride": null,
+   "size_stride": 70
+  },
+  "method_defs": {
+   "slot": 480,
+   "op": "xor",
+   "imm": 786727163,
+   "stride": 26
+  },
+  "md_size": {
+   "slot": 308,
+   "op": "add",
+   "imm": 2398083926,
+   "stride": null,
+   "size_stride": 26
+  },
+  "fields": {
+   "slot": 344,
+   "op": "add",
+   "imm": 3802899252,
+   "stride": 10
+  },
+  "params": {
+   "slot": 464,
+   "op": "xor",
+   "imm": 131120121,
+   "stride": 12
+  },
+  "nested_types": {
+   "slot": 440,
+   "op": "xor",
+   "imm": 1483389681,
+   "stride": 4
+  },
+  "event_defs": {
+   "slot": 100,
+   "op": "add",
+   "imm": 3860008039,
+   "stride": 14
+  },
+  "field_names": {
+   "slot": 76,
+   "op": "add",
+   "imm": 3855763903,
+   "stride": 8
+  },
+  "field_defaults": {
+   "slot": 356,
+   "op": "xor",
+   "imm": 59323654,
+   "stride": 12
+  },
+  "field_defaults_size": {
+   "slot": 324,
+   "op": "add",
+   "imm": 3522691314,
+   "stride": null,
+   "size_stride": 12
+  },
+  "default_value_data": {
+   "slot": 296,
+   "op": "xor",
+   "imm": 924013730,
+   "stride": null
+  },
+  "param_defs": {
+   "slot": 104,
+   "op": "xor",
+   "imm": 342615299,
+   "stride": 8
+  },
+  "param_defaults_size": {
+   "slot": 24,
+   "op": "add",
+   "imm": 2714252734,
+   "stride": null,
+   "size_stride": 12
+  },
+  "iface_table": {
+   "slot": 112,
+   "op": "add",
+   "imm": 2438614019,
+   "stride": 6
+  },
+  "generic_params": {
+   "slot": 372,
+   "op": "add",
+   "imm": 3469864369,
+   "stride": 14
+  },
+  "generic_containers": {
+   "slot": 200,
+   "op": "xor",
+   "imm": 148308387,
+   "stride": 16
+  },
+  "usage_index": {
+   "slot": 412,
+   "op": "xor",
+   "imm": 362790020,
+   "stride": null
+  },
+  "usage_pairs": {
+   "slot": 332,
+   "op": "xor",
+   "imm": 790928431,
+   "stride": null
+  },
+  "literal_offsets": {
+   "slot": 136,
+   "op": "add",
+   "imm": 4089492222,
+   "stride": null
+  },
+  "literal_data": {
+   "slot": 316,
+   "op": "xor",
+   "imm": 682743685,
+   "stride": null
+  },
+  "str": {
+   "slot": 336,
+   "op": "add",
+   "imm": 3360959954,
+   "stride": null
+  },
+  "startup_images": {
+   "slot": 132,
+   "op": "xor",
+   "imm": 1479489075,
+   "stride": 40
+  },
+  "startup_assemblies": {
+   "slot": 108,
+   "op": "add",
+   "imm": 3760775664,
+   "stride": 44
+  },
+  "generic_class_rows": {
+   "slot": 288,
+   "op": "xor",
+   "imm": 473917674,
+   "stride": 8
+  }
+ }
+}

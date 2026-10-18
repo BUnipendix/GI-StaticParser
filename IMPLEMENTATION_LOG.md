@@ -5242,3 +5242,36 @@ property/event）、AttributeAttribute（无法还原的属性实例；RVA/Offse
    start=u32[+4]^m2^0x2BAD4D8C、argc=u32[+8]^m2^0x07F8A45C（0x1404B8990/0x1404E4A90 反编译确认）。
    与 R25 的 5,796 = 类型级 2,697 + 方法级 3,099 分组一致，方法级泛型参数接线得到二次验证。
 3. 本轮无工件变化；final_verify 仍应 PASS（未改代码）。文档 71-generic-params.md §3 已更新。
+
+## 98. 跨版本通用解法：模块定位 + 形态迁移 + 方法设计（2026-10-18）
+
+1. **模块定位（新增）**：4.3.0–4.7.0 的 MHY 头不在 YuanShen.exe，而在
+   YuanShen_Data/Native/UserAssembly.dll；把 DLL 作为 --exe 传给 derive 后全部成功（cipher + typeDef）。
+   4.2.0 的 exe/DLL 都无 MHY 魔数，仍失败。derive 覆盖面 20/26 → **25/26**。
+2. **头结构随机化证据**：typeDef 槽位逐版漂移（6.0 0xB8 / 6.4 0xE0 / 6.7 0x1E0 / 7.0 0xC4 /
+   7.1 0xDC / 5.4 0x1E8 / 4.8 0x60），op 在 Add/Xor 间翻转；body 内 typeDef 基址 7.0 0x10B5E18 vs
+   7.1 0x48F3FD8 ⇒ 槽位与偏移都不能跨版搬运。
+3. **访问器形态稳定（新工具/新证据）**：
+   - tools/version-triage/loadsites.py：缓存每个模块全部 mov reg,[rip+hdr_global] 加载点及
+     去常数指令指纹（数字→#，3-gram 倒排 + Jaccard）；7.1 约 72 s。
+   - tools/version-triage/shape_transfer.py + docs/re/artifacts-7.1.0/shape-seed.json（25 条 7.1 语义，
+     常量即数据）：匹配目标函数并读回 (slot,op,imm)。typeDef 在 7.0/6.7/6.4/6.0/5.4 上 **5/5 与 derive
+     独立结果逐位一致**；4.8 匹配分仅 0.25、结果不符（形态差异，待单独处理）。
+   - 24/25 语义在 6 个目标版本上都产出候选；未过数据验收的候选（如 7.0 td_size 0x5CDA78 不被
+     70 整除）明确标注为原始候选，不当作结论。
+4. **常数在代码里被直接证实**：7.1 方法 builder 0x1405155AD 内联 md_pmask 全链常数
+   （0x4E94/0x62D8B7B8/0x7572748A/0x1F4D9EEA/0x6E8931D6）与 method_defs 槽 0x1E0/0x2EE480FB；
+   事件 builder 0x140515E42 内联事件表全部常数；字段/属性 builder 0x1405162A9 内联字段基址、
+   property name_add/get_sub/set_xor 与共享 mask 链；stride 以 lea 链编码（字段 10、方法 26）。
+   ⇒ 「算法=函数形态，常数=形态内立即数/位移」成立，列常数/掩码可走「模板常数迁移」。
+5. 文档：新增 docs/re/generalize-method.md（分层流水线 L0–L6、实测覆盖、未解项与下一步）；
+   REQUIREMENTS 增补 R12。
+6. **L5 验收器（size 语义）已接入**并给出独立验证：size 必须整除 stride，候选里唯一通过者被选中。
+   6.4.0 迁移得到 td_size/70=77,262（减 2 尾部 padding = 77,260）与 md_size/26=631,108（减 1 = 631,107），
+   与 6.4Dump.cs 逐行统计的类型 77,260 / 方法 631,107 **完全吻合**；7.0 得到类型 86,930 / 方法 713,955
+   （无 oracle，7.1 为 88,902 / 733,442，量级一致）。6.7/6.0/5.4 的 size 候选未过验收（扫描覆盖/匹配歧义），
+   4.8 形态差异失败——均显式标记，不当作结论。
+7. 未闭环：L5 验收器接入候选选择（已做 size 语义，其余语义待做）；L4a builder 常数模板迁移（下一步主线，
+   先在 7.0 闭环）；
+   L4b 数据自解兜底（colsolve 需换成 schedule 密码）；.upx0 常数（flags/bitfield）；4.8 形态差异；
+   4.2.0 头定位。
