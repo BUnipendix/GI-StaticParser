@@ -944,6 +944,23 @@ constants-index.md 的 2b 节；6.4 方法与参数仍 CANDIDATE - NOT VALIDATED
 最佳仅 9/30 标识符，怀疑还有类似 6.7 字段/属性的二次变换链）。6.4 状态更新为
 PARTIALLY VALIDATED。
 
+
+### 3.2al oracle 驱动的列暴力求解器（可复用管线组件）（2026-10-18）
+
+新增 tools/version-triage/oracle_column_bf.py：输入某版本的行表参数（base slot/op/imm、stride、
+掩码链 JSON）与 oracle dump.cs，自动穷举 (列偏移 × 变换族 × 常数)，报告所有与 oracle 完全一致的
+组合。支持两种语义：
+
+- --field param_count：u8 列，族 xor/sub/add/nomask × 常数 0..255；
+- --field param_start：u32 列，用累计和约束（常数可抵消）。
+
+在 6.4 上自动复现本轮结果：
+- param_count → 唯一 MATCH：off 16、xor、常数 99（即 row+0x10, (raw^mask^0x63)），与 oracle 60/60；
+- param_start → NO MATCH（与人工穷举一致，参数起始列仍未解）。
+
+用途：只要有目标版本的 dump.cs（6.1–6.5 的 rar、6.0 zip 里都有），同一套流程可以把列常数
+自动重新发现，而不需要人工读汇编——这是“可自动化 profile 管线”的第一个成型组件。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。

@@ -5785,3 +5785,13 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
    [r12+0x18] 与表公式 row+0x10 相差 8 字节，两者一致）。
 3. 仍未解：paramStart（累计和约束穷举无候选）、name（已知名字 x 堆偏移 x 4 族最佳 9/30，
    疑有二次变换链）。6.4 状态 PARTIALLY VALIDATED。
+
+## 135. R64 oracle 驱动的列暴力求解器（可复用管线组件）（2026-10-18）
+
+1. 新增 tools/version-triage/oracle_column_bf.py：输入行表参数（base slot/op/imm、stride、掩码链）
+   与 oracle dump.cs，自动穷举 (列偏移 x 变换族 x 常数)；支持 param_count（u8，族 xor/sub/add/
+   nomask x 0..255）与 param_start（u32，累计和约束）。
+2. 在 6.4 自动复现：param_count 唯一 MATCH off 16 / xor / 99（row+0x10, raw^mask^0x63）与 oracle
+   60/60；param_start NO MATCH（与人工穷举一致）。
+3. 该工具把“oracle 反推列常数”流程化：6.1–6.5 的 rar、6.0 zip 里都有 dump，可对每个历史版本
+   自动重新发现列常数，是可自动化 profile 管线的第一个成形组件。
