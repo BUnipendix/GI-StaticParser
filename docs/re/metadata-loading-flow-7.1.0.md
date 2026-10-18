@@ -64,6 +64,7 @@
 | 0x110 | ^ | 0x1AB6109A | 3 | 0x74 表字节数 |
 | 0x118 | ^ | 0x4009A6BF | 26 | 大表（语义待定）|
 | 0x134 | + | 0x8EEFDB56 | 3 | 方法表字节数（÷0x1A=行数）|
+| 0x158 | − | 0x1D545CCC | 1 | **propertyDefs 表（10B 行）**；运行时 PropertyInfo 构建器 0x140515FC0 直接读该槽 ⇒ 此槽是属性表锚点（2026-10-18，§83）|
 | 0x170 | >>4,^ | 0x28D714C | 1 | assembly 行数 |
 | 0x188 | ^ | 0x57DD5CA8 | 207 | 泛型实例表 12B/行 {i32,i32(-1=无),i32} |
 | 0x1B8 | ^ | 0x586ABAF1 | 2 | 嵌套类型 u32 索引表 |
@@ -95,6 +96,8 @@
 | 0x3C | u16 | ^0x8811 | methodCount | 加载器 |
 | 0x3E | u16 | −0x1398（0xFFFF=无）| byvalTypeIndex | 3 处 |
 | 0x45 | u8 | ^0xAB | nestedTypesCount | sub_14051e390+加载器 |
+| 0x24 | u32 | +0xCE2141CC | **propertyStart**（propertyDefs 行号）| 0x1405162B0（PropertyInfo 构建器），2026-10-18 |
+| 0x43 | u8 | ^0x86 | **propertyCount** | 0x1405161A4 同上（全量铺瓦 115,596 行，0 不规则）|
 | 0x2C | u32 | ^0x8177D738 混 tag | parent | layout71（旧）|
 | 0x3A | u16 | ^0x4BCE | ？（与 0x20 冲突，待重验）| layout71（旧）|
 | ? | u32 | ? | bitfield / token（未定位）| |

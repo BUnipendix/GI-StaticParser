@@ -11,7 +11,7 @@
 
 | 文件 | 大小 | 内容 |
 |---|---|---|
-| dump.cs | 125,190,007 B | 88,902 类型 / 440,172 字段 / 733,442 方法（Slot 列已静态重算） |
+| dump.cs | 127,953,647 B | 88,902 类型 / 440,172 字段 / 733,442 方法（Slot 列已静态重算）+ **115,596 条真实属性**（propertyDefs 表，2026-10-18） |
 | script.json | 160,118,677 B | ScriptMethod 679,867 + Addresses 460,313（Il2CppDumper 兼容格式） |
 | attributes.json | 10,025,050 B | 74,864 条属性实例，Recovered 70,693 |
 | literals.json | 6,287,449 B | 86,108 条字符串字面量（静态解密） |
@@ -31,7 +31,7 @@
 | 自定义属性实例 | 已恢复（实例/成员身份） | attributes.json 74,864 实例；dump.cs 中 47,976 条可渲染为 [Class] |
 | 属性构造参数 | 未保留 | body 无属性构造 token 表/参数 blob（全 body 扫描最长 token 连续段 11，日志 §75） |
 | 接口继承（interface 的基接口） | 未保留 | 7.1 metadata 1,580 个 interface 的基接口行 = 0（全量），6.4 oracle 有 270 个（日志 §75） |
-| property 表 | 未定位 | 按 get_/set_ 访问器合成 63,117 条（6.4 oracle 约 77,260 个头）；属性表本身未定位 |
+| property 表 | **已恢复（真实表，2026-10-18）** | metadata body 的 10B 行表（hdr[0x158]−0x1D545CCC）即 propertyDefs：115,596 条 / 30,226 类型，getter 112,107 / setter 19,907 全部索引合法；属性名经字符串 cipher 解码；与 6.4 oracle corelib shared 类型属性序列全等 1,272/1,318=96.5%、名称 Jaccard 0.9899（tools/validate_properties.py；日志 §83）。dump.cs 由合成 63,117 换成真实 115,596 |
 | metadataUsage / ScriptString / ScriptMetadata | 未解（需运行时/加密） | script.json 对应字段为空；metadataUsage 槽在运行时 BSS（历史轮次已证） |
 | DummyDll | 已生成 | 单程序集自包含（89MB）；Address(RVA/Offset/VA)/FieldOffset 特性 1,041,595 条；GenericParam 1,195 |
 | DummyDll 75 程序集划分 | 不可得 | startup image 表解列后无 typeStart/typeCount（反汇编 loader，日志 §78） |

@@ -4881,3 +4881,48 @@ dump-gen --dummy-out 的 JSONL 新增列：
   在该函数体内 **0 命中**，且整个 .upx0 扫描 **0 命中** → 字段布局不在该变异函数内联，推测在 .text 的通用列访问/布局函数里；
 - 结论：静态偏移的模拟路线**仍开放但成本更高**（需先在 .text 中定位字段布局例程，再构造 klass/metadata 环境模拟）；
   下一轮实验：在 .text（35MB）中扫描这些列常数与 fields 表引用，定位布局例程后再评估块级模拟。
+
+## 83. 真实 propertyDefs 表定位：115,596 条属性（静态解码，2026-10-18）
+
+> 不是需求，是执行记录。用户追加任务「继续」后本轮推进。
+
+### 83.1 定位路径（反汇编运行时构建函数，不是猜）
+`hdr[0x158]` 这张 10 字节行表此前在 profile 里名为 `fields`（`fd_base` 读入后从未被消费）。
+本轮从运行时内存 dump（memdump_ingame 的 klass 缓存 0x145AD62D8）出发，反汇编 .text 中的属性/字段
+cache 构建函数，确认其语义是 **propertyDefs**：
+
+- `0x1405121B0` = `klass->props` 迭代器：元素 0x28 字节，end = klass+0x48 + count*0x28，
+  count = u8[typeDefRow+0x43]^0x86；首次访问调用 0x140515FC0 填充；
+- `0x140515FC0` = propertyDefs -> PropertyInfo 数组构建器：
+  - 表基址 = body + (i32(hdr[0x158]) - 0x1D545CCC)（0x1405162A9..0x1405162C0）；
+  - 行 stride 10：+0 u32 name（packed string index）、+4 u16 getter、+6 u16（未定列）、+8 u16 setter；
+  - 行掩码 mask(i) = (((i*0xA593 ^ 0x3CA3FFA0) * 0x5CD0B62E + 0x63A341E6) ^ 0x2411ED71)（0x1405162C9..0x1405162E5）；
+  - name = (raw + 0xEE8895EA) ^ mask；getter = ((raw - 0x238F) ^ mask) & 0xFFFF；
+    setter = ((raw ^ mask) ^ 0xDB1) & 0xFFFF；0xFFFF = 无 accessor；
+  - 0x140516280 路径显示 u16@+6 参与 +0x720A / ^0x7F39AD03 的变换后写入 PropertyInfo+0x20，语义未定（Il2CppDumper 不输出）；
+- typeDef 侧：propertyStart = u32@0x24 + 0xCE2141CC，propertyCount = u8@0x43 ^ 0x86。
+
+### 83.2 全量验证（不是抽样）
+- 115,596 行：propertyStart/count 在全部 88,902 个 typeDef 上**精确铺瓦 [0,115596)，0 处不规则**；
+- getter 112,107 个 / setter 19,907 个，索引**全部 < 该类型 methodCount**（0 越界）；
+- 属性名用已有字符串 cipher 解码（packed = len<<24|off）：DateTimeFormatInfo 依次解出
+  CultureName / Culture / LanguageName / InvariantInfo / CurrentInfo / AMDesignator / Calendar / …，与 6.4 oracle 同序；
+- 与 6.4 oracle 对拍（新增 tools/validate_properties.py）：corelib 类 shared 类型 1,318 个里
+  **1,272 个属性序列完全相同（96.5%）**，属性名 Jaccard **0.9899**；全量差异来自版本新增属性
+  （7.1 的 UriBuilder.Fragment、MHYAsyncLoad 的新属性等）与游戏类型跨版本改名/混淆；
+- 全量 line-match 14,996 条，说明格式（可见性 / get; set; / 类型）与参考实现一致。
+
+### 83.3 实现与产物
+- profile 新增 `property_defs` / `property_stride` / `td_property_start` / `td_property_count` /
+  `property_mask` / `property_name_add` / `property_get_sub` / `property_set_xor`（7.1 常量见 src/derive/layout71.rs 注释）；
+- engine 新增 `td_prop_start` / `td_prop_count` / `property_row`；
+- dump_gen 的 Properties 段优先用真实表（profile 无表时保留旧合成回退）；可见性/修饰取自 getter（缺则 setter）方法 flags；
+- 产物：`~/gire/out/71/dump.cs` 125,190,007 B -> **127,953,647 B**；Properties 行 **63,117（合成）-> 115,596（真实）**，
+  新增 52,479 条是旧合成遗漏（accessor 方法名被混淆、无 get_/set_ 前缀的属性），221 条属性名为空（metadata 本身空名）；
+- `cargo build --release` / `cargo test --release`：17 passed / 0 failed。
+
+### 83.4 附注
+- `profile.fields`（hdr 0x158）现确认就是 propertyDefs 表；新增的 `property_defs` 与之同源，历史 `fd_base` 从未被消费；
+- 中间 u16@+6 列语义未定（疑似 attrs/token），不影响 Il2CppDumper 兼容输出；
+- 下一步候选：propertyDefs 接入 DummyDll/JSONL（PropertyDefinition 行）、事件表（若 metadata 保留）、attribute 参数。
+

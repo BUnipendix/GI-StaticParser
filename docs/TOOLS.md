@@ -121,3 +121,5 @@
 - [2026-10-17] DummyDll v2：JSONL 新增 rva/token/slot/instance-offset；生成器追加 AddressAttribute/FieldOffsetAttribute 与 1,041,595 条 CustomAttribute（命名参数格式，内置解码校验通过），DummyDll.dll 77MB。剩余差异：75 程序集划分（依赖 image 映射）、GenericParam 表。
 
 - [2026-10-17] DummyDll v3：+ GenericParam 表（1,195 行，按类型名 arity）与 AddressAttribute 的 RVA/Offset/VA；DummyDll.dll 89MB（88,904 TypeDef / 733,444 Method / 1,041,595 CustomAttribute）。方法泛型参数、泛型约束、75 程序集划分仍不可得（metadata/image 表已剥离）。
+
+- [2026-10-18] 真实属性表（propertyDefs）静态解码：`hdr[0x158]−0x1D545CCC` 的 10B 行表 = 属性表；typeDef propStart=u32@0x24+0xCE2141CC、propCount=u8@0x43^0x86。7.1 解出 **115,596 条属性 / 30,226 类型**（getter 112,107 / setter 19,907），dump.cs Properties 段由合成 63,117 换成真实 115,596。证据/公式：IMPLEMENTATION_LOG §83、docs/re/metadata-loading-flow-7.1.0.md §3/§4；校验：`python3 tools/validate_properties.py`（vs 6.4 oracle：corelib shared 类型 1,272/1,318 序列全等）。

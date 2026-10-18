@@ -12,7 +12,7 @@
 | interface 的基接口（oracle 270 行）| 7.1 元数据 interface 的 iface_start/count 全哨兵（0xFFFF/0） |
 | metadataUsage（script.json Addresses/ScriptMetadata 基础）| 扫 body 无 `{start,count}` 连续表（两种列序、双相位、≥32 行连续）；该表在运行时由 code registration 写入 BSS |
 | stringLiterals 数据 | exe `il2cpp` 段（306MB）无 ASCII 文本池（64KB 块密度>0.8 且零率<2% 的块数 = 0）；metadata body 只有 ~45KB 明文字符串（默认值用的 UI 路径），非 689,799 条字面量 |
-| 属性表本体（propertyDefs）| 标准 v27 20B `{nameIdx,get,set,attrs,token}` 结构扫描（含 -1 哨兵、名字可解码性校验）无命中；仅在 0x4EE3888 命中密集中小整数数组（非属性行）|
+| ~~属性表本体（propertyDefs）~~ | **已推翻（2026-10-18，§83）**：不是标准 20B 行，而是 `hdr[0x158]−0x1D545CCC` 的 **10B 行**（name/getter/未知/setter），运行时 PropertyInfo 构建器 0x140515FC0 直接读它；全量解出 115,596 条属性（详见 gap-inventory #3、71-final-status）|
 | 泛型参数名（genericParameters）| 29 个字符串解码调用点逐一分析、startup/body 明文 packed 索引扫、`{nameIdx,owner}` 8B 扫、16B container 扫 均无命中 |
 | 属性参数（22,146 条含参属性）| attributeTypes 数组后仅 769 个小整数；0xA03E64–0xC00000 无明文串；无 74,864 长度的偏移/单调数组 |
 
@@ -24,7 +24,7 @@
 | 项 | 现状 | 下一步 |
 |---|---|---|
 | attribute 参数 blob | 数据层已解（类型+成员），参数值缺失 | 在 .upx0/变异函数里找 attribute reader；或用属性类 ctor 参数类型反推变长记录布局 |
-| 属性表（若存在）| 结构扫描无明文命中 | 从 attributes.json 的 123 个 Property token 反推表规模；或反汇编 `il2cpp::vm::PropertyInfo` 构建路径 |
+| ~~属性表（若存在）~~ | **已解（2026-10-18）**：10B propertyDefs 行表 + typeDef propStart@0x24/propCount@0x43；115,596 条属性已进 dump.cs | 下一步把属性表接入 DummyDll PropertyDefinition 行 |
 | `.upx0` 中其余 metadata 函数 | 206 个 `.text→.upx0` 入口中仅 3 个与 metadata 相关（flags/klass 解析器已解）| 扩大入口发现范围（`.upx0` 内部 27,139 个调用目标里可能有未被 .text 直接引用的 metadata 访问器）|
 
 ## C. 工程类（数据已有，只需产出格式）

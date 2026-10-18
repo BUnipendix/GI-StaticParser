@@ -869,6 +869,9 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
     let mut unresolved_props = 0usize;
     let mut synthesized_props = 0usize;
     let mut props_synth_types = 0usize;
+    let mut real_props = 0usize;
+    let mut real_prop_types = 0usize;
+    let mut unnamed_props = 0usize;
 
     // Rebuilds instance field offsets from type structure (the dat carries no offset table).
     let mut layout_calc = LayoutCalc::new(m, &tds);
@@ -1069,12 +1072,101 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
             }
         }
         // Il2CppDumper section structure: Fields / Properties / Constructors / Methods.
-        // The property metadata table has not been located for this generation, so the section is
-        // SYNTHESIZED from accessor methods (`get_X` / `set_X`), which carry the exact signature:
-        //   line = `{mods}{type} {name} { get; }` / `{ get; set; }` / `{ set; }`
-        // Reported as synthesized (never silently presented as metadata-order output).
+        // 7.1: the REAL property-definition table is decoded from the metadata body
+        // (profile.property_defs, see src/derive/layout71.rs for the disassembly evidence):
+        // the typeDef row gives propertyStart/propertyCount and each 10-byte property row
+        // carries the packed name plus per-type getter/setter method indexes. Rows are emitted
+        // in metadata (declaration) order. Generations without the table fall back to the old
+        // synthesis from `get_X` / `set_X` accessor methods.
         writeln!(w, "\n\t// Properties")?;
-        {
+        let accessor_mods = |flags: u16| -> String {
+            method_modifiers(flags)
+                .split_whitespace()
+                .filter(|w| !matches!(*w, "virtual" | "override" | "abstract" | "extern" | "new" | "sealed" | "final" | "unsafe"))
+                .map(|w| format!("{} ", w))
+                .collect::<String>()
+        };
+        let vis_of = |m: &String| -> String {
+            m.split_whitespace()
+                .find(|w| matches!(*w, "private" | "protected" | "internal" | "public"))
+                .map(|w| format!("{} ", w))
+                .unwrap_or_default()
+        };
+        if let (Some(prop_start), Some(prop_count)) = (m.td_prop_start(i), m.td_prop_count(i)) {
+            let mut emitted = 0usize;
+            for row in prop_start..prop_start + prop_count {
+                let Some((name_idx, getter, setter)) = m.property_row(row) else {
+                    unresolved_props += 1;
+                    continue;
+                };
+                let get_gmi = getter.and_then(|k| per_type[i].get(k as usize).copied());
+                let set_gmi = setter.and_then(|k| per_type[i].get(k as usize).copied());
+                if getter.is_some() && get_gmi.is_none() {
+                    unresolved_props += 1;
+                }
+                if setter.is_some() && set_gmi.is_none() {
+                    unresolved_props += 1;
+                }
+                if get_gmi.is_none() && set_gmi.is_none() {
+                    unresolved_props += 1;
+                    continue;
+                }
+                let name = m.decode_str(name_idx);
+                if name.is_empty() {
+                    unnamed_props += 1;
+                }
+                let ptype = if let Some(g) = get_gmi {
+                    type_name(m, &tds, &parents, mds[g].ret_type, 0)
+                } else if let Some(s) = set_gmi {
+                    let smd = &mds[s];
+                    if smd.param_count == 0 {
+                        unresolved_props += 1;
+                        "System.Object".to_string()
+                    } else {
+                        let pidx = smd.param_start.wrapping_add(smd.param_count as u32 - 1);
+                        match m.param_type(pidx) {
+                            Some(Some(ti)) => type_name(m, &tds, &parents, ti, 0),
+                            _ => {
+                                unresolved_props += 1;
+                                "System.Object".to_string()
+                            }
+                        }
+                    }
+                } else {
+                    unresolved_props += 1;
+                    continue;
+                };
+                let owner_mods = if let Some(g) = get_gmi {
+                    accessor_mods(mds[g].flags)
+                } else if let Some(s) = set_gmi {
+                    accessor_mods(mds[s].flags)
+                } else {
+                    String::new()
+                };
+                let owner_vis = vis_of(&owner_mods);
+                let mut acc = String::new();
+                if let Some(g) = get_gmi {
+                    let extra = vis_of(&accessor_mods(mds[g].flags));
+                    if extra != owner_vis && !extra.is_empty() {
+                        acc.push_str(&extra);
+                    }
+                    acc.push_str("get; ");
+                }
+                if let Some(s) = set_gmi {
+                    let extra = vis_of(&accessor_mods(mds[s].flags));
+                    if extra != owner_vis && !extra.is_empty() {
+                        acc.push_str(&extra);
+                    }
+                    acc.push_str("set; ");
+                }
+                writeln!(w, "\t{}{} {} {{ {} }}", owner_mods, ptype, name, acc.trim_end())?;
+                emitted += 1;
+            }
+            if emitted > 0 {
+                real_props += emitted;
+                real_prop_types += 1;
+            }
+        } else {
             #[derive(Clone)]
             struct PropSynth {
                 name: String,
@@ -1270,15 +1362,20 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
             "[warn] parameter names/types unresolved: {unresolved_params} parameters emitted as 'object /*unresolved*/'"
         );
     }
+    if real_props > 0 {
+        eprintln!(
+            "[info] properties: {real_props} propertyDef entries across {real_prop_types} types decoded from the metadata property table ({unnamed_props} with an empty name)"
+        );
+    }
     if synthesized_props > 0 || unresolved_props > 0 {
         eprintln!(
-            "[warn] properties: {synthesized_props} entries SYNTHESIZED from get_/set_ accessor methods across {props_synth_types} types (the property metadata table is not located; accessor visibility maps to the {{{{ get; private set; }}}} form, property attributes are not available)"
+            "[warn] properties: {synthesized_props} entries SYNTHESIZED from get_/set_ accessor methods across {props_synth_types} types (no property table in this profile); {unresolved_props} entries unresolved (missing accessor index or value type)"
         );
+    }
     if attrs_rendered + attrs_arg_required + attrs_unsupported > 0 {
         eprintln!(
             "[warn] custom attributes: {attrs_rendered} rendered as [Class] (classes with a parameterless ctor), {attrs_arg_required} skipped because their constructor takes arguments (the attribute argument blob is not recovered), {attrs_unsupported} skipped (parameter attribute / unknown token kind), {attrs_unmapped} attribute instances have no member row"
         );
-    }
     }
     if unresolved_iface_generic > 0 {
         eprintln!(

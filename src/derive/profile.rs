@@ -312,6 +312,35 @@ pub struct Profile {
     #[serde(default)]
     pub nested_types: Option<TableBase>,
 
+    /// PROPERTY-definition table (7.1.0: body + (hdr[0x158] - 0x1D545CCC), 10-byte rows).
+    /// Located 2026-10-18 from the runtime field/property cache builder at 0x140515FC0 (the
+    /// .text function that fills klass->fields[i] for a typeDef row). Row layout:
+    ///   +0x00 u32 name: packed string index, `((raw + name_add) ^ mask(row))`
+    ///   +0x04 u16 getter: per-type method index, `(raw - get_sub) ^ mask` (0xFFFF = none)
+    ///   +0x06 u16 attrs/token column (meaning not yet resolved)
+    ///   +0x08 u16 setter: `(raw ^ mask) ^ set_xor` (0xFFFF = none)
+    /// Per-type range from typeDef propertyStart (u32@0x24, `start = raw + 0xCE2141CC`) and
+    /// propertyCount (u8@0x43 ^ 0x86). Validated over the full table: 115,596 rows tile
+    /// [0, 115596) with 0 irregularities; getter/setter indexes are always < methodCount; names
+    /// decode through the shared string cipher (DateTimeFormatInfo -> CultureName, AMDesignator,
+    /// Calendar, ... in declaration order).
+    #[serde(default)]
+    pub property_defs: Option<TableBase>,
+    #[serde(default)]
+    pub property_stride: u32,
+    #[serde(default)]
+    pub td_property_start: Option<Column>,
+    #[serde(default)]
+    pub td_property_count: Option<Column>,
+    #[serde(default)]
+    pub property_mask: Option<MaskChain>,
+    #[serde(default)]
+    pub property_name_add: u32,
+    #[serde(default)]
+    pub property_get_sub: u16,
+    #[serde(default)]
+    pub property_set_xor: u16,
+
     /// Generic-class row table: 8-byte rows `{defTypeDefIndex u32, genericInstIndex i32}`.
     /// The table lives in the sibling **`startup-metadata.dat`** (loaded at the same time as
     /// global-metadata), not in the metadata body; the offset is `hdr[slot] op imm`.

@@ -57,6 +57,30 @@ pub fn gen71() -> Profile {
         td_nested_start: Some(Column { offset: 0x36, kind: ColKind::XorC, c: 0xC87C }),
         td_nested_count: Some(Column { offset: 0x45, kind: ColKind::XorC, c: 0xAB }),
         nested_types: Some(TableBase { hdr_off: 0x1B8, sub: None, xor: Some(0x586A_BAF1), add: None }),
+        // Property-definition table: body + (hdr[0x158] - 0x1D545CCC), 10-byte rows.
+        // Decoded from the runtime cache builder at 0x140515FC0 (fills klass->fields array):
+        //   name = ((raw@+0 u32 + 0xEE8895EA) ^ mask(row)) -- packed string index
+        //   getter = ((raw@+4 u16 - 0x238F) ^ mask) & 0xFFFF
+        //   setter = ((raw@+8 u16 ^ mask) ^ 0xDB1) & 0xFFFF
+        // mask(row) = (((row*0xA593) ^ 0x3CA3FFA0) * 0x5CD0B62E + 0x63A341E6) ^ 0x2411ED71
+        // typeDef propertyStart = u32@0x24 + 0xCE2141CC; propertyCount = u8@0x43 ^ 0x86.
+        // Full-table validation: 115,596 rows tile [0, 115596) exactly over all 88,902 typeDefs,
+        // getter/setter indexes all < methodCount, names decode (DateTimeFormatInfo anchor).
+        property_defs: Some(TableBase { hdr_off: 0x158, sub: Some(0x1D54_5CCC), xor: None, add: None }),
+        property_stride: 10,
+        td_property_start: Some(Column { offset: 0x24, kind: ColKind::AddC, c: 0xCE21_41CC }),
+        td_property_count: Some(Column { offset: 0x43, kind: ColKind::XorC, c: 0x86 }),
+        property_mask: Some(MaskChain {
+            mul1: 0xA593,
+            xor1: 0x3CA3_FFA0,
+            mul2: 0x5CD0_B62E,
+            add1: 0x63A3_41E6,
+            xor2: 0x2411_ED71,
+            mul_last: 0,
+        }),
+        property_name_add: 0xEE88_95EA,
+        property_get_sub: 0x238F,
+        property_set_xor: 0x0DB1,
         // Generic-class rows live in startup-metadata.dat (loader 0x1405365BE..0x140536660):
         //   base = startup + (i32(hdr[0x120]) ^ 0x1C3F68EA); rows = {defTdi u32, genericInstIndex i32}
         // GenericInst structs: registration+0x28 -> 16B {argc, pad, Il2CppType** argv}.

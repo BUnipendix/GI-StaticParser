@@ -46,6 +46,8 @@ pub struct Meta<'a> {
     pub param_def_base: usize,
     /// Nested-types table base (u32 typeDef indexes per row).
     pub nested_base: usize,
+    /// Property-definition table base (10-byte rows in 7.1; 0 when the profile lacks it).
+    pub property_base: usize,
     /// Field default values: field-table index -> (value byte offset in the shared blob, value Il2CppType index).
     pub field_defaults: std::collections::HashMap<u32, (i32, u32)>,
     /// Body offset of the shared default-value data blob.
@@ -159,6 +161,7 @@ impl<'a> Meta<'a> {
             iface_base: profile.iface_table.resolve(&header_bytes),
             param_def_base: profile.param_defs.as_ref().map(|t| t.resolve(&header_bytes)).unwrap_or(0),
             nested_base: profile.nested_types.as_ref().map(|t| t.resolve(&header_bytes)).unwrap_or(0),
+            property_base: profile.property_defs.as_ref().map(|t| t.resolve(&header_bytes)).unwrap_or(0),
             field_defaults,
             default_values,
             profile,
@@ -541,6 +544,60 @@ impl<'a> Meta<'a> {
         self.body
             .read_slice(self.nested_base + stride * row as usize, stride)
             .and_then(|b| b.get(0..4).map(|s| u32::from_le_bytes(s.try_into().unwrap())))
+    }
+
+    /// typeDef propertyStart (u32 column; `raw + c`). None when the profile lacks the
+    /// property-definition table.
+    pub fn td_prop_start(&self, i: usize) -> Option<u32> {
+        let col = self.profile.td_property_start.as_ref()?;
+        self.profile.property_defs.as_ref()?;
+        let rec = self.td_base + self.profile.td_stride as usize * i;
+        let raw = self.body.read_u32(rec + col.offset as usize);
+        Some(match col.kind {
+            ColKind::XorC => raw ^ col.c,
+            _ => raw.wrapping_add(col.c),
+        })
+    }
+
+    /// typeDef propertyCount (u8 column; `raw ^ (c & 0xFF)`). None without the table.
+    pub fn td_prop_count(&self, i: usize) -> Option<u32> {
+        let col = self.profile.td_property_count.as_ref()?;
+        self.profile.property_defs.as_ref()?;
+        let rec = self.td_base + self.profile.td_stride as usize * i;
+        let raw = *self.body.read_slice(rec + col.offset as usize, 1)?.first()? as u32;
+        Some(match col.kind {
+            ColKind::XorC => (raw ^ (col.c & 0xFF)) & 0xFF,
+            _ => raw.wrapping_add(col.c) & 0xFF,
+        })
+    }
+
+    /// One property-definition row: `(name packed string index, getter method index, setter
+    /// method index)`. The accessor options are None for the 0xFFFF sentinel (no such accessor).
+    /// Row format (10 bytes): `{u32 name, u16 getter, u16 attrs, u16 setter}`.
+    pub fn property_row(&self, row: u32) -> Option<(u32, Option<u16>, Option<u16>)> {
+        let mask_chain = self.profile.property_mask.as_ref()?;
+        let stride = self.profile.property_stride as usize;
+        if stride < 10 {
+            return None;
+        }
+        let at = self.property_base + stride * row as usize;
+        let b = self.body.read_slice(at, 10)?;
+        let raw_name = u32::from_le_bytes(b[0..4].try_into().ok()?);
+        let raw_get = u16::from_le_bytes(b[4..6].try_into().ok()?);
+        let raw_set = u16::from_le_bytes(b[8..10].try_into().ok()?);
+        let mask = mask_chain.eval(row);
+        let name = raw_name.wrapping_add(self.profile.property_name_add) ^ mask;
+        let get = (raw_get as u32)
+            .wrapping_sub(self.profile.property_get_sub as u32)
+            ^ mask;
+        let get = (get & 0xFFFF) as u16;
+        let set = ((raw_set ^ (mask as u16)) as u32) ^ self.profile.property_set_xor as u32;
+        let set = (set & 0xFFFF) as u16;
+        Some((
+            name,
+            if get == 0xFFFF { None } else { Some(get) },
+            if set == 0xFFFF { None } else { Some(set) },
+        ))
     }
 
     /// typeDef interfacesCount (u8 column, `raw + add`); None when the profile lacks it.
