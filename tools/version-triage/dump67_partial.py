@@ -58,12 +58,17 @@ def main():
     fl = json.load(open(ART + '/field-name-layout.json'))
     fb = tbase(fl['table']); fmk = fl['mask']
     def fmask(i): return (((i * h(fmk['mul1']) + h(fmk['add1'])) & 0xFFFFFFFFFFFFFFFF) >> fmk['shr']) & 0xFFFFFFFF
-    fc = fl['columns']['name']
+    fc = fl['columns']['name']; ftc = fl['columns']['type']
     def fname(i):
         m = fmask(i)
         extra = ((((m + h(fmk['extra_add'])) & 0xFFFFFFFF) ^ h(fmk['extra_xor'])) * h(fmk['extra_mul'])) & 0xFFFFFFFF
         raw = m32(fb + i * fl['stride'] + fc['off'])
         return cipher.dec(body, ((raw ^ h(fc['c'])) + extra) & 0xFFFFFFFF)
+    def ftype(i):
+        m = fmask(i)
+        extra = ((((m + h(fmk['extra_add'])) & 0xFFFFFFFF) ^ h(fmk['extra_xor'])) * 0x364C6D3D) & 0xFFFFFFFF
+        raw = m32(fb + i * fl['stride'] + ftc['off'])
+        return (raw - extra + 0xF94BD493) & 0xFFFFFFFF
     ta = json.load(open(ART + '/typearr.json'))
     tb = open(sites['exe'], 'rb').read(); TA = int(ta['file_off'], 16); TN = ta['count']
     def tyname(i):
@@ -84,7 +89,8 @@ def main():
         if typ['fieldCount']:
             out.write('  // Fields\n')
             for j in range(typ['fieldCount']):
-                out.write(f'  ? {fname(typ["fieldStart"] + j)}\n'); nf += 1
+                fi = typ['fieldStart'] + j
+                out.write(f'  {tyname(ftype(fi))} {fname(fi)}\n'); nf += 1
         if typ['methodCount'] and typ['methodStart'] != 0xFFFFFFFF:
             out.write('  // Methods\n')
             for k in range(typ['methodCount']):

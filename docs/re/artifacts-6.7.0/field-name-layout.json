@@ -26,6 +26,10 @@
    "off": 0,
    "formula": "m = ((i*0x1BB4F2A67161 + 0x251BA412D3BC6) >> 18) & 0xFFFFFFFF; extra = ((((m + 0x2C7618B2) & 0xFFFFFFFF) ^ 0x14BDA7A6) * 0xC9B392C3) & 0xFFFFFFFF; name = cipher_dec(((raw32 ^ 0x70F1D209) + extra) & 0xFFFFFFFF)",
    "c": "0x70F1D209"
+  },
+  "type": {
+   "off": 4,
+   "formula": "m = ((i*0x1BB4F2A67161 + 0x251BA412D3BC6) >> 18) & 0xFFFFFFFF; extra = ((((m + 0x2C7618B2) & 0xFFFFFFFF) ^ 0x14BDA7A6) * 0x364C6D3D) & 0xFFFFFFFF; type_index = ((raw32 - extra) + 0xF94BD493) & 0xFFFFFFFF"
   }
  },
  "validation": {
@@ -42,7 +46,25 @@
    "value",
    "default_vtable",
    "xdomain_vtable"
+  ],
+  "type_oob": 13,
+  "type_kinds": {
+   "class": 107329,
+   "valuetype": 107229,
+   "genericinst": 40180,
+   "boolean": 35009,
+   "int32": 34253,
+   "uint32": 26469,
+   "single": 22398,
+   "string": 18914,
+   "szarray": 11875
+  },
+  "field0_type": 409207,
+  "monoclass_ptr_types": [
+   409207,
+   409209,
+   409240
   ]
  },
- "notes": "The type column and attrs are not decoded yet. Field rows are 8 bytes with the name column at +0."
+ "notes": "Both name and type columns are now decoded; field rows are 8 bytes with name at +0 and type at +4 (type stores an Il2CppType index, 13 tail rows out of range)."
 }
