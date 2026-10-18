@@ -874,6 +874,23 @@ plain methodStart（不是额外的编码域）。但继续验证仍失败：
 这些负结果写入 docs/re/artifacts-6.4.0/method-param-layout-candidate.json 与
 constants-index.md 的 2b 节；6.4 方法与参数仍 CANDIDATE - NOT VALIDATED。
 
+
+### 3.2ah 跨版本 profile 差异报告（可自动化）（2026-10-18）
+
+新增 tools/version-triage/diff_profiles.py：读取两个版本的 artifacts 目录，按语义（方法/参数/
+字段/属性/事件/typearr）对比 slot+op+imm、stride、mask 链、列偏移，输出 markdown 差异报告。
+已生成 docs/re/cross-version-diff.md（7.0.0 vs 6.7.0）。要点：
+
+- 行 stride 跨版本高度稳定：方法 26、参数 8、字段 8、属性 10；
+- 表基址与掩码链每版完全不同（随机化），必须逐版从代码提取——印证「零硬编码」原则；
+- 语义列布局大体稳定但有交换：方法 param_start 7.0 +4 / 6.7 +0；return_type 7.0 +0 / 6.7 +4；
+  字段 name/type 也是 4/0 vs 0/4；属性 name+getter 都在 0/+8，setter 7.0 +6 / 6.7 +4；
+- 6.7 多出事件表（stride 14）与更长的掩码链（字段/属性各多一段乘法-移位），7.0 尚未解出事件表；
+- typearr 只是运行时数组，每版位置/条数不同（7.0：662,534 条；6.7：633,862 条）。
+
+结论用于自动化管线：**结构（stride/列语义）可以跨版继承，常数必须每版重导**；差异报告可以
+作为下一版推导的 checklist。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。

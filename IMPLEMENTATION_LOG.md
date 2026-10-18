@@ -5743,3 +5743,13 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
 3. 可能原因（均未验证）：slot 0x1FC 不是方法表；或 6.4 方法表 base/mask 与 7.0/6.7 不同。
    6.4 方法/参数继续 CANDIDATE - NOT VALIDATED。
 4. constants-index.md 新增 2b 节（6.4 typeDef 已验收、方法/参数候选、负结果）；build_index.py 同步更新。
+
+## 131. R60 跨版本 profile 差异报告工具（2026-10-18）
+
+1. 新增 tools/version-triage/diff_profiles.py：读两版 artifacts 目录，按语义（方法/参数/字段/
+   属性/事件/typearr）对比 slot+op+imm、stride、mask 链、列偏移，输出 markdown 差异报告。
+2. 已生成 docs/re/cross-version-diff.md（7.0.0 vs 6.7.0）：stride 稳定（方法 26/参数 8/字段 8/
+   属性 10）；表基址与掩码链每版随机化需逐版重导；列偏移有交换（方法 param_start 4↔0、
+   return_type 0↔4；字段 name/type 4↔0；属性 setter 6↔4）；6.7 多事件表（stride 14）与更长掩码链；
+   typearr 位置/条数不同（662,534 vs 633,862）。
+3. 结论：结构可跨版继承、常数必须每版重导；差异报告作为下一版推导 checklist。
