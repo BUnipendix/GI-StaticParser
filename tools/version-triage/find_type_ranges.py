@@ -98,8 +98,10 @@ def main():
                                 gaps += 1
                             prev = st + c; nz += 1
                             if st > maxs: maxs = st
-                        if bad <= 4 and nz >= 50 and prev > 0 and prev < 26_000_000 \
-                                and gaps <= max(16, nz // 10):
+                        total = int(cdec[cdec > 0].sum())
+                        contiguous = gaps == 0 and prev == total
+                        if bad == 0 and nz >= 50 and prev > 0 and prev < 26_000_000 \
+                                and gaps <= max(16, nz // 10) and (contiguous or gaps > 0):
                             results.append(dict(start_off=soff, start_w=sw, start_fam=sfam, start_c=Cs,
                                                 cnt_off=coff, cnt_w=cw, cnt_fam=cfam, cnt_c=Cc,
                                                 chain_rows=nz, gaps=gaps, end=prev))

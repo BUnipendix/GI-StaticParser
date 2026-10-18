@@ -5,7 +5,10 @@ Inputs:
   <version dir>            e.g. ~/gire/sample/gi/6.4.0
   <derive artifact>        mhydump derive JSON (cipher schedule + strsec)
   <tables JSON>            mhydump tables --base <typeDef base> --json
-Output: JSONL rows {i, ns, name, fieldStart, fieldCount, methodStart, methodCount}
+Optional: <ranges JSON> from find_type_ranges.py adds propertyStart/Count and
+eventStart/Count, which makes the row a full typeDef record for the dump pipeline.
+Output: JSONL rows {i, ns, name, fieldStart, fieldCount, methodStart, methodCount,
+                    propStart, propCount, eventStart, eventCount}
 
 The row layout (name/ns columns, field/method range columns) is solved from data by
 tables.rs: string columns are validated by decoding the heap, and the two range pairs
@@ -62,6 +65,63 @@ def main():
     ts = tj['tables']
     fld = min(ts, key=lambda x: x['max_index']); mth = max(ts, key=lambda x: x['max_index'])
     out = sys.argv[4] if len(sys.argv) > 4 else None
+    ranges_path = sys.argv[5] if len(sys.argv) > 5 else None
+    ranges = json.load(open(ranges_path)) if ranges_path else []
+    # Classify the discovered (start,count) pairs that are NOT the field/method pairs:
+    #   property: chain_rows > 10k and end > 5k; event: chain_rows >= 50 and end <= 5k.
+    # Ambiguous pairs (e.g. nested-type arrays, 35k rows) are reported but not wired
+    # until the semantic is settled by a validator.
+    prop_pair = ev_pair = None
+    for r in ranges:
+        if r['start_off'] == fld['idx_off'] and r['cnt_off'] == fld['cnt_off']:
+            continue
+        if r['start_off'] == mth['idx_off'] and r['cnt_off'] == mth['cnt_off']:
+            continue
+        if r['chain_rows'] > 10000 and r['end'] > 5000 and prop_pair is None:
+            prop_pair = r
+        elif r['chain_rows'] >= 50 and r['end'] <= 5000 and ev_pair is None:
+            ev_pair = r
+    def pair_cols(r):
+        sw, cw = r['start_w'], r['cnt_w']
+        def rd(off, w):
+            if w == 4: return u32(off)
+            if w == 2: return (struct.unpack_from('<H', body, row_off + off)[0])
+            return body[row_off + off]
+        def sval(): return rd(r['start_off'], sw)
+        def cval(): return rd(r['cnt_off'], cw)
+        smask = (1 << (8 * sw)) - 1
+        cmask = (1 << (8 * cw)) - 1
+        def dec_s(raw):
+            v = (raw ^ r['start_c']) if r['start_fam'] == 'xor' else ((raw + r['start_c']) & smask)
+            return v & smask
+        def dec_c(raw):
+            v = (raw ^ r['cnt_c']) if r['cnt_fam'] == 'xor' else ((raw + r['cnt_c']) & cmask)
+            return v & cmask
+        return sval, cval, dec_s, dec_c
+    if prop_pair: ps_fn, pc_fn, ps_dec, pc_dec = pair_cols(prop_pair)
+    if ev_pair: es_fn, ec_fn, es_dec, ec_dec = pair_cols(ev_pair)
+    # A range pair is only accepted when its counts sum to the discovered chain end
+    # (i.e. the array is one contiguous run). An overlapping/multi-run array (e.g.
+    # the 5.4.0 35,864-row pair) fails this and is reported instead of being wired.
+    def read_at(off, w, i):
+        at = base + i * stride + off
+        if w == 4: return struct.unpack_from('<I', body, at)[0]
+        if w == 2: return struct.unpack_from('<H', body, at)[0]
+        return body[at]
+    def pair_total(r):
+        cmask = (1 << (8 * r['cnt_w'])) - 1
+        s = 0
+        for i in range(rows):
+            raw = read_at(r['cnt_off'], r['cnt_w'], i)
+            c = (raw ^ r['cnt_c']) if r['cnt_fam'] == 'xor' else ((raw + r['cnt_c']) & cmask)
+            s += c & cmask
+        return s
+    if prop_pair and pair_total(prop_pair) != prop_pair['end']:
+        sys.stderr.write(f"{vdir}: property pair rejected (sum != end); pair={prop_pair}\n")
+        prop_pair = None
+    if ev_pair and pair_total(ev_pair) != ev_pair['end']:
+        sys.stderr.write(f"{vdir}: event pair rejected (sum != end); pair={ev_pair}\n")
+        ev_pair = None
     f = open(out, 'w') if out else sys.stdout
     n = 0
     for i in range(rows):
@@ -93,8 +153,19 @@ def main():
             return val & 0xFFFF
         fs = idx_col(fld); fc = cnt_col(fld)
         ms = idx_col(mth); mc = cnt_col(mth)
+        prop_start = prop_count = ev_start = ev_count = None
+        if prop_pair:
+            prop_start = ps_dec(ps_fn()); prop_count = pc_dec(pc_fn())
+            if prop_count == 0:
+                prop_start = 0xFFFFFFFF if prop_pair['start_w'] == 4 else 0xFFFF
+        if ev_pair:
+            ev_start = es_dec(es_fn()); ev_count = ec_dec(ec_fn())
+            if ev_count == 0:
+                ev_start = 0xFFFFFFFF if ev_pair['start_w'] == 4 else 0xFFFF
         f.write(json.dumps({'i': i, 'ns': ns, 'name': nm, 'fieldStart': fs, 'fieldCount': fc,
-                            'methodStart': ms, 'methodCount': mc}, ensure_ascii=False) + '\n')
+                            'methodStart': ms, 'methodCount': mc,
+                            'propStart': prop_start, 'propCount': prop_count,
+                            'eventStart': ev_start, 'eventCount': ev_count}, ensure_ascii=False) + '\n')
         n += 1
     if out: f.close()
     print(f'{vdir}: wrote {n} typeDef rows', file=sys.stderr)

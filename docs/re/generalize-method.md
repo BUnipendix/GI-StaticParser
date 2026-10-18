@@ -229,6 +229,28 @@ property/event/nested 范围列，以及方法/字段/参数表的行布局与�
 5.4 方法/属性对；嵌套/接口对在多数版本未发现（嵌套数组可跨类型乱序、接口 offsets 含继承项，
 需要不同的链判据）。下一步：把该发现器接入 tables 子命令，并入 profile 草稿。
 
+### 3.2e 类型清单扩展到属性/事件范围，并做逐类型 oracle 校验（2026-10-18）
+
+范围对发现器收紧判据：start 必须完全非减（bad == 0），无缝（gaps == 0）时还要求
+end == sum(count)，否则视为多段/重叠数组而拒绝（例如 5.4.0 的 35,864 行对就是这种）。
+type_defs_dump.py 现在接受 ranges JSON，把属性/事件的 (start,count) 并入每个类型行：
+{propStart, propCount, eventStart, eventCount}；属性对用 chain_rows>10k 且 end>5k 识别，
+事件对用 chain_rows>=50 且 end<=5k 识别，选中后用 sum == end 复核，失败则显式拒绝。
+
+逐类型 oracle 校验（把 dump.cs 的 "// Namespace" + 类型声明 + 属性行按类型聚合，与我们的
+propCount 比较；同名类型占多数差异）：
+
+| 版本 | 比较类型数 | 属性数一致 | 一致率 |
+|---|---|---|---|
+| 7.1.0 | 88,872 | 88,304 | **99.36%** |
+| 6.4.0 | 75,764 | 75,179 | **99.23%** |
+
+差异全部集中在同名类型/嵌套类型（dump 的类型块名与 metadata 短名不完全对应）以及 99 行
+区间边界，不是属性列解码错误；属性总数与发现器 end 完全一致（115,596 / 99,320 …）。
+
+当前六版本的类型行已含：ns/name/fieldStart/fieldCount/methodStart/methodCount/propStart/
+propCount/eventStart/eventCount。5.4.0 的属性对因数组重叠被拒绝（显式报告），事件对保留。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。

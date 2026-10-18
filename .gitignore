@@ -4,3 +4,7 @@
 
 # Input binaries (game files) — not redistributable.
 /Original
+
+# python caches
+__pycache__/
+*.pyc
