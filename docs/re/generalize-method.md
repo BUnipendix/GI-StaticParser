@@ -684,6 +684,32 @@ flags 的完整 MethodAttributes 语义仍是暂定的：distinct 992、部分�
 因此本轮只记录“构建器已找到 + 候选常数”，**不把 6.7 属性表当作已解**；下一步需要从
 函数里把循环起点的含义（u16 + 0xFFFFFD33 与 r14b 的组合）彻底读清楚。
 
+### 3.2y 更正：6.7 那组常数是事件表（617 行全部验证通过）（2026-10-18）
+
+R50 把形态转移命中的 6.7 函数 0x1404C0020 当作属性构建器，但它的行数正好等于 6.7 的**事件数 617**
+（不是属性数 108,747），行内结构也是 {type u32, name u32, raise/add u16×3} 的标准 EventDefinition：
+所以那是事件构建器。按事件表验收：
+
+| 检查 | 结果 |
+|---|---|
+| 行数 | 617（= R30 数据求解的事件区间终点） |
+| 事件名 | **617 / 617 = 100% 标识符** |
+| 样例 | KeyGenerated / AssemblyLoad / DomainUnload / ProcessExit / Elapsed / ConnectionClosed / Completed（AppDomain 事件） |
+| 访问器 | add=11、remove=12、raise=0xFFFF（缺失），落在类型方法索引范围内 |
+| type 列 | 0x63F78 等，均 < typearr count 633,862 |
+
+事件表定案（写入 docs/re/artifacts-6.7.0/event-layout.json，纯数据）：
+
+- base = hdr[0x140] + 0xB8765480，stride 14；
+- 行掩码 = (idx * 0xFDA4FDC7922E20A0 + 0x52ED0039DCB14F2E)；
+- type = ((raw32[+0] + 0xE2CC29CA) & 0xFFFFFFFF) ^ mask32；
+- name = ((raw32[+4] + 0xA16DD35B) & 0xFFFFFFFF) ^ mask32；
+- raise = ((raw16[+8] ^ mask16) ^ 0xC054)；remove = ((raw16[+0xA] ^ mask16) ^ 0xC0EE)；
+  add = ((raw16[+0xC] + 0x5B99) ^ mask16)；0xFFFF 表示无。
+
+**属性表仍未定位**：6.7 属性行大概率也是 14 字节但使用另一组常数/构建器。下一轮从
+7.0 属性构建器的真正对应函数重新匹配（事件/属性构建器指纹相似，需用行数区分）。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。

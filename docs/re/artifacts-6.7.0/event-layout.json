@@ -1,0 +1,62 @@
+{
+  "artifact": "event-row-layout",
+  "artifact_version": 1,
+  "version": "6.7.0",
+  "provenance": {
+    "method": "shape transfer of the 7.0 property-builder load site 0x1404E6455 -> 6.7 0x1404C07E9 (jaccard 0.2421); the matched function is the event builder (its row count is exactly 617 = 6.7 event count)",
+    "function": "0x1404C0020"
+  },
+  "table": {
+    "slot": "0x140",
+    "op": "add",
+    "imm": "0xB8765480"
+  },
+  "stride": 14,
+  "rows": 617,
+  "mask": {
+    "mul1": "0xFDA4FDC7922E20A0",
+    "add1": "0x52ED0039DCB14F2E"
+  },
+  "columns": {
+    "type": {
+      "off": 0,
+      "formula": "((raw32 + 0xE2CC29CA) & 0xFFFFFFFF) ^ mask32"
+    },
+    "name": {
+      "off": 4,
+      "formula": "((raw32 + 0xA16DD35B) & 0xFFFFFFFF) ^ mask32"
+    },
+    "raise": {
+      "off": 8,
+      "formula": "((raw16 ^ mask16) ^ 0xC054) & 0xFFFF"
+    },
+    "remove": {
+      "off": 10,
+      "formula": "((raw16 ^ mask16) ^ 0xC0EE) & 0xFFFF"
+    },
+    "add": {
+      "off": 12,
+      "formula": "((raw16 + 0x5B99) ^ mask16) & 0xFFFF"
+    }
+  },
+  "validation": {
+    "rows": 617,
+    "name_identifiers": 617,
+    "sample_names": [
+      "KeyGenerated",
+      "AssemblyLoad",
+      "DomainUnload",
+      "ProcessExit",
+      "Elapsed",
+      "ConnectionClosed",
+      "Completed"
+    ],
+    "sample_types": [
+      412536,
+      412549,
+      410614
+    ],
+    "raise_absent_value": 65535
+  },
+  "notes": "Accessor columns store a small index into the class's method table (add=11/remove=12) or 0xFFFF when absent. Type column is an Il2CppType index (< 633,862)."
+}

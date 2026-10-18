@@ -5636,3 +5636,17 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
    索引不是线性全局属性索引（可能是局部/编码起点），或表长/列语义与 7.0 不同。
 3. 本轮只记录构建器与候选常数，不把 6.7 属性表当作已解；下一步彻底读清循环起点
    (u16 + 0xFFFFFD33 与 r14b) 的含义。
+
+## 122. R51 更正：6.7 那组常数是事件表（617 行 100% 验证）（2026-10-18）
+
+1. R50 命中的 6.7 函数 0x1404C0020 行数正好等于事件数 617（非属性 108,747），行内结构为标准
+   EventDefinition {type u32, name u32, raise/add u16x3} ⇒ 那是事件构建器。
+2. 事件表验收：617/617 名字均为标识符（KeyGenerated/AssemblyLoad/DomainUnload/ProcessExit/
+   Elapsed/ConnectionClosed/Completed 等 AppDomain 事件）；add=11/remove=12/raise=0xFFFF 落在
+   类型方法索引范围；type 0x63F78 等 < typearr 633,862。
+3. 定案（docs/re/artifacts-6.7.0/event-layout.json，纯数据）：base=hdr[0x140]+0xB8765480,
+   stride 14, 掩码 (idx*0xFDA4FDC7922E20A0+0x52ED0039DCB14F2E)；type=(raw32[0]+0xE2CC29CA)^mask32；
+   name=(raw32[4]+0xA16DD35B)^mask32；raise=(raw16[8]^mask16)^0xC054；
+   remove=(raw16[0xA]^mask16)^0xC0EE；add=(raw16[0xC]+0x5B99)^mask16，0xFFFF=无。
+4. 属性表仍未定位：6.7 属性行也大概率 14 字节，但属另一组常数/构建器；事件/属性构建器指纹相似，
+   下一轮用行数区分后重新匹配。
