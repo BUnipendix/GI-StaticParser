@@ -93,6 +93,7 @@ def col_value(kind, c, raw, m):
     if kind == 'XorCSubMask8':   return ((raw ^ c) - (m & 0xFF)) & 0xFF
     if kind == 'AddCXorMask32':  return ((raw + c) & 0xFFFFFFFF) ^ m
     if kind == 'XorCSubMask32':  return ((raw ^ c) - m) & 0xFFFFFFFF
+    if kind == 'XorCSubMask16':  return ((raw ^ c) - (m & 0xFFFF)) & 0xFFFF
     raise SystemExit('unknown column kind ' + kind)
 
 def main():

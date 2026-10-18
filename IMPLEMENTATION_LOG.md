@@ -5542,3 +5542,14 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
    + 少量跨版本混淆改名（JAAJEOLDNPH vs FPBCFBKKCFG）。
 4. 结论：参数名 name 列、参数 type 列、参数顺序（paramStart 链）、byref 标志在 7.0 均验证；
    只差泛型实例表即可完整渲染签名。
+
+## 114. R43 字段/属性类型渲染 + 7.1 dump 对照（2026-10-18）
+
+1. 用 typearr 渲染器渲染字段 type 列与属性 getter 返回类型，与 7.1 dump.cs corelib 前 60 类型对照：
+   字段类型 205/207 = 99.03%（按字段名匹配）；属性类型 34/37 = 91.89%；
+   属性访问器存在性 35/37 = 94.6%。残余差异来自泛型占位与跨版本混淆改名。
+2. 修复属性访问器解码：getter 用 SubMaskAddC16、setter 用 XorCSubMask16（16 位截断），
+   method_rows.col_value 补 XorCSubMask16；用 32 位 xor 会解出 5 万级假索引。
+3. 负结果：GENERICINST 泛型实例表三种结构扫描全 0 命中（16B {argc,pad,argv_ptr}、
+   24/32B generic-class 记录、metadata body generic class 表 stride 8..24）⇒ 指针可能加密或布局不同。
+4. 新增 tools/version-triage/validate_fields_props.py（字段/属性对照验收）。
