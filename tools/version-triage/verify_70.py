@@ -133,6 +133,20 @@ def main():
         if v > tmax: tmax = v
     check('field type range', tmax <= 300000, f'max type index {tmax} in 20k rows')
 
+    # --- typearr + corrected return type column -----------------------------
+    ta = json.load(open(f'{ART}/typearr.json'))
+    N = ta['count']; exe_d = open(sites['exe'], 'rb').read(); ta_off = int(ta['file_off'], 16)
+    rcol = ml['method']['columns']['return_type']
+    rv = 0; void = 0
+    for i in range(50000):
+        raw = struct.unpack_from('<I', body, mb + i * ms + rcol['off'])[0]
+        v = (((raw ^ h(rcol['c'])) - mf(i)) & 0xFFFFFFFF)
+        rv += 1
+        if v >= N: rv = -10**9; break
+        if exe_d[ta_off + 16 * v + 10] == 0x01: void += 1
+    check('return type column', rv >= 0 and void >= 24000,
+          f'{void}/50000 resolve to System.Void, all in-typearr')
+
     failed = [n for n, ok, _ in checks if not ok]
     print()
     if failed:

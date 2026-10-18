@@ -1,0 +1,36 @@
+{
+  "artifact": "typearr",
+  "artifact_version": 1,
+  "note": "Il2CppType array in the 7.0.0 module, located by a structure scan (16-byte records with a valid Il2CppTypeEnum byte and small attrs) and validated against three independent tables: every field/method/param type index is < count, and the method return column resolves to 61% System.Void.",
+  "file_off": "0x2D3C7F0",
+  "va": "0x142D3DFF0",
+  "count": 662534,
+  "entry": {
+    "data_off": 0,
+    "attrs_off": 8,
+    "type_off": 10,
+    "flags_off": 11,
+    "size": 16
+  },
+  "type_enum": {
+    "0x01": "System.Void",
+    "0x02": "System.Boolean",
+    "0x03": "System.Char",
+    "0x04": "System.SByte",
+    "0x05": "System.Byte",
+    "0x06": "System.Int16",
+    "0x07": "System.UInt16",
+    "0x08": "System.Int32",
+    "0x09": "System.UInt32",
+    "0x0a": "System.Int64",
+    "0x0b": "System.UInt64",
+    "0x0c": "System.Single",
+    "0x0d": "System.Double",
+    "0x0e": "System.String",
+    "0x16": "System.TypedReference",
+    "0x18": "System.IntPtr",
+    "0x19": "System.UIntPtr",
+    "0x1c": "System.Object"
+  },
+  "note_kinds": "0x11 VALUETYPE and 0x12 CLASS store a TypeDefinitionIndex in data; 0x15 GENERICINST stores a generic-instance index; 0x13/0x1E are VAR/MVAR (generic parameter position); 0x1D SZARRAY / 0x0F PTR store an element type index or pointer (unresolved)."
+}

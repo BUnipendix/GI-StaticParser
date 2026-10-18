@@ -92,6 +92,7 @@ def col_value(kind, c, raw, m):
     if kind == 'SubMaskAddC16':  return (raw - m + c) & 0xFFFF
     if kind == 'XorCSubMask8':   return ((raw ^ c) - (m & 0xFF)) & 0xFF
     if kind == 'AddCXorMask32':  return ((raw + c) & 0xFFFFFFFF) ^ m
+    if kind == 'XorCSubMask32':  return ((raw ^ c) - m) & 0xFFFFFFFF
     raise SystemExit('unknown column kind ' + kind)
 
 def main():
@@ -154,7 +155,21 @@ def main():
             named_bad += 1
     print(f'  name: identifier {named}, sentinel/undecodable {named_sentinel}, other {named_bad}, sample {name_sample}')
     rets = [col('return_type', i) for i in range(rows)]
-    print(f'  return_type: max 0x{max(rets):X}, distinct {len(set(rets))}')
+    ta = json.load(open('/home/yangsanyi/Documents/git-repo/GI-StaticParser/docs/re/artifacts-7.0.0/typearr.json'))
+    N = ta['count']; d_ = open(sys.argv[1].rstrip('/') + '/YuanShen.exe', 'rb').read()
+    tbase_off = int(ta['file_off'], 16)
+    def tyname(i):
+        if i >= N: return 'OOB'
+        off = tbase_off + 16 * i
+        data = struct.unpack_from('<Q', d_, off)[0]
+        typ = d_[off + 10]
+        prim = ta['type_enum'].get(f'0x{typ:02x}')
+        if prim: return prim
+        return f'kind0x{typ:02x}(data=0x{data:X})'
+    sample = [tyname(v) for v in rets[:8]]
+    void = sum(1 for v in rets if v == 416618)
+    oob = sum(1 for v in rets if v >= N)
+    print(f'  return_type: distinct {len(set(rets))}, void {void} ({100*void/rows:.1f}%), out-of-typearr {oob}, sample {sample}')
     total_params = cum
     ok = bad = 0; sample = []
     pname = lay['param']['name']; ptype = lay['param']['type']

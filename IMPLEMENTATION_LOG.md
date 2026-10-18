@@ -5485,3 +5485,20 @@ R12 通用方法的关键一步：typeDef 行布局不再依赖 7.1 代码迁移
    占大头预期，疑 mask2/列错）；② 参数 type max 662,533 vs 字段 232,880/方法 ret 86,928，
    是否同一 typearr 索引空间未定，需 typearr 本体定案。
 4. 复现：python3 tools/version-triage/verify_70.py（PASS 12 checks）。
+
+## 110. R39 Il2CppType 数组定位 + returnType 列纠正（2026-10-18）
+
+1. 结构扫描定位 Il2CppType 数组：16 字节记录 {u64 data, u16 attrs, u8 type, u8 flags,
+   4B padding=0}，连续 662,534 条，文件偏移 0x2D3C7F0（VA 0x142D3DFF0）。判定依据：
+   参数 type 最大 662,533 = count-1；字段 type 232,880 < count；方法 return 全在界内；
+   记录 type 枚举合法、CLASS/VALUETYPE 的 data 是 typeDefIndex（可解析出 System.Int32 等）。
+2. 纠正 R33：方法 returnType 列在 +0x00（value = (raw ^ 0x215FCCB1) - mask），不是 +0x10。
+   713,956 个方法：全部在 [0,662,534)、437,167 个 System.Void（61.2%）、distinct 32,246；
+   前 12 个方法 Void/String/String/String/Void... 与 <Module> 的 .ctor/GetText 对应；
+   高频返回 Void 437,167 / Boolean 66,823 / Int32 30,854 / String 13,880。
+   原 +0x10 列从布局移除并标注未知。
+3. 新增 docs/re/artifacts-7.0.0/typearr.json（file_off/va/count/entry layout/type enum）；
+   method_rows.py 输出 return_type 解析样本/void 比例/越界数；verify_70.py 增至 13 项
+   检查全部 PASS（新增 return type column 检查：50k 抽样 25,021 个 Void 且全部在界内）。
+4. 未完成：GENERICINST/PTR/SZARRAY 的 data 语义（索引还是指针）与泛型实例表解码；
+   参数 type 列用 typearr 复核在界内（max 662,533=N-1）。

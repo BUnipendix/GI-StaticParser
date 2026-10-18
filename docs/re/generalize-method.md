@@ -417,6 +417,33 @@ add 4.29e9 / sub 1.32e6 / xor 2.41e9 —— 没有一族收敛到可解释的 ty
    三者是否同一 typearr 索引空间、参数列是否叠加打包位，需要 typearr 本体（base + Il2CppType 布局）
    才能定案。
 
+### 3.2m Il2CppType 数组定位 + 方法 returnType 列纠正（2026-10-18）
+
+决定性一步：在 7.0 模块里结构扫描定位了 Il2CppType 数组——16 字节记录
+{u64 data, u16 attrs, u8 type, u8 flags, 4B padding=0}，连续 662,534 条，
+文件偏移 0x2D3C7F0（VA 0x142D3DFF0）。判定依据（互证）：
+
+| 证据 | 结果 |
+|---|---|
+| 参数 type 列最大值 | 662,533 = count−1（全在界内） |
+| 字段 type 列最大值 | 232,880 < count |
+| 方法 return 列最大值 | 全部 < count |
+| 记录语义 | type 枚举合法（class=0x12/valuetype=0x11 data=typeDefIndex；Void/Bool/Int32/String 等按枚举直接命名；genericinst=0x15 data=泛型实例索引） |
+
+据此纠正 R33 的 returnType 列：不在 +0x10，而在 +0x00，
+value = (raw ^ 0x215FCCB1) − mask。验证：
+
+- 713,956 个方法值全部在 [0, 662,534)；
+- 437,167 个解析为 System.Void（61.2%）；distinct 32,246；
+- 前 12 个方法依次为 Void / String / String / String / Void…，与 <Module> 的
+  .ctor、GetText、mono_runtime_install_handlers 等完全对应；
+- 高频返回类型：Void 437,167、Boolean 66,823、Int32 30,854、String 13,880、UInt32 9,619。
+
+原先放在 +0x10 的列不是返回值（分布不符合 void 占多数），已从布局里移除并标注未知。
+
+新增 docs/re/artifacts-7.0.0/typearr.json；tools/version-triage/method_rows.py 输出
+return_type 的解析样本/void 比例/越界数；verify_70.py 增加到 13 项检查，全部 PASS。
+
 ### 3.3 代码形态匹配的适用范围与边界
 
 - 适用：同一编译器/同一代源码结构（6.x–7.1 实测）；函数窗口 0x180 字节足够。

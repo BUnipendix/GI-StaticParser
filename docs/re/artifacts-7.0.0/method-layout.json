@@ -1,80 +1,81 @@
 {
-  "artifact": "method-row-layout",
-  "artifact_version": 2,
-  "note": "7.0.0 method/param row layout recovered from code (mask chain + column transforms) and completed by data validation for the two columns the code path we found does not touch (name, returnType). Constants are DATA; automated extraction is the next step.",
-  "provenance": {
-    "builder_fn": "0x1404e5560",
-    "resolver_fn": "0x1404e59e0",
-    "param_decoder_fn": "0x1404f9750",
-    "name_column_source": "code: (raw[+8] + 0x997E86CD) - mask ; validated by full-table string decode (99.5% identifiers, 0.4% 0xFFFFFFFF)",
-    "ret_column_source": "data: (raw[+0x10] - mask) + C, C pinned by the range/window property over 200k rows"
+ "artifact": "method-row-layout",
+ "artifact_version": 3,
+ "note": "7.0.0 method/param row layout recovered from code (mask chain + column transforms) and completed by data validation for the two columns the code path we found does not touch (name, returnType). Constants are DATA; automated extraction is the next step. FIX R39: the return type column is at +0x00 (XorCSubMask32, c=0x215FCCB1), not +0x10; validated against the located Il2CppType array: all 713,956 values are in [0,662,534) and 437,167 resolve to System.Void (61%).",
+ "provenance": {
+  "builder_fn": "0x1404e5560",
+  "resolver_fn": "0x1404e59e0",
+  "param_decoder_fn": "0x1404f9750",
+  "name_column_source": "code: (raw[+8] + 0x997E86CD) - mask ; validated by full-table string decode (99.5% identifiers, 0.4% 0xFFFFFFFF)",
+  "ret_column_source": "data: (raw[+0x10] - mask) + C, C pinned by the range/window property over 200k rows",
+  "typearr": "docs/re/artifacts-7.0.0/typearr.json (Il2CppType array at VA 0x142D3DFF0, 662,534 entries)"
+ },
+ "method": {
+  "table": {
+   "slot": "0x138",
+   "op": "add",
+   "imm": "0xD37E9675"
   },
-  "method": {
-    "table": {
-      "slot": "0x138",
-      "op": "add",
-      "imm": "0xD37E9675"
-    },
-    "stride": 26,
-    "rows": 713956,
-    "mask": {
-      "mul1": "0x3639B538F896",
-      "add1": "0xCC49CF2E948F28F",
-      "shr": 13,
-      "mul2": "0x3209B9A2",
-      "add2": "0x066E3EE5EEBB7B78"
-    },
-    "columns": {
-      "param_start": {
-        "off": 4,
-        "kind": "AddCSubMask32",
-        "c": "0xAC706A39"
-      },
-      "name": {
-        "off": 8,
-        "kind": "SubMaskAddC32",
-        "c": "0x997E86CD"
-      },
-      "flags": {
-        "off": 14,
-        "kind": "SubMaskAddC16",
-        "c": "0x13"
-      },
-      "return_type": {
-        "off": 16,
-        "kind": "AddCSubMask32",
-        "c": "0xDF812A65"
-      },
-      "param_count": {
-        "off": 24,
-        "kind": "XorCSubMask8",
-        "c": "0x5B"
-      }
-    }
+  "stride": 26,
+  "rows": 713956,
+  "mask": {
+   "mul1": "0x3639B538F896",
+   "add1": "0xCC49CF2E948F28F",
+   "shr": 13,
+   "mul2": "0x3209B9A2",
+   "add2": "0x066E3EE5EEBB7B78"
   },
-  "param": {
-    "table": {
-      "slot": "0x1FC",
-      "op": "add",
-      "imm": "0xFC3EC0CE"
-    },
-    "stride": 8,
-    "mask": {
-      "mul1": "0x2F64C993DFFE",
-      "add1": "0xAB42C68E0D4A",
-      "shr": 17,
-      "mul2": "0x272E941C",
-      "xor2": "0x705880A8"
-    },
-    "name": {
-      "off": 4,
-      "kind": "AddCXorMask32",
-      "c": "0xDA14EDA6"
-    },
-    "type": {
-      "off": 0,
-      "kind": "AddCXorMask32",
-      "c": "0x8FE5701B"
-    }
+  "columns": {
+   "param_start": {
+    "off": 4,
+    "kind": "AddCSubMask32",
+    "c": "0xAC706A39"
+   },
+   "name": {
+    "off": 8,
+    "kind": "SubMaskAddC32",
+    "c": "0x997E86CD"
+   },
+   "flags": {
+    "off": 14,
+    "kind": "SubMaskAddC16",
+    "c": "0x13"
+   },
+   "return_type": {
+    "off": 0,
+    "kind": "XorCSubMask32",
+    "c": "0x215FCCB1"
+   },
+   "param_count": {
+    "off": 24,
+    "kind": "XorCSubMask8",
+    "c": "0x5B"
+   }
   }
+ },
+ "param": {
+  "table": {
+   "slot": "0x1FC",
+   "op": "add",
+   "imm": "0xFC3EC0CE"
+  },
+  "stride": 8,
+  "mask": {
+   "mul1": "0x2F64C993DFFE",
+   "add1": "0xAB42C68E0D4A",
+   "shr": 17,
+   "mul2": "0x272E941C",
+   "xor2": "0x705880A8"
+  },
+  "name": {
+   "off": 4,
+   "kind": "AddCXorMask32",
+   "c": "0xDA14EDA6"
+  },
+  "type": {
+   "off": 0,
+   "kind": "AddCXorMask32",
+   "c": "0x8FE5701B"
+  }
+ }
 }
