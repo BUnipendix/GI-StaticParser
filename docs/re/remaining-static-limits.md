@@ -9,11 +9,11 @@
 |---|---|
 | 静态字段偏移（109,214 个字段）| oracle 首静态偏移 vs TypeDefIndex 单调性仅 50.2% ⇒ 偏移由运行时类初始化顺序决定；7.1 元数据无静态偏移表 |
 | 方法 Slot 非零值 | 反汇编 0x1405155FC 构建器逐句核对：7.1 元数据几乎全 -1；oracle 6.4 非零 Slot 属 oracle 运行时语义 |
-| interface 的基接口（oracle 270 行）| 7.1 元数据 interface 的 iface_start/count 全哨兵（0xFFFF/0） |
+| interface 的基接口（oracle 270 行）| 7.1 元数据 interface 的 iface_start/count 全哨兵（0xFFFF/0）；且实现类接口列表**已扁平化**（7.1 ResourceReader 行含 IResourceReader+IEnumerable+IDisposable），运行时判定 0x140513260 只遍历 klass+0x20 接口数组、不递归基接口 ⇒ 构建期裁掉，运行时不需要（docs/re/71-generics-interface-origin.md）|
 | ~~metadataUsage~~（script.json Addresses/ScriptMetadata 基础）| **已推翻（2026-10-18，R19）**：索引表 body+(hdr[0x19C]^0x159FBC84)、pair 表 body+(hdr[0x14C]^0x2F249C2F)，解析器 0x140524250；全量 311,730 usage / 788,057 pair（tools/inspect_usage_tables.py，见 docs/re/71-usage-tables.md）|
 | ~~stringLiterals 数据~~ | **已推翻（2026-10-18，R19）**：offset 表 = body+(hdr[0x88]+0xF3C0B2FE)、数据 = body+(hdr[0x13C]^0x28B1D785)，解密器 0x140526BD0；86,108 条与 literals.json 逐条一致（tools/inspect_usage_tables.py）|
 | ~~属性表本体（propertyDefs）~~ | **已推翻（2026-10-18，§83）**：不是标准 20B 行，而是 `hdr[0x158]−0x1D545CCC` 的 **10B 行**（name/getter/未知/setter），运行时 PropertyInfo 构建器 0x140515FC0 直接读它；全量解出 115,596 条属性（详见 gap-inventory #3、71-final-status）|
-| 泛型参数名 / 约束（genericParameters）| 2026-10-18 复核：全字符串池解码后 TKey/TValue/TResult 计数 = 0；数据区/startup 按 12/14/16B stride 全位置扫描（名称可解码 + owner 单调 + 约束列合理，连续 ≥50 行）0 命中；旧 29 个字符串解码调用点 0 命中。结论：7.1 已剥离（6.4 oracle 仍有真实名字）|
+| 泛型参数名 / 约束（genericParameters）| 2026-10-18 复核：identifier 字符串堆 0 命中 TKey/TValue/TResult；86,108 条 literal 表同样 0 命中；标准布局 genericContainers(16B)/genericParameters(14B) 结构扫描 body+startup = 0 个非退化候选（tools/scan_generic_tables.c）⇒ 7.1 已剥离且无标准表可解（docs/re/71-generics-interface-origin.md）|
 | ~~属性参数~~（22,146 条含参属性）| **结论修订（R19）**：不是未定位，而是运行时设计上不存在——4 个属性查询 API（0x1404B2400/2710/2C90/5353DC）只返回 attribute klass（经 0x140526AF0），无对象构造/ctor 调用；成员→实例表 = slot 0x118、实例→类 = slot 0x1A8（body 0x9BACA4）。属性参数在构建期丢弃 |
 
 > 这些项的 oracle 值要么来自运行时内存（Il2CppDumper 参考 dump 是运行时辅助产生的），要么 GI 构建期 strip。

@@ -45,9 +45,9 @@ DummyDll 的 Token/Attribute/Constant/MetadataOffset 全量接线，以及两个
 |---|---|
 | 静态字段偏移（109,214） | 文件内无 fieldOffsets 数组（400 类型签名抽样 0 有效命中，长签名 0 命中，tools/check_field_offset_arrays.py §79）；oracle 首静态偏移 vs TypeDefIndex 单调仅 50.2% ⇒ 每程序集 arena，image.typeStart/typeCount 已被剥离，无法定位类型→程序集分组 |
 | 属性构造参数（22,146 条含参属性） | 静态无 token/参数 blob（§75），且 **R19 确证运行时设计上不需要**：4 个属性查询 API 只返回 attribute klass，无对象构造（详见 docs/re/71-usage-tables.md §4）；DummyDll 用 AttributeAttribute(Name=类名) 标记 |
-| interface 的基接口 | 7.1 metadata 1,580 个 interface 的基接口行 = 0（全量；6.4 oracle 有 270 个） |
-| 泛型参数名 / 约束（type + method） | 全字符串池无 TKey/TValue/TResult 等常见泛型名；数据区按 12/14/16B stride 结构扫描（名称可解码 + owner 单调）0 命中；旧笔记 29 个字符串解码点亦 0 命中（§89）。当前 dump.cs 对 VAR/MVAR 以 object/*k0x13*/ 占位、类型头用 List`1 形式 |
-| ~~metadataUsage~~ / ScriptString / ScriptMetadata | **已推翻（R19）**：usage 索引/ pair 表在 body（slot 0x19C / 0x14C），311,730 usage / 788,057 pair 可静态解码；stringLiteral 表+数据+cipher 亦解出（86,108）。见 docs/re/71-usage-tables.md |
+| interface 的基接口 | 7.1 metadata 1,580 个 interface 的基接口行 = 0（全量；6.4 oracle 有 270 个）；实现类列表已扁平化、运行时判定不递归基接口 ⇒ 构建期裁掉（docs/re/71-generics-interface-origin.md） |
+| 泛型参数名 / 约束（type + method） | identifier 堆 0 命中 TKey/TValue/TResult；86,108 条 literal 表同样 0 命中；标准 16B/14B 表结构扫描 body+startup 0 个非退化候选（tools/scan_generic_tables.c）⇒ 已剥离（docs/re/71-generics-interface-origin.md）；dump.cs 对 VAR/MVAR 以 object/*k0x13*/ 占位、类型头用 List`1 形式 |
+| ~~metadataUsage / ScriptString~~ | **已恢复（R19/R20）**：usage 索引/pair 表在 body（slot 0x19C / 0x14C），311,730 usage / 788,057 pair；`ScriptString` 137,466 已进 script.json（R20），`Addresses` 483,496（R21）。仅 Il2CppDumper 的 `ScriptMetadata`（kind1/kind7 归类未定）未接线——见 docs/re/71-usage-tables.md |
 | DummyDll 75 程序集划分 | image 表解列后无 typeStart/typeCount（反汇编 loader，§78） |
 | il2cpp.h | 未产出：GI 运行时结构经 VMP 修改（klass+0x10=tdi、+0x38 events、+0x48 props、+0x58 methods、+0x60 typeDef 行…），与 Il2CppDumper 标准 V27/V29 模板不一致；产出标准模板会误导。GI 实测结构目前只覆盖 metadata-cache 部分，不足以生成完整头文件 |
 

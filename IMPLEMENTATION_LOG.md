@@ -5166,3 +5166,19 @@ property/event）、AttributeAttribute（无法还原的属性实例；RVA/Offse
 3. 验证：script.json 176,561,152 → **176,764,249 B**；final_verify.py 增补 Addresses=483,496 断言；
    `tools/final_verify.sh` 全 PASS；`cargo test --release` 通过（新增 code_addresses 样本测试）。
 4. 下一步：ScriptMetadata（kind1/kind7 归类仍待 jump-table 语义确认）、kind6 methodSpecs；然后回到泛型参数名/接口基接口。
+## 93. R22：泛型参数名 / 接口基接口的运行时来源追查（2026-10-18）
+
+> 目标第二轮：沿用「反汇编解析器→表锚点」方法追查这两项。
+
+1. 泛型参数名（新证据）：
+   - identifier 字符串堆 0 命中 TKey/TValue/TResult（R18）；新增 literal 表检查（86,108 条，R19 解密）：同名 0 条；
+   - 新增 tools/scan_generic_tables.c：body/startup 扫描标准 16B genericContainers 与 14B genericParameters，
+     containers = 0/0，genericParameters 仅 11 个 0xB9C98C 附近的全零退化候选 / 0 ⇒ 标准形式表不存在。
+2. 接口基接口（新证据）：
+   - 7.1 自身 dump：`System.Resources.ResourceReader : IResourceReader, IEnumerable, IDisposable`，
+     6.4 oracle 相同 ⇒ 实现类接口列表已扁平化；而 interface 类型本身无基接口行（哨兵）；
+   - 运行时判定函数 0x140513260 反汇编：遍历 klass+0x20 接口指针数组、无基接口递归 ⇒ 运行时不需要该边。
+3. 结论（写入 docs/re/71-generics-interface-origin.md）：两项均为构建期裁掉而非解析未遂；若要补只能跨版本推断
+   （6.4 oracle 泛型名 ~85%、接口基接口 131 条）。
+4. 唯一未证点：GI runtime 的 genericParameter 结构是否存在（可从 Il2CppType kind 0x13/0x1E 分派入口继续）。
+5. 验证：final_verify.py 仍全 PASS（工件未变）；docs 同步更新。
