@@ -5868,3 +5868,10 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
 - **为什么窗口法找不到 6.6 方法链**：链以 `movabs rax,imm64 + imul r11,rax` 形态存在（symwalk 的 imm 匹配/密扫判据都没覆盖），且该函数早段就有运行时指针间接调用断掉一切回看。模拟执行 30 条指令直接拿到完整链+列公式（+0x10 flags 型 `(raw16+0x1EEA)^mask32`、+0x12 slot 型）。
 - 7.1 ground truth 一次过（链+mask2 逐位）；6.6 方法表全解（name/count/start，链 0 违例）；6.5/6.1 方法链提取+name 验证 idrate 1.0。6.3/6.2 断在首段间接调用，待 ret-forest（把指针寄存器指向填满 ret 桩的页）。
 - Rust 移植映射已记 docs/TOOLS.md 与记忆：symwalk→iced-x86、emu→unicorn crate、exprvm/rowtable_solve→ndarray/裸切片；表达式 JSON 保持 serde 中立。
+
+## R72（2026-10-25）：oracle 全绿 + 6.2/6.3 链 + 6.4 根因（不是需求，方案记录）
+
+- oracle 逐名比对：**6.1/6.2/6.5 方法名 vs 官方 dump 全部 100%**（5151/5232/5250 零失配）。比对坑：oracle 的 RVA 注释与签名分行（解析器要抓含 `) { }` 的行）；跳过己方不可解码行时必须同步跳过 oracle 行，否则错位全失配（首版比对 0.3% 即此假象）。
+- emu_chain 修复：imul reg,reg 追踪（dst=gete(dst)*gete(src)，此前双侧取 movabs imm 折叠成常数——6.6 链一直手工注入的根因）；ret-forest 会改变分支走向 → 改 zero/forest 双策略自动重试合并。
+- 6.2 方法表 name 解出（off0 XorCSubMask 0x614fcedd）；6.3 链提取但 builder 不读 name（惰性访问器边界，同 7.0 字段名模式）。
+- **6.4 三轮悬案根因**：name 公式正确；第二解密器 0x140474480（splitmix64：0x9E3779B185EBCA87×idx ^0x27D4EB2F165667C9 rol 0x17 ×0xC2B2AE3D27D4EB4F +0x165667B19E3779F9，shr 0x21/0x1d/0x20 三轮 finalize；位切片查表 r10[（h>>6）<<5]）；密钥表由 0x1404B78AC/0x1404B7B6C 区域在加载期构建（写 0x144EEAC08/28/30）。模拟路线已通到最后一步（喂 idx→查表→解密），缺建表。提交 28dbfd5。
