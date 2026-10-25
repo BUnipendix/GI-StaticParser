@@ -5890,3 +5890,10 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
 - 进制坑两连：sub 族 C=88 ≡ add 族 +0xA8（mod 256 同变换）；断言/文档写常数必须注明进制。
 - auto_tables emu 合流：method_defs 12→24 链（emu 贡献 movabs 形态 3 条）。
 - dev/release 构建混淆：裸 `cargo build` 只出 dev profile，target/release/mhydump 不更新——统一 `env -u RUSTC_WRAPPER /usr/bin/cargo build --release`。
+
+## R75（2026-10-25）：symwalk Rust 化 11/11 全绿（不是需求，方案记录）
+
+- src/symwalk.rs + `mhydump symwalk` 子命令；门控回归 symwalk_regression 11/11 站点常数逐位复现（等价 Python 的 11/12 组，第 12 个是兄弟站点设计性排除）。
+- 调试方法论：构造隔离微测试（mov eax,edi+imul3 / 行标记+disp4 / movabs+imul2）把「全站缺」收敛到单指令路径，再回真实站点验证——比全站调试快一个量级。
+- 四根因（Rust 移植特有，Python 无）：iced OpKind::Immediate32to64（imul r64,r64,imm32 的立即数形态，imm_of 曾静默 None）；lin_terms 对 Lo/Ext 不穿透（32 位循环变量→行标记全灭；对 <2^32 索引穿透精确）；caller-saved 表 SysV/Win64 混淆（rsi/rdi 被误清，getter 列全在 call 后）；reg_info 裸 r8-r15 无后缀名解析（"R13" 的 rest[..len-1] 剥掉数字）。
+- 设计差异（有意）：候选全量合并（Python top-3）——错起点垃圾由下游数据验收过滤；合并回扫 289 起点，链 cap 400。
