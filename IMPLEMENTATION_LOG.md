@@ -5910,3 +5910,15 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
 - **验收**：6.6（方法链须模拟执行的 hardest case）方法表 name/count/start 三列常数与 Python 战役（R71）逐字段一致；method/param/prop/event 四语义 slot 与 Python 逐位同。已知分歧：field_names（score 0.084 弱匹配）序数选取 Rust→slot 0x4 vs Python→slot 0xDC，显式记录待核（该语义基址在 Python 靠 derive 侧独立互证过）。
 - 移植期两根因：iced `memory_displacement64()` 对 RIP 相对寻址返回绝对目标地址（capstone 返回位移，加 next_ip 双重偏移致锚点扫描全空）；种子 op 词（add/xor）与 AnchorOp 符号（+ /^）表示不一致致序数匹配恒败（归一化 parse_op 修复）。
 - R39 五件套完成度：expr(449d1f6)/rowtable(5cf4207)/symwalk(f03ba6f)/emu_chain(185fffc)/shape_transfer+编排(8415cdb)，各带门控回归；Python 原型仍在 tools/version-triage 作为参考实现。
+
+## R78（2026-10-25）：改进①——auto-tables → Profile → dump-gen 接线（不是需求，方案记录）
+
+**目标（改进计划第 1 项）**：把零接触管线输出接成 dump-gen 可吃的 Profile，使「新版本 → auto-tables → dump-gen」闭环。质量分级：solved/partial/inherited 由 `_splice` manifest 显式携带。
+
+- src/profile_splice.rs：种子 Profile（默认内置 71 布局）+ TransferReport + TableReport + 目标 derive_build → 拼接 Profile。cipher/strsec 恒取目标自身 derive（strsec_direct 直写，str 槽位换算 `str_sub=-imm mod 2^32` 且与 derive 互证）；24 语义表基座映射到 Profile 的 TableBase 字段；方法表切片（stride+通用链+name/param_start/param_count 三列）。
+- Profile 扩展（数据字段，老 JSON 兼容）：`md_mask_expr: Option<Expr>`（通用逐行掩码链，取代 md_pmask——固定 MaskChain 形状装不下 6.6 的 46 位乘子）、`strsec_direct`、ColKind 新增 8 个 Gen* 变体（fam_value u32 域 ×5 + count u8 域 ×3，统一走 `gen_col_value` 单点求值，杜绝换算与求值漂移）。engine md_col/find_header/strsec 消费点接入。
+- `auto-tables --profile-out --seed-profile --verify-rows`：拼接后**用 dump-gen 同款引擎路径**（Meta::md_col+decode_str）解码前 N 行验证。
+- **6.6 实弹（全链 6:22，其中 solve 5 分钟）**：256/256 行命名、标识符率 100%、样本=corelib 前缀（.ctor/GetText/GetText/Format/mono_runtime_install_handlers/...）。dump-gen 冒烟 exit 0（cipher 校验过、md=0x794924 正确），0 types=如实现状（typedef 仍种子继承，等改进③）。
+- **实弹捉到并修复的真 bug**：转移成功后 `rec.op` 是符号形式（"+"，shape_transfer.rs:375 `a.op.name()`），splice 首版只认词形式（"add"）→ method_defs 的 imm 静默丢失 → 引擎验证乱码暴露。parse_op 双形式归一化修复+回归测试（`params` 符号 op 用例）。又一例「op 表示不一致」家族（R77 已踩过同根）。
+- **勘误（R77/TOOLS.md）**：6.6 name 列记为 XorCSubMask 0xA6C26AFF——本轮同链实测 len=181 乱码；本轮解 AddCXorMask c=0xA6BBF48D（idrate 1.0、2580 行、exact-prior 门过、引擎路径 100%+精确 corelib 前缀）。旧记录疑为转写误差，以本轮可复现证据为准（auto.json/profile.json 在 ~/gire/out/zero-touch/）。
+- 未验证项：`--seed-profile` 外部 JSON 路径未实弹（默认 gen71 路径已验）；startup-metadata 表 partial 接线（表基座可换、掩码仍种子）未验——掩码属改进③。

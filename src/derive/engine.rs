@@ -93,10 +93,16 @@ impl<'a> Meta<'a> {
             .ok_or_else(|| anyhow!("embedded MHY header not located (self-validation failed)"))?;
         let body = Buffer::new(body_buf);
 
-        let strsec = (i32::from_le_bytes(
-            header_bytes[profile.str_hdr_off as usize..profile.str_hdr_off as usize + 4].try_into().unwrap(),
-        )
-        .wrapping_sub(profile.str_sub as i32)) as usize;
+        let strsec = match profile.strsec_direct {
+            // zero-touch override: derived from the target binary directly
+            Some(s) => s as usize,
+            None => (i32::from_le_bytes(
+                header_bytes[profile.str_hdr_off as usize..profile.str_hdr_off as usize + 4]
+                    .try_into()
+                    .unwrap(),
+            )
+            .wrapping_sub(profile.str_sub as i32)) as usize,
+        };
 
         let img = crate::pe::Image::parse(exe)?;
         let image_base = img.image_base();
@@ -353,11 +359,36 @@ impl<'a> Meta<'a> {
         (v as u32).wrapping_mul(self.profile.md_mask2_mul)
     }
 
+    /// Per-row mask for the method table: the zero-touch generic chain when
+    /// spliced, else the fixed-shape `md_pmask`.
+    #[inline]
+    pub fn md_mask(&self, i: u32) -> u32 {
+        match &self.profile.md_mask_expr {
+            Some(e) => e
+                .eval(i as u64, &self.header, &|_, _| 0)
+                .unwrap_or(0) as u32,
+            None => self.profile.md_pmask.eval(i),
+        }
+    }
+
     /// methodDef column decode (32-bit result; narrow kinds truncate afterwards).
     #[inline]
     pub fn md_col(&self, c: &Column, i: u32) -> u32 {
         let at = self.md_base + self.profile.md_stride as usize * i as usize + c.offset as usize;
         let raw = u32::from_le_bytes(self.body.read_slice(at, 4).unwrap_or(&[0, 0, 0, 0]).try_into().unwrap_or([0; 4]));
+        if matches!(
+            c.kind,
+            ColKind::GenSubMaskAddC
+                | ColKind::GenAddCSubMask
+                | ColKind::GenXorCXorMask
+                | ColKind::GenAddCXorMask
+                | ColKind::GenXorCSubMask
+                | ColKind::GenCountXor8
+                | ColKind::GenCountSub8
+                | ColKind::GenCountAdd8
+        ) {
+            return super::profile::gen_col_value(c.kind, raw, self.md_mask(i), c.c);
+        }
         let t = self.profile.md_pmask.eval(i);
         let m2 = self.mask2(i);
         match c.kind {
@@ -1023,10 +1054,17 @@ fn find_header(exe: &[u8], body: &[u8], profile: &Profile) -> Option<Vec<u8>> {
     while let Some(rel) = region[pos..].windows(4).position(|w| w == b"MHY\0") {
         let at = pos + rel;
         if let Some(hdr) = region.get(at..at + 0x600) {
-            let raw = u32::from_le_bytes(
-                hdr[profile.str_hdr_off as usize..profile.str_hdr_off as usize + 4].try_into().ok()?,
-            );
-            let ss = (i32::from_le_bytes(raw.to_le_bytes()).wrapping_sub(profile.str_sub as i32)) as usize;
+            let ss = match profile.strsec_direct {
+                Some(s) => s as usize,
+                None => {
+                    let raw = u32::from_le_bytes(
+                        hdr[profile.str_hdr_off as usize..profile.str_hdr_off as usize + 4]
+                            .try_into()
+                            .ok()?,
+                    );
+                    (i32::from_le_bytes(raw.to_le_bytes()).wrapping_sub(profile.str_sub as i32)) as usize
+                }
+            };
             if ss > 0 && ss < body.len() {
                 let buf = crate::mem::Buffer::new(body);
                 let s = crate::decode_str::decode_str_sched(&buf, ss, 8 << 24, &profile.schedule());

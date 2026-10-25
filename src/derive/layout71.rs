@@ -18,6 +18,8 @@ pub fn gen71() -> Profile {
         // so it is left in the legacy form on purpose -- it is the oracle the derived
         // form is checked against.
         cipher: None,
+        strsec_direct: None,
+        md_mask_expr: None,
         str_m1: 0xB33E_4042_7D56_68C0,
         str_x1: 0x6D8C_4AAB_00FE_8E27,
         str_x2: 0x30EE_5B43_130F_E0CD,

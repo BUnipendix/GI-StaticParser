@@ -15,6 +15,7 @@ pub mod derive;
 pub mod dump;
 pub mod expr;
 pub mod rowtable;
+pub mod profile_splice;
 pub mod symwalk;
 pub mod emu_chain;
 pub mod shape_transfer;

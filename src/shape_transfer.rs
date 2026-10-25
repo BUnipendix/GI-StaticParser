@@ -214,7 +214,7 @@ pub fn scan_anchors(
     out
 }
 
-fn parse_op(s: &str) -> AnchorOp {
+pub fn parse_op(s: &str) -> AnchorOp {
     match s.to_ascii_lowercase().as_str() {
         "add" | "+" => AnchorOp::Add,
         "xor" | "^" => AnchorOp::Xor,

@@ -180,6 +180,18 @@ enum Cmd {
         rows: usize,
         #[arg(long)]
         out: Option<String>,
+        /// Splice the results into a Profile JSON for `dump-gen --profile-in`.
+        /// Seeds every unsolved field from the seed profile and embeds a
+        /// `_splice` manifest (solved / partial / inherited).
+        #[arg(long)]
+        profile_out: Option<String>,
+        /// Seed Profile JSON (default: built-in 7.1 layout).
+        #[arg(long)]
+        seed_profile: Option<String>,
+        /// After splicing, decode the first N method rows through the ENGINE
+        /// path on the spliced profile and report the identifier rate.
+        #[arg(long)]
+        verify_rows: Option<usize>,
     },
     /// Milestone (a): parse a PE image, print its section table, ImageBase, and flag BSS globals.
     PeValidate {
@@ -379,8 +391,8 @@ fn main() -> Result<()> {
             }
             Ok(())
         }
-        Cmd::AutoTables { exe, metadata, sites, seed, seed_sites, seed_derive, strings, solve_method, rows, out } => {
-            auto_tables_cmd(&exe, &metadata, &sites, &seed, &seed_sites, &seed_derive, strings.as_deref(), solve_method, rows, out.as_deref())?;
+        Cmd::AutoTables { exe, metadata, sites, seed, seed_sites, seed_derive, strings, solve_method, rows, out, profile_out, seed_profile, verify_rows } => {
+            auto_tables_cmd(&exe, &metadata, &sites, &seed, &seed_sites, &seed_derive, strings.as_deref(), solve_method, rows, out.as_deref(), profile_out.as_deref(), seed_profile.as_deref(), verify_rows)?;
             Ok(())
         }
         Cmd::PeValidate { exe } => pe_validate(&exe),
@@ -1237,6 +1249,9 @@ fn auto_tables_cmd(
     solve_method: bool,
     rows: usize,
     out_path: Option<&str>,
+    profile_out: Option<&str>,
+    seed_profile_path: Option<&str>,
+    verify_rows: Option<usize>,
 ) -> anyhow::Result<()> {
     use static_mhy_dumper::emu_chain;
     use static_mhy_dumper::expr::Expr;
@@ -1280,6 +1295,7 @@ fn auto_tables_cmd(
 
     // optional: solve the method table end-to-end
     let mut solved: Option<serde_json::Value> = None;
+    let mut solved_rep: Option<static_mhy_dumper::rowtable::TableReport> = None;
     if solve_method {
         if let Some(sp) = strings_path {
             let Some(mrec) = report.semantics.get("method_defs").or_else(|| report.semantics.get("method_defs")) else {
@@ -1294,6 +1310,7 @@ fn auto_tables_cmd(
             let chains: Vec<Expr> = mrec.chains.clone();
             if let Some(rep) = static_mhy_dumper::rowtable::solve_table(body, base, 26, rows, &chains, &heap, &prior) {
                 solved = Some(serde_json::to_value(&rep)?);
+                solved_rep = Some(rep);
             }
         }
     }
@@ -1306,6 +1323,64 @@ fn auto_tables_cmd(
         Some(p) => std::fs::write(p, serde_json::to_string_pretty(&payload)?)?,
         None => println!("{}", serde_json::to_string_pretty(&payload)?),
     }
+
+    // optional: splice into a Profile for dump-gen
+    if let Some(pp) = profile_out {
+        let seedp = match seed_profile_path {
+            Some(sp) => static_mhy_dumper::profile_splice::load_seed_profile(sp)
+                .map_err(|e| anyhow::anyhow!("seed profile {sp}: {e}"))?,
+            None => static_mhy_dumper::derive::layout71::gen71(),
+        };
+        let derived = static_mhy_dumper::derive::cipher::derive_build(&d, &md)?;
+        let (spliced, manifest) =
+            static_mhy_dumper::profile_splice::splice_profile(seedp, &report, solved_rep.as_ref(), derived.as_ref());
+        let mut v = serde_json::to_value(&spliced)?;
+        v["_splice"] = serde_json::to_value(&manifest)?;
+        std::fs::write(pp, serde_json::to_string_pretty(&v)?)?;
+        println!(
+            "wrote profile {pp}: {} solved, {} partial bases, {} inherited groups",
+            manifest.solved.len(),
+            manifest.partial.len(),
+            manifest.inherited.len()
+        );
+        for n in &manifest.notes {
+            println!("  note: {n}");
+        }
+
+        if let Some(n) = verify_rows {
+            // Engine-path verification: load the TARGET under the spliced
+            // profile and decode method names through the same accessors
+            // dump-gen uses (md_col + decode_str), so the slice that will
+            // feed the real dump is what gets checked.
+            let m = static_mhy_dumper::derive::engine::Meta::load_with_startup(&d, &md, None, spliced)?;
+            let p = &m.profile;
+            let (mut ok, mut good) = (0usize, 0usize);
+            let mut sample: Vec<String> = Vec::new();
+            for i in 0..n {
+                let idx = m.md_col(&p.md_name, i as u32);
+                let s = m.decode_str(idx);
+                if s.is_empty() {
+                    continue;
+                }
+                ok += 1;
+                if static_mhy_dumper::rowtable::is_identifier(&s) {
+                    good += 1;
+                }
+                if sample.len() < 8 {
+                    sample.push(s);
+                }
+            }
+            let rate = good as f64 / ok.max(1) as f64;
+            println!(
+                "engine verify: {}/{} rows named, identifier rate {:.1}%, sample {}",
+                ok, n, 100.0 * rate, sample.join(", ")
+            );
+            if rate < 0.9 {
+                println!("engine verify: identifier rate below 90% — treat the method slice as broken");
+            }
+        }
+    }
+
     for (name, rec) in &report.semantics {
         println!(
             "{:14} score={} fn={:#x} slot={:#x} {} {:#x} resolved={:?} chains={}",

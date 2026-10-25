@@ -8,6 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::cipher::{CipherOp, CipherSchedule};
+use crate::expr::{fam_value, Expr, Fam};
 
 /// Per-row index mask chains. Each chain is evaluated on `i` (u32-domain row index)
 /// in 64-bit arithmetic, then truncated to u32.
@@ -204,6 +205,78 @@ pub enum ColKind {
     AddC,
     /// plain = (raw + C) ^ mask(i)
     AddCXorMask,
+    // ---- zero-touch families (R78, spliced by `auto-tables --profile-out`) ----
+    // These evaluate against the generic `md_mask_expr` chain, NOT md_pmask:
+    // the fixed MaskChain shape cannot express every real chain (e.g. 6.6's
+    // movabs multiplier is 46 bits wide). Formulas are expr::fam_value in the
+    // u32 domain; count kinds are rowtable's count_decode in the u8 domain.
+    /// plain = raw - mask(i) + C
+    GenSubMaskAddC,
+    /// plain = raw + C - mask(i)
+    GenAddCSubMask,
+    /// plain = raw ^ C ^ mask(i)
+    GenXorCXorMask,
+    /// plain = (raw + C) ^ mask(i)
+    GenAddCXorMask,
+    /// plain = (raw ^ C) - mask(i)
+    GenXorCSubMask,
+    /// u8: plain = raw ^ C ^ mask8(i)
+    GenCountXor8,
+    /// u8: plain = raw - mask8(i) - C
+    GenCountSub8,
+    /// u8: plain = raw + mask8(i) + C
+    GenCountAdd8,
+}
+
+impl ColKind {
+    /// Map a rowtable transform family to its generic column kind.
+    pub fn from_fam(fam: Fam) -> ColKind {
+        match fam {
+            Fam::SubMaskAddC => ColKind::GenSubMaskAddC,
+            Fam::AddCSubMask => ColKind::GenAddCSubMask,
+            Fam::XorCXorMask => ColKind::GenXorCXorMask,
+            Fam::AddCXorMask => ColKind::GenAddCXorMask,
+            Fam::XorCSubMask => ColKind::GenXorCSubMask,
+        }
+    }
+
+    /// Map a rowtable count-op word ("xor"/"sub"/"add") to its generic u8 kind.
+    pub fn from_count_op(op: &str) -> Option<ColKind> {
+        match op {
+            "xor" => Some(ColKind::GenCountXor8),
+            "sub" => Some(ColKind::GenCountSub8),
+            "add" => Some(ColKind::GenCountAdd8),
+            _ => None,
+        }
+    }
+}
+
+/// Generic-column decode shared by the engine and the splice tests: one place
+/// that turns (kind, raw, mask(i), C) into the plain value, so the conversion
+/// from solver output to profile data can never drift from the evaluator.
+#[inline]
+pub fn gen_col_value(kind: ColKind, raw: u32, mask: u32, c: u32) -> u32 {
+    match kind {
+        ColKind::GenSubMaskAddC | ColKind::GenAddCSubMask | ColKind::GenXorCXorMask
+        | ColKind::GenAddCXorMask | ColKind::GenXorCSubMask => {
+            let fam = match kind {
+                ColKind::GenSubMaskAddC => Fam::SubMaskAddC,
+                ColKind::GenAddCSubMask => Fam::AddCSubMask,
+                ColKind::GenXorCXorMask => Fam::XorCXorMask,
+                ColKind::GenAddCXorMask => Fam::AddCXorMask,
+                _ => Fam::XorCSubMask,
+            };
+            fam_value(fam, raw as u64, mask as u64, c as u64, u32::MAX as u64) as u32
+        }
+        ColKind::GenCountXor8 => (raw ^ mask ^ c) as u8 as u32,
+        ColKind::GenCountSub8 => (raw as u8)
+            .wrapping_sub(mask as u8)
+            .wrapping_sub(c as u8) as u32,
+        ColKind::GenCountAdd8 => (raw as u8)
+            .wrapping_add(mask as u8)
+            .wrapping_add(c as u8) as u32,
+        _ => raw,
+    }
 }
 
 /// The full per-build profile (generation 7.x layout).
@@ -283,6 +356,12 @@ pub struct Profile {
     /// `strsec = i32(header[hdr_off]) - strsub` — offset of the string section in body.
     pub str_hdr_off: u32,
     pub str_sub: u32,
+    /// Zero-touch override: string-section body offset derived from the target
+    /// binary (`derive::cipher::derive_build`). When set it supersedes
+    /// `str_hdr_off`/`str_sub`, so a spliced profile stays usable even when the
+    /// header-slot transfer for `str` failed or picked a wrong ordinal.
+    #[serde(default)]
+    pub strsec_direct: Option<u32>,
 
     pub type_defs: TableBase,
     /// typeDef-table BYTE SIZE (not an offset): `rows = size / td_stride`. The structural
@@ -473,6 +552,14 @@ pub struct Profile {
     pub td_iface_count_add: u32,
 
     pub md_stride: u32,
+    /// Zero-touch override: generic per-row mask chain for the METHOD table
+    /// (a pure function of the row index, from symwalk/emu). When set it
+    /// supersedes `md_pmask`, and the Gen* column kinds evaluate against it —
+    /// `md_mask2_mul` is unused on that path. Needed because MaskChain's
+    /// fixed u32-constant shape cannot express chains like 6.6's
+    /// `((i*0x190F9299014A)^0x534F6131)+0x62C58385`.
+    #[serde(default)]
+    pub md_mask_expr: Option<Expr>,
     pub md_ret_type: Column,
     pub md_name: Column,
     pub md_param_start: Column,

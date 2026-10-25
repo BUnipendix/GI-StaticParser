@@ -79,7 +79,7 @@ impl HeapIndex {
     }
 }
 
-fn is_identifier(s: &str) -> bool {
+pub fn is_identifier(s: &str) -> bool {
     let mut cs = s.chars();
     match cs.next() {
         Some(c) if c.is_ascii_alphabetic() || "_.<>`".contains(c) => {}
