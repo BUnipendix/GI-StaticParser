@@ -151,3 +151,5 @@
 
 - [2026-10-25] `mhydump rowtable --metadata .. --base 0x.. --stride 26 --rows N --strings strings.json --walks pool.json [--prior ..] [--out ..]`：**列求解器 Rust 化（R39 第二块）**。6.7 实弹与 Python 逐字段一致（name 0x6bbf48d/count off24/start 0xd62b555 链 0 违例）；先验名内置 `assets/prior_method_names.json`。样本门控测试：`MHY_SAMPLE_EXE/DAT/STRINGS=.. cargo test rowtable_67 -- --ignored`。注意 release 构建：`env -u RUSTC_WRAPPER /usr/bin/cargo build --release`（裸 cargo 被代理劫持；dev profile 不会更新 target/release/mhydump）。
 - auto_tables.py 现每表自动并入 emu_chain 链（6.6 method 12→24 条含 movabs 形态）——形态转移+symwalk+模拟三路一条命令。
+
+- [2026-10-25] `mhydump symwalk --exe .. --blob-va 0x.. --site 0x.. [--hdr-global ..] [--back 0x120] [--win 0x700] [--out ..]`：**符号执行提常数 Rust 化（R39 第三块）**。11/11 锚点站点逐位回归（`MHY_SAMPLE_ROOT=.. cargo test symwalk_regression -- --ignored`）；Python symwalk.py 的对位实现，产物同表达式 JSON。移植期四根因记录于实现日志 R75（iced imm32to64 变体/lo 穿透/Win64 caller-saved/r8-r15 解析）。
