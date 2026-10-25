@@ -142,3 +142,9 @@
 - [2026-10-18] 最终校验：tools/final_verify.sh [out]（重建全部工件并断言计数/大小；WITH_LITERALS=1 重跑字面量工具）+ tools/final_verify.py（仅校验现有工件）。7.1 实测全 PASS、端到端 31.7s。泛型参数名负结果与最终差距清单见 docs/re/71-final-status.md、IMPLEMENTATION_LOG §89。
 
 - [2026-10-25] `emu_chain.py <exe> --metadata .. --site 0x.. [--fn-start ..] [--set r10=body]`：unicorn 静态模拟提链（R71）。7.1 ground truth 链+mask2 逐位复现；6.6 方法表 open case 关闭（链 0x190f9299014a 系，rowtable_solve 验收全绿）；6.5/6.1 方法链+name 列 idrate 1.0。Rust 移植（R39）：log-then-rebuild → unicorn crate + serde，表达式 JSON 保持语言中立。
+
+### Rust 移植进度（R39，2026-10-25 起）
+
+- `src/expr.rs`：表达式求值器 + Fam 列变换族（symwalk/rowtable_solve 的 Rust 半）。**wire format = 数组形式**，serde 1.0.229 元组变体默认是映射形式，已手写 Serialize/Deserialize 对齐 Python 工件。测试含 6.7/6.6 真实工件常数回归。
+- 构建/测试：`env -u RUSTC_WRAPPER /usr/bin/cargo test`（会话代理劫持裸 `cargo`）。
+- 下一步移植顺序建议：rowtable 列求解器（纯代数）→ symwalk（iced-x86 或 capstone-rs）→ emu_chain（unicorn crate）→ auto_tables 编排（并入 mhydump 子命令）。
