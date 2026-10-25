@@ -16,6 +16,7 @@ pub mod dump;
 pub mod expr;
 pub mod rowtable;
 pub mod symwalk;
+pub mod emu_chain;
 pub mod dump_gen;
 pub mod vtable;
 pub mod dummy_export;

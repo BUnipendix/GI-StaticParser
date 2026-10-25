@@ -129,6 +129,27 @@ enum Cmd {
         #[arg(long)]
         out: Option<String>,
     },
+    /// Static-emulation mask-chain extractor (Rust port of
+    /// tools/version-triage/emu_chain.py): maps the real exe+metadata,
+    /// plants header/body globals, runs zero+forest seed strategies, and
+    /// rebuilds chain expressions from the executed arithmetic.
+    EmuChain {
+        #[arg(short, long)]
+        exe: String,
+        #[arg(long)]
+        metadata: String,
+        #[arg(long, value_parser = parse_u64_hex)]
+        blob_va: u64,
+        #[arg(long, value_parser = parse_u64_hex)]
+        hdr_global: u64,
+        /// Function start to emulate from (hex).
+        #[arg(long, value_parser = parse_u64_hex)]
+        start: u64,
+        #[arg(long, default_value_t = 60_000)]
+        max_insns: u64,
+        #[arg(long)]
+        out: Option<String>,
+    },
     /// Milestone (a): parse a PE image, print its section table, ImageBase, and flag BSS globals.
     PeValidate {
         /// Path to GenshinImpact.exe (or any PE32+ image).
@@ -289,6 +310,38 @@ fn main() -> Result<()> {
                         rep.columns.len()
                     );
                     for c in rep.chains.iter().take(8) {
+                        println!("  chain {}", c.expr);
+                    }
+                }
+            }
+            Ok(())
+        }
+        Cmd::EmuChain { exe, metadata, blob_va, hdr_global, start, max_insns, out } => {
+            let d = std::fs::read(&exe).unwrap_or_else(|e| {
+                eprintln!("read {exe}: {e}");
+                std::process::exit(1);
+            });
+            let md = std::fs::read(&metadata).unwrap_or_else(|e| {
+                eprintln!("read {metadata}: {e}");
+                std::process::exit(1);
+            });
+            let img = static_mhy_dumper::pe::Image::parse(&d).expect("pe parse");
+            let mut rep = static_mhy_dumper::emu_chain::emu_chain(
+                &img, &d, &md, blob_va, hdr_global, start, max_insns,
+            );
+            rep.exe = exe.clone();
+            let j = serde_json::to_string_pretty(&rep).unwrap();
+            match out {
+                Some(p) => std::fs::write(p, j).unwrap(),
+                None => {
+                    println!(
+                        "start {:#x}: {} chains, {} anchors, stops {:?}",
+                        start,
+                        rep.chains.len(),
+                        rep.anchors.len(),
+                        rep.stops
+                    );
+                    for c in rep.chains.iter().take(6) {
                         println!("  chain {}", c.expr);
                     }
                 }

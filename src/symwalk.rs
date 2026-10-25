@@ -57,6 +57,10 @@ pub struct SymwalkReport {
 }
 
 // ------------------------------------------------------------- register map
+pub fn reg_canon_bits(name: &str) -> Option<(String, u32)> {
+    reg_info(name)
+}
+
 fn reg_name(r: Register) -> String {
     format!("{:?}", r)
 }

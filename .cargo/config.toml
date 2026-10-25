@@ -1,0 +1,5 @@
+# unicorn-engine-sys (qemu backend) references GCC 16-byte atomics
+# (__atomic_compare_exchange_16) which rust-lld does not provide from
+# libgcc; link the system libatomic explicitly.
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-latomic"]
