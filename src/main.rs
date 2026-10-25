@@ -150,6 +150,37 @@ enum Cmd {
         #[arg(long)]
         out: Option<String>,
     },
+    /// Full zero-touch pipeline for one target version (Rust port of
+    /// auto_tables.py, R39 final piece): shape-transfer semantic seeds from a
+    /// solved version, then symwalk + emu-chain the matched functions, then
+    /// (optionally) solve the method table with the rowtable column solver.
+    AutoTables {
+        #[arg(short, long)]
+        exe: String,
+        #[arg(long)]
+        metadata: String,
+        /// Target loadsites cache JSON.
+        #[arg(long)]
+        sites: String,
+        /// Seed semantics JSON (data file; e.g. docs/re/artifacts-*/shape-seed.json
+        /// or the 6.7 table set).
+        #[arg(long)]
+        seed: String,
+        #[arg(long)]
+        seed_sites: String,
+        #[arg(long)]
+        seed_derive: String,
+        /// Heap enumeration (mhydump strings --out) for method-table solving.
+        #[arg(long)]
+        strings: Option<String>,
+        /// Solve the method table end-to-end after the transfer.
+        #[arg(long)]
+        solve_method: bool,
+        #[arg(long, default_value_t = 675_000)]
+        rows: usize,
+        #[arg(long)]
+        out: Option<String>,
+    },
     /// Milestone (a): parse a PE image, print its section table, ImageBase, and flag BSS globals.
     PeValidate {
         /// Path to GenshinImpact.exe (or any PE32+ image).
@@ -346,6 +377,10 @@ fn main() -> Result<()> {
                     }
                 }
             }
+            Ok(())
+        }
+        Cmd::AutoTables { exe, metadata, sites, seed, seed_sites, seed_derive, strings, solve_method, rows, out } => {
+            auto_tables_cmd(&exe, &metadata, &sites, &seed, &seed_sites, &seed_derive, strings.as_deref(), solve_method, rows, out.as_deref())?;
             Ok(())
         }
         Cmd::PeValidate { exe } => pe_validate(&exe),
@@ -1190,4 +1225,92 @@ fn rowtable_cmd(
             std::process::exit(1);
         }
     }
+}
+fn auto_tables_cmd(
+    exe: &str,
+    metadata: &str,
+    sites_path: &str,
+    seed_path: &str,
+    seed_sites_path: &str,
+    seed_derive_path: &str,
+    strings_path: Option<&str>,
+    solve_method: bool,
+    rows: usize,
+    out_path: Option<&str>,
+) -> anyhow::Result<()> {
+    use static_mhy_dumper::emu_chain;
+    use static_mhy_dumper::expr::Expr;
+    use static_mhy_dumper::shape_transfer::{
+        transfer_semantic, DeriveFile, SeedFile, SitesFile, TransferRec, TransferReport,
+    };
+    use static_mhy_dumper::symwalk;
+
+    let d = std::fs::read(exe)?;
+    let md = std::fs::read(metadata)?;
+    let img = static_mhy_dumper::pe::Image::parse(&d)?;
+    let sd = std::fs::read(seed_sites_path.replace('~', &std::env::var("HOME").unwrap_or_default()))?;
+    let seed_img_path = serde_json::from_str::<SitesFile>(&String::from_utf8_lossy(&sd))?.exe;
+    let seed_bytes = std::fs::read(&seed_img_path)?;
+    let seed_img = static_mhy_dumper::pe::Image::parse(&seed_bytes)?;
+
+    let target_sites: SitesFile = serde_json::from_str(&std::fs::read_to_string(sites_path)?)?;
+    let seed_sites: SitesFile = serde_json::from_str(&String::from_utf8_lossy(&sd))?;
+    let seed: SeedFile = serde_json::from_str(&std::fs::read_to_string(seed_path)?)?;
+    let seed_derive: DeriveFile = serde_json::from_str(&std::fs::read_to_string(seed_derive_path)?)?;
+
+    let mut report = TransferReport {
+        target_exe: exe.to_string(),
+        semantics: Default::default(),
+    };
+    let body = if md.len() > 0x210 { &md[0x210..] } else { &[][..] };
+    for (name, sem) in &seed.semantics {
+        let mut rec: TransferRec =
+            transfer_semantic(&seed_img, &seed_bytes, &img, &d, &seed, &seed_sites, &seed_derive, &target_sites, name, sem);
+        let _ = &rec;
+        // symwalk + emu on the matched function, merged chains
+        if rec.matched_fn != 0 {
+            let (sw, _) = symwalk::symwalk(&img, &d, target_sites.blob_va, Some(target_sites.hdr_global), rec.matched_fn, 0x120, 0x700);
+            let mut chains: Vec<Expr> = sw.chains.iter().map(|c| c.expr.clone()).collect();
+            let emu = emu_chain::emu_chain(&img, &d, &md, target_sites.blob_va, target_sites.hdr_global, rec.matched_fn, 60_000);
+            chains.extend(emu.chains.iter().map(|c| c.expr.clone()));
+            rec.chains = chains;
+        }
+        report.semantics.insert(name.clone(), rec);
+    }
+
+    // optional: solve the method table end-to-end
+    let mut solved: Option<serde_json::Value> = None;
+    if solve_method {
+        if let Some(sp) = strings_path {
+            let Some(mrec) = report.semantics.get("method_defs").or_else(|| report.semantics.get("method_defs")) else {
+                anyhow::bail!("seed has no method_defs semantic");
+            };
+            let Some(resolved) = mrec.resolved else {
+                anyhow::bail!("method transfer unresolved");
+            };
+            let base = (resolved & 0xFFFF_FFFF) as usize;
+            let heap = static_mhy_dumper::rowtable::HeapIndex::load(sp)?;
+            let prior = static_mhy_dumper::rowtable::load_prior(None).map_err(|e| anyhow::anyhow!(e))?;
+            let chains: Vec<Expr> = mrec.chains.clone();
+            if let Some(rep) = static_mhy_dumper::rowtable::solve_table(body, base, 26, rows, &chains, &heap, &prior) {
+                solved = Some(serde_json::to_value(&rep)?);
+            }
+        }
+    }
+
+    let mut payload = serde_json::to_value(&report)?;
+    if let Some(sv) = solved {
+        payload["method_table"] = sv;
+    }
+    match out_path {
+        Some(p) => std::fs::write(p, serde_json::to_string_pretty(&payload)?)?,
+        None => println!("{}", serde_json::to_string_pretty(&payload)?),
+    }
+    for (name, rec) in &report.semantics {
+        println!(
+            "{:14} score={} fn={:#x} slot={:#x} {} {:#x} resolved={:?} chains={}",
+            name, rec.score, rec.matched_fn, rec.slot, rec.op, rec.imm, rec.resolved, rec.chains.len()
+        );
+    }
+    Ok(())
 }
