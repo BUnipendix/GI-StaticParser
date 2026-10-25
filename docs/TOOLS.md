@@ -155,3 +155,5 @@
 - [2026-10-25] `mhydump symwalk --exe .. --blob-va 0x.. --site 0x.. [--hdr-global ..] [--back 0x120] [--win 0x700] [--out ..]`：**符号执行提常数 Rust 化（R39 第三块）**。11/11 锚点站点逐位回归（`MHY_SAMPLE_ROOT=.. cargo test symwalk_regression -- --ignored`）；Python symwalk.py 的对位实现，产物同表达式 JSON。移植期四根因记录于实现日志 R75（iced imm32to64 变体/lo 穿透/Win64 caller-saved/r8-r15 解析）。
 
 - [2026-10-25] `mhydump emu-chain --exe .. --metadata .. --blob-va 0x.. --hdr-global 0x.. --start 0x.. [--max-insns 60000] [--out ..]`：**模拟执行链提取 Rust 化（R39 第四块）**。6/6 版本 ground truth 回归（`MHY_SAMPLE_ROOT=.. cargo test emu_chain_regression -- --ignored`），优于 Python（6.3/6.2 不再断于间接调用）。注意：.cargo/config.toml 有 `-latomic`（unicorn qemu 后端 16 字节原子需要）。
+
+- [2026-10-25] `mhydump auto-tables --exe .. --metadata .. --sites <loadsites.json> --seed <seed.json> --seed-sites .. --seed-derive .. [--strings .. --solve-method --rows N] [--out ..]`：**R39 收官——纯 Rust 零接触管线一条命令**（shape 转移→symwalk+emu 合流→rowtable 方法表求解）。6.6 实弹：方法表三列与 Python 战役输出逐字段一致（name 0xA6C26AFF/2580 行、count off24、start 0xE28AA76E 链 0 违例）。种子文件可用 6.7 五表集（语义+slot/op/imm+stride 纯数据）。
