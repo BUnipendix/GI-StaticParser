@@ -148,3 +148,6 @@
 - `src/expr.rs`：表达式求值器 + Fam 列变换族（symwalk/rowtable_solve 的 Rust 半）。**wire format = 数组形式**，serde 1.0.229 元组变体默认是映射形式，已手写 Serialize/Deserialize 对齐 Python 工件。测试含 6.7/6.6 真实工件常数回归。
 - 构建/测试：`env -u RUSTC_WRAPPER /usr/bin/cargo test`（会话代理劫持裸 `cargo`）。
 - 下一步移植顺序建议：rowtable 列求解器（纯代数）→ symwalk（iced-x86 或 capstone-rs）→ emu_chain（unicorn crate）→ auto_tables 编排（并入 mhydump 子命令）。
+
+- [2026-10-25] `mhydump rowtable --metadata .. --base 0x.. --stride 26 --rows N --strings strings.json --walks pool.json [--prior ..] [--out ..]`：**列求解器 Rust 化（R39 第二块）**。6.7 实弹与 Python 逐字段一致（name 0x6bbf48d/count off24/start 0xd62b555 链 0 违例）；先验名内置 `assets/prior_method_names.json`。样本门控测试：`MHY_SAMPLE_EXE/DAT/STRINGS=.. cargo test rowtable_67 -- --ignored`。注意 release 构建：`env -u RUSTC_WRAPPER /usr/bin/cargo build --release`（裸 cargo 被代理劫持；dev profile 不会更新 target/release/mhydump）。
+- auto_tables.py 现每表自动并入 emu_chain 链（6.6 method 12→24 条含 movabs 形态）——形态转移+symwalk+模拟三路一条命令。
