@@ -58,6 +58,11 @@
 | `colverify.py <hypo.json>` | 假设 JSON → 全表验证（分布/链/哨兵），产证据记录 | 6.7.0 五列 60k 行验证 |
 | `densescan3.py <exe> <section> <out.jsonl>` | `.upx0` 全段列成语扫描：**双向变换**（常数先行/加载先行）+寄存器族归一+垃圾容忍+4KB 重同步 | 已用 7.1 已知常数校准（name/flags 双中）；v1/v2 已废弃 |
 | `colscan.py` | 单变换常数站点窗数据流（单向，早期版） | 被 densescan3 取代，留档 |
+| `symwalk.py <exe> --blob-va .. --site 0x.. [--hdr-global ..]` | **builder 函数符号执行提取器（L4a）**：hdr 锚点/索引掩码链（含 mask2 派生）/行列公式→表达式树 JSON | 12 目标回归：掩码链 11/12 组全常数；7.1 方法链+mask2/事件 movabs 链全过（R68） |
+| `rowtable_solve.py --vdir .. --base-candidates .. --walks .. --prior-names ..` | **数据侧语义求解器**：name（堆明文反解 C）/count（众数）/start（哨兵+累计链）/flags 列自动求解+验收 | 6.7 方法表端到端回归四列常数=人工逆向全一致（R69）；6.6/6.5 参数表零接触解（R70） |
+| `exprvm.py` | 表达式树→numpy 向量化求值（symwalk 列公式直接验证） | ✓ |
+| `chain_hunt.py` | imul-imm32 簇向量化扫描（形态转移失败时找链函数） | 簇检测 ✓（23807 头/3s）；walk ranking 留优化 |
+| `auto_tables.py <ver>` | **零接触编排器**：6.7 种子→shape_transfer→symwalk→链/列/基址落盘 | 5 版（6.1/6.2/6.3/6.5/6.6）×5 表全产链；报告 docs/re/zero-touch-report.md |
 
 `out/6.7.0.columns.json` 是「相邻版本推导结果」的记录格式样例（含证据、未解项、代码事件）。
 

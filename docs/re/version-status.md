@@ -34,3 +34,6 @@ shape=形态转移结果；method/param/prop/field/event/typearr=已解的布局
 | 7.1.0 | Y | Y | Y | Y | Y | - | - | - | - | - | - | - | 88904 |
 
 Y=已解/已产出；P=候选未验证；-=缺失。
+
+> 2026-10-25 零接触战役（R70，产物在 ~/gire/out/zero-touch/，报告 docs/re/zero-touch-report.md）：
+> 6.6.0/6.5.0 参数表全解（链+基址+name/type 列并解码验证）；6.3.0 方法 builder+链定位；6.2.0/6.1.0 链已提取（验收未过）；各版方法表链除 6.3 外未定位。

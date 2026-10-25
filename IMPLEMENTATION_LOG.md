@@ -5836,3 +5836,26 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
    静态偏移这条线摸到 image 表 loader（无 typeStart/count）、exe 数组搜索（0 命中）两个有证据的
    终点；尚未摸的藤：loader per-image 注册 sub_14051e390 的 typeStart 来源、0x188/0x118 大表、
    VMP 初始化器仿真。
+
+## R68–R70（2026-10-25）：通用解法落地——符号执行提常数 + 数据验收求解器 + 零接触战役
+
+**不是需求（方案记录，需求见 REQUIREMENTS）**
+
+### R68 symwalk.py（L4a 核心件）
+- builder 函数窗口线性符号执行：hdr 锚点/掩码链（含 mask2=mask*K 派生）/行列公式全自动提取，表达式树 JSON 为唯一接口；exprvm.py numpy 求值。
+- 关键修复：寄存器别名表 base[1:] 截断 bug（32 位名从未映射到 64 位规范名）、位宽统一 bits（调用处误 ×8）、lo 嵌套折叠、x*A±x*B 分配律折叠（mod 2^64 sound）、行标记广义线性化（shl/sub stride 惯用语，lea 5×5+1 折成 26i）、递归死循环（x+A+x*B 分支重建自身输入）、PE 字节按路径共享（多 walker 不再各拷 450MB，曾 OOM）。
+- 多起点 top-3 质量合并（resolved<body 锚点/大乘数链/列数评分）。
+- 回归 12 目标（7.0/6.7/7.1 方法/参数/字段/属性/事件锚点）：掩码链 11/12 组全常数复现；7.0 参数表/属性表整组 PASS；残缺=16 位访问器列与兄弟函数列（设计上由多锚点合并+数据求解覆盖）。提交 f376f6b。
+
+### R69 rowtable_solve.py
+- name 列：堆枚举（mhydump strings）已知明文反解 C；**fam_invert 修 XorCSubMask 逆推 bug（C=raw^((idx+mask)&M)，此前漏了外层 xor 导致 6.6 全灭）**；验收=堆命中率≥45%×4000 且标识符率（可解行中）≥95%。
+- count 列：u8 众数钉 C（sub-88 ≡ add-168 mod 256 族自动归一）。
+- start 列：哨兵 0xFFFFFFFF 钉 C + 非哨兵行=累计参数数全表校验（修正连续差分判据——哨兵行不参与链）；32 位域截断（fam_value dom 参数）修 64 位回绕假象。
+- **6.7 方法表端到端回归全绿：name off8 XorCSubMask 0x6bbf48d / count off24 +0xA8 / start off0 0xd62b555 链 0 违例 哨兵 385952/385952 / flags off20 —— 与人工逆向常数全部一致。**
+- 链求值坑：人工注入测试树多加了 lo32(i*mul1)（真代码 64 位 imul）——symwalk 记录即正确；教训=注入测试必须与代码记录逐位对齐。提交 0b8f3e5。
+- 6.6 方法链未定位（open）：锚点密集区 0x40 步长密扫无 stride-26+大乘链共存窗口；解码器 52 调用点定向只覆盖惰性访问器外围；全 .text imul 簇 23807 头（3s）但 walk 不可行（未 ranking）。chain_hunt.py 留优化。
+
+### R70 auto_tables.py + 零接触战役
+- 6.7 多表种子（数据文件）→ shape_transfer → symwalk → 落盘 ~/gire/out/zero-touch/。
+- **6.6/6.5 参数表零接触全解**（见 zero-touch-report.md §2，解码验证标识符率 100%）；6.3 方法 builder 定位（0x140467bc8，stride+链同函数）；6.2/6.1 链已提取、验收未过。
+- oracle（6.1–6.5 官方 dump 已解压 ~/gire/out/oracle/，6.0=59,629/6.1=72,832/6.2=73,951/6.3=76,397/6.4=77,260/6.5=80,166 类型）逐名比对留下一步。提交 2cd4400。
