@@ -5897,3 +5897,9 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
 - 调试方法论：构造隔离微测试（mov eax,edi+imul3 / 行标记+disp4 / movabs+imul2）把「全站缺」收敛到单指令路径，再回真实站点验证——比全站调试快一个量级。
 - 四根因（Rust 移植特有，Python 无）：iced OpKind::Immediate32to64（imul r64,r64,imm32 的立即数形态，imm_of 曾静默 None）；lin_terms 对 Lo/Ext 不穿透（32 位循环变量→行标记全灭；对 <2^32 索引穿透精确）；caller-saved 表 SysV/Win64 混淆（rsi/rdi 被误清，getter 列全在 call 后）；reg_info 裸 r8-r15 无后缀名解析（"R13" 的 rest[..len-1] 剥掉数字）。
 - 设计差异（有意）：候选全量合并（Python top-3）——错起点垃圾由下游数据验收过滤；合并回扫 289 起点，链 cap 400。
+
+## R76（2026-10-25）：emu_chain Rust 化 6/6 全绿（不是需求，方案记录）
+
+- src/emu_chain.rs + `mhydump emu-chain`。unicorn crate API 与 Python 版差异：Prot/HookType::MEM_INVALID（无 add_mem_invalid_hook，走 add_mem_hook）；emu_start count 参数 usize；hook 闭包借用 D=() 的 Unicorn；共享态用 Rc<RefCell>（hooks 持弱引用，emu 结束后 Rc::try_unwrap/swap 取回）。
+- 链接：unicorn qemu 后端引 __atomic_compare_exchange_16（GCC 内建），rust-lld 不从 libgcc 提供——`.cargo/config.toml` rustflags `-C link-arg=-latomic`。
+- 结果：6/6 版本（7.1/6.6/6.5/6.3/6.2/6.1）链常数逐位复现；6.3/6.2 优于 Python（栈返回恢复穿过首段间接调用，stop=clean）。全量 cargo test 31 passed。
