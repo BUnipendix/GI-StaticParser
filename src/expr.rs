@@ -82,49 +82,54 @@ impl Expr {
             Expr::Raw(off, w) => raw(*off, *w),
             Expr::Op2(op, a, b) => {
                 let (x, y) = (a.eval(i, hdr, raw)?, b.eval(i, hdr, raw)?);
-                match op {
-                    BinOp::Add => x.wrapping_add(y),
-                    BinOp::Sub => x.wrapping_sub(y),
-                    BinOp::Mul => x.wrapping_mul(y),
-                    BinOp::Xor => x ^ y,
-                    BinOp::And => x & y,
-                    BinOp::Or => x | y,
-                    BinOp::Shr => {
-                        if y >= 64 {
-                            0
-                        } else {
-                            x >> y
-                        }
-                    }
-                    BinOp::Shl => {
-                        if y >= 64 {
-                            0
-                        } else {
-                            x.wrapping_shl(y as u32)
-                        }
-                    }
-                }
+                eval_binop_pub(op, x, y)
             }
             Expr::Lo(n, a) => {
                 let n = *n as u32;
+                let v = a.eval(i, hdr, raw)?;
                 if n >= 64 {
-                    a.eval(i, hdr, raw)?
+                    v
                 } else {
-                    a.eval(i, hdr, raw)? & ((1u64 << n) - 1)
+                    v & ((1u64 << n) - 1)
                 }
             }
-            Expr::Ext(n, a, signed) => {
+            Expr::Ext(n, a, sg) => {
                 let v = a.eval(i, hdr, raw)?;
                 let n = *n as u32;
                 if n >= 64 {
                     v
-                } else if *signed && (v >> (n - 1)) & 1 == 1 {
+                } else if *sg && (v >> (n - 1)) & 1 == 1 {
                     v | (!0u64 << n)
                 } else {
                     v & ((1u64 << n) - 1)
                 }
             }
         })
+    }
+}
+
+fn eval_binop_pub(op: &BinOp, x: u64, y: u64) -> u64 {
+    match op {
+        BinOp::Add => x.wrapping_add(y),
+        BinOp::Sub => x.wrapping_sub(y),
+        BinOp::Mul => x.wrapping_mul(y),
+        BinOp::Xor => x ^ y,
+        BinOp::And => x & y,
+        BinOp::Or => x | y,
+        BinOp::Shr => {
+            if y >= 64 {
+                0
+            } else {
+                x >> y
+            }
+        }
+        BinOp::Shl => {
+            if y >= 64 {
+                0
+            } else {
+                x.wrapping_shl(y as u32)
+            }
+        }
     }
 }
 
@@ -276,6 +281,205 @@ where
     use serde::de::Error;
     seq.next_element::<T>()?
         .ok_or_else(|| A::Error::custom(format!("missing {}", what)))
+}
+
+
+// --------------------------------------------------------- shared utilities
+/// Pretty-print in the same shape as the Python side (`0x...` immediates,
+/// `rawN@0xoff`, infix ops). Regression tests match hex substrings here.
+// --------------------------------------------------------- shared utilities
+/// Pretty-print in the same shape as the Python side (`0x...` immediates,
+/// `rawN@0xoff`, infix ops). Regression tests match hex substrings here.
+impl std::fmt::Display for Expr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Expr::Imm(v) => write!(f, "{:#x}", v),
+            Expr::Sym(n) => write!(f, "{}", n),
+            Expr::Hdr(slot, _) => write!(f, "hdr[{:#x}]", slot),
+            Expr::Raw(off, w) => write!(f, "raw{}@{:#x}", w, off),
+            Expr::Op2(op, a, b) => {
+                let o = match op {
+                    BinOp::Add => "+",
+                    BinOp::Sub => "-",
+                    BinOp::Mul => "*",
+                    BinOp::Xor => "^",
+                    BinOp::And => "&",
+                    BinOp::Or => "|",
+                    BinOp::Shr => ">>",
+                    BinOp::Shl => "<<",
+                };
+                write!(f, "({} {} {})", a, o, b)
+            }
+            Expr::Lo(n, a) => write!(f, "lo{}({})", n, a),
+            Expr::Ext(n, a, sg) => write!(f, "{}ext{}({})", if *sg { "s" } else { "z" }, n, a),
+        }
+    }
+}
+
+pub fn expr_syms(e: &Expr, out: &mut std::collections::BTreeSet<String>) {
+    match e {
+        Expr::Sym(n) => {
+            out.insert(n.clone());
+        }
+        Expr::Imm(_) | Expr::Hdr(_, _) | Expr::Raw(_, _) => {}
+        Expr::Op2(_, a, b) => {
+            expr_syms(a, out);
+            expr_syms(b, out);
+        }
+        Expr::Lo(_, a) | Expr::Ext(_, a, _) => expr_syms(a, out),
+    }
+}
+
+pub fn expr_syms_set(e: &Expr) -> std::collections::BTreeSet<String> {
+    let mut s = std::collections::BTreeSet::new();
+    expr_syms(e, &mut s);
+    s
+}
+
+/// kind=true: contains Hdr; kind=false: contains Raw.
+pub fn expr_has(e: &Expr, hdr: bool) -> bool {
+    match e {
+        Expr::Hdr(_, _) => hdr,
+        Expr::Raw(_, _) => !hdr,
+        Expr::Imm(_) | Expr::Sym(_) => false,
+        Expr::Op2(_, a, b) => expr_has(a, hdr) || expr_has(b, hdr),
+        Expr::Lo(_, a) | Expr::Ext(_, a, _) => expr_has(a, hdr),
+    }
+}
+
+pub fn expr_size(e: &Expr) -> usize {
+    1 + match e {
+        Expr::Op2(_, a, b) => expr_size(a) + expr_size(b),
+        Expr::Lo(_, a) | Expr::Ext(_, a, _) => expr_size(a),
+        _ => 0,
+    }
+}
+
+/// Pure-linear decomposition over symbols.
+pub fn lin_terms(e: &Expr) -> Option<(std::collections::BTreeMap<String, u64>, u64)> {
+    let mut m = std::collections::BTreeMap::new();
+    let c = lin_rec(e, 1, &mut m)?;
+    Some((m, c))
+}
+
+fn lin_rec(e: &Expr, k: u64, m: &mut std::collections::BTreeMap<String, u64>) -> Option<u64> {
+    match e {
+        Expr::Imm(v) => Some(v.wrapping_mul(k)),
+        Expr::Sym(n) => {
+            *m.entry(n.clone()).or_insert(0) = m.get(n).copied().unwrap_or(0).wrapping_add(k);
+            Some(0)
+        }
+        Expr::Op2(BinOp::Add, a, b) => Some(lin_rec(a, k, m)?.wrapping_add(lin_rec(b, k, m)?)),
+        Expr::Op2(BinOp::Sub, a, b) => Some(lin_rec(a, k, m)?.wrapping_sub(lin_rec(b, k, m)?)),
+        Expr::Op2(BinOp::Mul, a, b) => {
+            if let Expr::Imm(v) = a.as_ref() {
+                lin_rec(b, k.wrapping_mul(*v), m)
+            } else if let Expr::Imm(v) = b.as_ref() {
+                lin_rec(a, k.wrapping_mul(*v), m)
+            } else {
+                None
+            }
+        }
+        Expr::Op2(BinOp::Shl, a, b) => {
+            if let Expr::Imm(sh) = b.as_ref() {
+                if *sh < 64 {
+                    return lin_rec(a, k.wrapping_mul(1u64 << sh), m);
+                }
+            }
+            None
+        }
+        // lo/ext wrappers: row indices stay < 2^32 in these loops, so the
+        // truncation never wraps and linear decomposition through the wrapper
+        // is exact. Without this, every 32-bit loop counter kills the row
+        // marker (the dominant encoding of the stride idioms).
+        Expr::Lo(_, a) | Expr::Ext(_, a, _) => lin_rec(a, k, m),
+        _ => None,
+    }
+}
+
+/// Normalizer mirroring the Python `fold`: constant folding, coefficient
+/// merging (x*A ± x*B -> x*(A ± B)), nested lo collapse. Sound mod 2^64.
+pub fn fold(e: &Expr) -> Expr {
+    match e {
+        Expr::Imm(_) | Expr::Sym(_) | Expr::Hdr(_, _) | Expr::Raw(_, _) => e.clone(),
+        Expr::Op2(op, a, b) => {
+            let (a, b) = (fold(a), fold(b));
+            if let (Expr::Imm(x), Expr::Imm(y)) = (&a, &b) {
+                return Expr::Imm(eval_binop_pub(op, *x, *y));
+            }
+            if matches!(op, BinOp::Add | BinOp::Sub) {
+                if let Some(out) = fold_lin_merge(*op, &a, &b) {
+                    return out;
+                }
+            }
+            match (op, &a, &b) {
+                (BinOp::Add, Expr::Imm(0), _) => b,
+                (BinOp::Add, _, Expr::Imm(0)) => a,
+                (BinOp::Sub, _, Expr::Imm(0)) => a,
+                (BinOp::Xor, _, Expr::Imm(0)) => a,
+                (BinOp::Mul, _, Expr::Imm(1)) => a,
+                (BinOp::Mul, Expr::Imm(1), _) => a,
+                (BinOp::Mul, _, Expr::Imm(0)) => Expr::Imm(0),
+                (BinOp::Mul, Expr::Imm(0), _) => Expr::Imm(0),
+                _ => Expr::Op2(*op, Box::new(a), Box::new(b)),
+            }
+        }
+        Expr::Lo(n, a) => {
+            let a = fold(a);
+            match &a {
+                Expr::Imm(v) => Expr::Imm(v & ((1u64 << *n) - 1)),
+                Expr::Raw(_, w) if w == n => a.clone(),
+                Expr::Lo(m, inner) => fold(&Expr::Lo((*m).min(*n), inner.clone())),
+                _ if *n >= 64 => a,
+                _ => Expr::Lo(*n, Box::new(a)),
+            }
+        }
+        Expr::Ext(n, a, sg) => {
+            let a = fold(a);
+            match &a {
+                Expr::Imm(v) => {
+                    let mut v = *v & ((1u64 << *n) - 1);
+                    if *sg && *n < 64 && (v >> (*n - 1)) & 1 == 1 {
+                        v |= !0u64 << *n;
+                    }
+                    Expr::Imm(v)
+                }
+                _ if *n >= 64 => a,
+                _ => Expr::Ext(*n, Box::new(a), *sg),
+            }
+        }
+    }
+}
+
+/// x*A ± x*B -> x*(A ± B) for a single shared symbol.
+fn fold_lin_merge(op: BinOp, a: &Expr, b: &Expr) -> Option<Expr> {
+    let (la, ca) = lin_terms(a)?;
+    let (lb, cb) = lin_terms(b)?;
+    let shared: Vec<String> = la.keys().filter(|k| lb.contains_key(*k)).cloned().collect();
+    if shared.len() != 1 {
+        return None;
+    }
+    let sym = shared[0].clone();
+    let ka = *la.get(&sym).unwrap();
+    let kb = *lb.get(&sym).unwrap();
+    let (kc, cst) = match op {
+        BinOp::Add => (ka.wrapping_add(kb), ca.wrapping_add(cb)),
+        BinOp::Sub => (ka.wrapping_sub(kb), ca.wrapping_sub(cb)),
+        _ => return None,
+    };
+    if kc == 0 {
+        return Some(fold(&Expr::Imm(cst)));
+    }
+    let scaled = if kc == 1 {
+        Expr::Sym(sym)
+    } else {
+        Expr::Op2(
+            BinOp::Mul,
+            Box::new(Expr::Sym(sym)),
+            Box::new(Expr::Imm(kc)),
+        )
+    };
+    Some(fold(&Expr::Op2(BinOp::Add, Box::new(scaled), Box::new(Expr::Imm(cst)))))
 }
 
 #[cfg(test)]

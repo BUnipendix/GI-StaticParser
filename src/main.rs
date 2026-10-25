@@ -110,6 +110,25 @@ enum Cmd {
         #[arg(long)]
         out: Option<String>,
     },
+    /// Symbolic dataflow walk over a metadata builder window (Rust port of
+    /// tools/version-triage/symwalk.py): anchors / mask chains / column
+    /// expressions as expression-tree JSON.
+    Symwalk {
+        #[arg(short, long)]
+        exe: String,
+        #[arg(long, value_parser = parse_u64_hex)]
+        blob_va: u64,
+        #[arg(long, value_parser = parse_u64_hex)]
+        hdr_global: Option<u64>,
+        #[arg(long, value_parser = parse_u64_hex)]
+        site: u64,
+        #[arg(long, value_parser = parse_u64_hex, default_value = "0x120")]
+        back: u64,
+        #[arg(long, value_parser = parse_u64_hex, default_value = "0x700")]
+        win: u64,
+        #[arg(long)]
+        out: Option<String>,
+    },
     /// Milestone (a): parse a PE image, print its section table, ImageBase, and flag BSS globals.
     PeValidate {
         /// Path to GenshinImpact.exe (or any PE32+ image).
@@ -241,6 +260,41 @@ fn main() -> Result<()> {
             prior,
             out,
         } => { rowtable_cmd(&metadata, base as usize, stride, rows, &strings, &walks, prior.as_deref(), out.as_deref()); Ok(()) }
+        Cmd::Symwalk { exe, blob_va, hdr_global, site, back, win, out } => {
+            let d = std::fs::read(&exe).unwrap_or_else(|e| {
+                eprintln!("read {exe}: {e}");
+                std::process::exit(1);
+            });
+            let img = static_mhy_dumper::pe::Image::parse(&d).expect("pe parse");
+            let (mut rep, used) = static_mhy_dumper::symwalk::symwalk(
+                &img,
+                &d,
+                blob_va,
+                hdr_global,
+                site,
+                back as usize,
+                win as usize,
+            );
+            rep.exe = exe.clone();
+            let j = serde_json::to_string_pretty(&rep).unwrap();
+            match out {
+                Some(p) => std::fs::write(p, j).unwrap(),
+                None => {
+                    println!(
+                        "site {:#x}: {} anchors, {} chains (merged {} walks), {} columns",
+                        site,
+                        rep.anchors.len(),
+                        rep.chains.len(),
+                        used,
+                        rep.columns.len()
+                    );
+                    for c in rep.chains.iter().take(8) {
+                        println!("  chain {}", c.expr);
+                    }
+                }
+            }
+            Ok(())
+        }
         Cmd::PeValidate { exe } => pe_validate(&exe),
         Cmd::DecodeOne { exe, metadata, idx } => decode_one(&exe, &metadata, idx),
         Cmd::HeaderDump { exe, metadata } => header_dump(&exe, &metadata),
