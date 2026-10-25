@@ -104,8 +104,9 @@ def fn_start_by_padding(d, ib, secs, site):
 
 
 class Emu:
-    def __init__(self, a):
+    def __init__(self, a, seed_mode='zero'):
         self.a = a
+        self.seed_mode = seed_mode
         self.d, self.ib, self.secs = pe_map(a.exe)
         self.meta = open(a.metadata, 'rb').read()
         self.body_len = len(self.meta) - 0x210
@@ -130,8 +131,16 @@ class Emu:
             mu.mem_write(self.ib + va, self.d[roff:roff + rsz])
         mu.mem_map(META_BASE, (len(self.meta) + 0xFFF) & ~0xFFF)
         mu.mem_write(META_BASE, self.meta)
-        mu.mem_map(SCRATCH, 0x400000)
+        mu.mem_map(SCRATCH, 0x500000)
         mu.mem_map(STACK_TOP - 0x200000, 0x200000)
+        # ret-forest: unknown pointer args are seeded here so chained derefs
+        # land on qwords that all point at a `ret` stub -- indirect calls
+        # through garbage then return immediately instead of faulting.
+        self.ret_stub = SCRATCH + 0x4FF000
+        mu.mem_write(self.ret_stub, b'\xc3')
+        forest = SCRATCH + 0x300000
+        mu.mem_write(forest, struct.pack('<Q', self.ret_stub) * (0x100000 // 8))
+        self.forest = forest
         # plant the two globals: header ptr / body ptr (loadsites convention)
         mu.mem_write(a.hdr_global, struct.pack('<Q', a.blob_va))
         mu.mem_write(a.hdr_global + 8, struct.pack('<Q', META_BASE + 0x210))
@@ -139,7 +148,10 @@ class Emu:
         vals = {'rsp': STACK_TOP - 0x10000, 'rbp': SCRATCH + 0x1000, 'rax': 64}
         for i, r in enumerate(GPR):
             if r not in vals:
-                vals[r] = SCRATCH + 0x2000 + i * 0x40
+                if self.seed_mode == 'forest':
+                    vals[r] = forest + ((i * 0x800) & 0xFFFF8)
+                else:
+                    vals[r] = SCRATCH + 0x2000 + i * 0x40
         setitems = []
         for chunk in (a.set or []):
             setitems.extend(chunk.split(','))
@@ -228,14 +240,17 @@ class Emu:
                 if e[0] == 'op2' and self._has_bigmul(e):
                     self.chains.setdefault(expr_str(e), dict(addr=ins.address, expr=e))
             # also record index-derivations (mask2 = mask*K) even without big mul
-        if m == 'imul' and len(ops) == 2 and ops[0].type == X86_OP_REG and ops[1].type == X86_OP_REG:
-            dst, src = cname(ops[0].reg), cname(ops[1].reg)
-            sete(dst, ['op2', '*', gete(src), ['sym', 'movabs']] if False else
-                      ['op2', '*', gete(src), gete('__last_movabs' )])
-            self.oplog.append((hex(ins.address), m, dst, src, 'reg,reg'))
-        elif m == 'movabs' and len(ops) == 2 and ops[0].type == X86_OP_REG and ops[1].type == X86_OP_IMM:
-            self._reg_expr['__last_movabs'] = ['imm', ops[1].imm & M64]
+        if m == 'movabs' and len(ops) == 2 and ops[0].type == X86_OP_REG and ops[1].type == X86_OP_IMM:
             self._reg_expr[cname(ops[0].reg)] = ['imm', ops[1].imm & M64]
+        elif m == 'imul' and len(ops) == 2 and ops[0].type == X86_OP_REG and ops[1].type == X86_OP_REG:
+            # imul dst, src  ->  dst = dst * src (movabs+imul idiom: src holds imm64)
+            dst, src = cname(ops[0].reg), cname(ops[1].reg)
+            nb = name_bits(ins.reg_name(ops[0].reg))
+            e = ['op2', '*', gete(dst), gete(src)]
+            if nb < 64:
+                e = ['lo', nb, e]
+            sete(dst, e)
+            self.oplog.append((hex(ins.address), m, dst, src, 'reg,reg'))
         elif m == 'imul' and len(ops) == 3 and ops[2].type == X86_OP_IMM and ops[0].type == X86_OP_REG:
             src = cname(ops[1].reg) if ops[1].type == X86_OP_REG else None
             e = ['op2', '*', gete(src) if src else ['sym', 'mem'], ['imm', ops[2].imm & M64]]
@@ -349,13 +364,27 @@ def main():
     ap.add_argument('--json', default=None)
     a = ap.parse_args()
 
-    emu = Emu(a)
-    add_read_hook(emu)
-    d, ib, secs = emu.d, emu.ib, emu.secs
+    d, ib, secs = pe_map(a.exe)
     start = a.fn_start or fn_start_by_padding(d, ib, secs, a.site)
     print(f'emulating from {start:#x} (site {a.site:#x}), hdr={a.blob_va:#x}, '
           f'body mapped @{META_BASE + 0x210:#x}')
-    emu.run(start)
+    merged = None
+    for mode in ('zero', 'forest'):
+        emu = Emu(a, seed_mode=mode)
+        add_read_hook(emu)
+        emu.run(start)
+        print(f'  [{mode}] {emu.icount} insns, stop={ (emu.stop_reason or "clean")[:48] }, '
+              f'chains={len(emu.chains)}, anchors={len(emu.anchors)}')
+        if merged is None:
+            merged = emu
+        else:
+            merged.anchors.extend(emu.anchors)
+            for k, v in emu.chains.items():
+                merged.chains.setdefault(k, v)
+            merged.calls.extend(emu.calls)
+            merged.col_reads |= emu.col_reads
+            merged.icount += emu.icount
+    emu = merged
     if emu.tail:
         print('tail:')
         for t in emu.tail:
