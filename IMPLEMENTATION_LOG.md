@@ -5903,3 +5903,10 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
 - src/emu_chain.rs + `mhydump emu-chain`。unicorn crate API 与 Python 版差异：Prot/HookType::MEM_INVALID（无 add_mem_invalid_hook，走 add_mem_hook）；emu_start count 参数 usize；hook 闭包借用 D=() 的 Unicorn；共享态用 Rc<RefCell>（hooks 持弱引用，emu 结束后 Rc::try_unwrap/swap 取回）。
 - 链接：unicorn qemu 后端引 __atomic_compare_exchange_16（GCC 内建），rust-lld 不从 libgcc 提供——`.cargo/config.toml` rustflags `-C link-arg=-latomic`。
 - 结果：6/6 版本（7.1/6.6/6.5/6.3/6.2/6.1）链常数逐位复现；6.3/6.2 优于 Python（栈返回恢复穿过首段间接调用，stop=clean）。全量 cargo test 31 passed。
+
+## R77（2026-10-25）：R39 收官——auto-tables 编排子命令（不是需求，方案记录）
+
+- src/shape_transfer.rs + `mhydump auto-tables`；纯 Rust 全链：6.7 种子（数据 JSON）→ 指纹转移（trigram Jaccard top-3）→ 匹配函数 symwalk(全起点合并)+emu(zero/forest) 链合流 → rowtable 方法表求解（--solve-method）。
+- **验收**：6.6（方法链须模拟执行的 hardest case）方法表 name/count/start 三列常数与 Python 战役（R71）逐字段一致；method/param/prop/event 四语义 slot 与 Python 逐位同。已知分歧：field_names（score 0.084 弱匹配）序数选取 Rust→slot 0x4 vs Python→slot 0xDC，显式记录待核（该语义基址在 Python 靠 derive 侧独立互证过）。
+- 移植期两根因：iced `memory_displacement64()` 对 RIP 相对寻址返回绝对目标地址（capstone 返回位移，加 next_ip 双重偏移致锚点扫描全空）；种子 op 词（add/xor）与 AnchorOp 符号（+ /^）表示不一致致序数匹配恒败（归一化 parse_op 修复）。
+- R39 五件套完成度：expr(449d1f6)/rowtable(5cf4207)/symwalk(f03ba6f)/emu_chain(185fffc)/shape_transfer+编排(8415cdb)，各带门控回归；Python 原型仍在 tools/version-triage 作为参考实现。
