@@ -5859,3 +5859,12 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
 - 6.7 多表种子（数据文件）→ shape_transfer → symwalk → 落盘 ~/gire/out/zero-touch/。
 - **6.6/6.5 参数表零接触全解**（见 zero-touch-report.md §2，解码验证标识符率 100%）；6.3 方法 builder 定位（0x140467bc8，stride+链同函数）；6.2/6.1 链已提取、验收未过。
 - oracle（6.1–6.5 官方 dump 已解压 ~/gire/out/oracle/，6.0=59,629/6.1=72,832/6.2=73,951/6.3=76,397/6.4=77,260/6.5=80,166 类型）逐名比对留下一步。提交 2cd4400。
+
+## R71（2026-10-25）：模拟执行链提取（用户提议，验证成功）
+
+**不是需求（方案记录）**：用户问「可否通过模拟执行寻找？」+ 指令「最终要移植到 Rust」（后者已录入 REQUIREMENTS R39）。
+
+- `emu_chain.py`：unicorn 静态模拟（映射真实 exe+metadata、植入 hdr_global/body_global、寄存器播种、fetch-unmapped 时栈顶合法则模拟 ret）。执行流 mini-tracker 重建链表达式（symwalk 同款 JSON）。
+- **为什么窗口法找不到 6.6 方法链**：链以 `movabs rax,imm64 + imul r11,rax` 形态存在（symwalk 的 imm 匹配/密扫判据都没覆盖），且该函数早段就有运行时指针间接调用断掉一切回看。模拟执行 30 条指令直接拿到完整链+列公式（+0x10 flags 型 `(raw16+0x1EEA)^mask32`、+0x12 slot 型）。
+- 7.1 ground truth 一次过（链+mask2 逐位）；6.6 方法表全解（name/count/start，链 0 违例）；6.5/6.1 方法链提取+name 验证 idrate 1.0。6.3/6.2 断在首段间接调用，待 ret-forest（把指针寄存器指向填满 ret 桩的页）。
+- Rust 移植映射已记 docs/TOOLS.md 与记忆：symwalk→iced-x86、emu→unicorn crate、exprvm/rowtable_solve→ndarray/裸切片；表达式 JSON 保持 serde 中立。
