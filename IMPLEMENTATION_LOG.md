@@ -5881,3 +5881,12 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
 - **6.4 补充证据**：strings 枚举证明 6.4 heap 前缀无 .ctor/GetText/Format（<Module> 后直接 resourceFormat）——方法名字符串不在 derive 堆，第二字符串空间实锤；GetTextInfoData/GetTextureStreamingEnabled 等长名仍在（属其它表）。6.4 方法名恢复需模拟 C++ 初始化（0x1404B72B0，CRT/TLS 重）或运行时 dump，战略价值低（7.x 无此架构），维持 timebox。
 - **expr.rs 落地**（R39 首块）：Expr/eval + Fam/fam_value/fam_invert + 8 测试。两个坑：① serde 1.0.229 元组变体序列化为 {"imm":v} 而非 ["imm",v]——手写 impl 保数组 wire format（跨语言工件稳定性优先）；② 测试常数手抄十进制两度错（27083628349962≠27554674704714 等）——与「JSON 存十进制人看十六进制」同一族坑，规则=测试常数必须脚本换算注入。
 - 会话环境：cargo 被 AppImage 代理劫持，`env -u RUSTC_WRAPPER /usr/bin/cargo` 绕过（记入 TOOLS.md 与记忆）。
+
+## R74（2026-10-25）：rowtable Rust 化 + CLI + auto_tables emu 合流（不是需求，方案记录）
+
+- src/rowtable.rs（name/count/start 三求解器）+ `mhydump rowtable` 子命令 + assets/prior_method_names.json（先验名数据文件）。
+- **验证等级**：6.7 实弹 CLI 输出与 Python 求解器逐字段一致（含 ok_rows 2565/idrate 1.0/哨兵 385952/sum_counts 513345）；门控样本测试全绿（508s）。
+- **移植期新发现（回灌 Python 语义）**：均匀堆偏移下「错 C 恒定位移」可通过标识符率验收（合成测试抓到）——Python 的 exact-prior 校验（_verify_name ≥5 精确命中）此前漏移植，已补齐；该类 alias 在真实非均匀堆上本就难成立（oracle 100% 佐证），但判据应显式化。
+- 进制坑两连：sub 族 C=88 ≡ add 族 +0xA8（mod 256 同变换）；断言/文档写常数必须注明进制。
+- auto_tables emu 合流：method_defs 12→24 链（emu 贡献 movabs 形态 3 条）。
+- dev/release 构建混淆：裸 `cargo build` 只出 dev profile，target/release/mhydump 不更新——统一 `env -u RUSTC_WRAPPER /usr/bin/cargo build --release`。
