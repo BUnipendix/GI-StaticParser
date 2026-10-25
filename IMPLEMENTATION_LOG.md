@@ -5875,3 +5875,9 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
 - emu_chain 修复：imul reg,reg 追踪（dst=gete(dst)*gete(src)，此前双侧取 movabs imm 折叠成常数——6.6 链一直手工注入的根因）；ret-forest 会改变分支走向 → 改 zero/forest 双策略自动重试合并。
 - 6.2 方法表 name 解出（off0 XorCSubMask 0x614fcedd）；6.3 链提取但 builder 不读 name（惰性访问器边界，同 7.0 字段名模式）。
 - **6.4 三轮悬案根因**：name 公式正确；第二解密器 0x140474480（splitmix64：0x9E3779B185EBCA87×idx ^0x27D4EB2F165667C9 rol 0x17 ×0xC2B2AE3D27D4EB4F +0x165667B19E3779F9，shr 0x21/0x1d/0x20 三轮 finalize；位切片查表 r10[（h>>6）<<5]）；密钥表由 0x1404B78AC/0x1404B7B6C 区域在加载期构建（写 0x144EEAC08/28/30）。模拟路线已通到最后一步（喂 idx→查表→解密），缺建表。提交 28dbfd5。
+
+## R73（2026-10-25）：Rust 移植第一步 + 6.4 二号堆前缀实证（不是需求，方案记录）
+
+- **6.4 补充证据**：strings 枚举证明 6.4 heap 前缀无 .ctor/GetText/Format（<Module> 后直接 resourceFormat）——方法名字符串不在 derive 堆，第二字符串空间实锤；GetTextInfoData/GetTextureStreamingEnabled 等长名仍在（属其它表）。6.4 方法名恢复需模拟 C++ 初始化（0x1404B72B0，CRT/TLS 重）或运行时 dump，战略价值低（7.x 无此架构），维持 timebox。
+- **expr.rs 落地**（R39 首块）：Expr/eval + Fam/fam_value/fam_invert + 8 测试。两个坑：① serde 1.0.229 元组变体序列化为 {"imm":v} 而非 ["imm",v]——手写 impl 保数组 wire format（跨语言工件稳定性优先）；② 测试常数手抄十进制两度错（27083628349962≠27554674704714 等）——与「JSON 存十进制人看十六进制」同一族坑，规则=测试常数必须脚本换算注入。
+- 会话环境：cargo 被 AppImage 代理劫持，`env -u RUSTC_WRAPPER /usr/bin/cargo` 绕过（记入 TOOLS.md 与记忆）。
