@@ -3,6 +3,7 @@
 //! Milestone (a): `mhydump pe-validate <exe>` — parse and print the PE section table + flag BSS.
 
 use anyhow::Result;
+use static_mhy_dumper::rowtable;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -82,6 +83,32 @@ enum Cmd {
         /// Row count override (default: everything from base to end of body).
         #[arg(long)]
         rows: Option<usize>,
+    },
+    /// Data-side column solver for one row table (Rust port of
+    /// tools/version-triage/rowtable_solve.py). Pins the name/count/start
+    /// columns from the heap string enumeration + prior corelib names.
+    Rowtable {
+        /// global-metadata.dat (body starts at +0x210).
+        #[arg(long)]
+        metadata: String,
+        /// Resolved table base (body offset, hex).
+        #[arg(long, value_parser = parse_u64_hex)]
+        base: u64,
+        #[arg(long)]
+        stride: usize,
+        #[arg(long)]
+        rows: usize,
+        /// `mhydump strings --out` heap enumeration file.
+        #[arg(long)]
+        strings: String,
+        /// Chain pool JSON (symwalk artifact / pool / bare array).
+        #[arg(long)]
+        walks: String,
+        /// Prior method names JSON (default: bundled corelib prefix).
+        #[arg(long)]
+        prior: Option<String>,
+        #[arg(long)]
+        out: Option<String>,
     },
     /// Milestone (a): parse a PE image, print its section table, ImageBase, and flag BSS globals.
     PeValidate {
@@ -203,6 +230,17 @@ fn main() -> Result<()> {
         Cmd::Strings { exe, metadata, out, head } => strings_cmd(&exe, &metadata, out.as_deref(), head),
         Cmd::Tables { exe, metadata, base, json } => tables_cmd(&exe, &metadata, base, json),
         Cmd::StrCols { exe, metadata, base, stride, rows } => strcols_cmd(&exe, &metadata, base, stride, rows),
+
+        Cmd::Rowtable {
+            metadata,
+            base,
+            stride,
+            rows,
+            strings,
+            walks,
+            prior,
+            out,
+        } => { rowtable_cmd(&metadata, base as usize, stride, rows, &strings, &walks, prior.as_deref(), out.as_deref()); Ok(()) }
         Cmd::PeValidate { exe } => pe_validate(&exe),
         Cmd::DecodeOne { exe, metadata, idx } => decode_one(&exe, &metadata, idx),
         Cmd::HeaderDump { exe, metadata } => header_dump(&exe, &metadata),
@@ -1012,4 +1050,37 @@ fn pe_validate(path: &str) -> Result<()> {
         println!("  {dll}!{:<14} IAT slot VA=0x{va:016X}", name.as_deref().unwrap_or("?"));
     }
     Ok(())
+}
+fn rowtable_cmd(
+    metadata: &str,
+    base: usize,
+    stride: usize,
+    rows: usize,
+    strings: &str,
+    walks: &str,
+    prior: Option<&str>,
+    out: Option<&str>,
+) {
+    let md = std::fs::read(metadata).unwrap_or_else(|e| { eprintln!("read {metadata}: {e}"); std::process::exit(1) });
+    if md.len() < 0x210 {
+        eprintln!("metadata too short");
+        std::process::exit(1);
+    }
+    let body = &md[0x210..];
+    let heap = rowtable::HeapIndex::load(strings).unwrap_or_else(|e| { eprintln!("strings: {e}"); std::process::exit(1) });
+    let prior_names = rowtable::load_prior(prior).unwrap_or_else(|e| { eprintln!("prior: {e}"); std::process::exit(1) });
+    let chains = rowtable::load_chains(walks).unwrap_or_else(|e| { eprintln!("walks: {e}"); std::process::exit(1) });
+    match rowtable::solve_table(body, base, stride, rows, &chains, &heap, &prior_names) {
+        Some(rep) => {
+            let j = serde_json::to_string_pretty(&rep).unwrap();
+            match out {
+                Some(p) => std::fs::write(p, j).unwrap(),
+                None => println!("{j}"),
+            }
+        }
+        None => {
+            eprintln!("no (chain) pair decoded the name column; tried {} chains", chains.len());
+            std::process::exit(1);
+        }
+    }
 }

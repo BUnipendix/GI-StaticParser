@@ -14,6 +14,7 @@ pub mod default_values;
 pub mod derive;
 pub mod dump;
 pub mod expr;
+pub mod rowtable;
 pub mod dump_gen;
 pub mod vtable;
 pub mod dummy_export;

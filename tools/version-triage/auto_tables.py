@@ -84,6 +84,26 @@ def main():
             sw_p = f'{a.out_dir}/{a.version}.{name}.walk.json'
             run([PY, f'{HERE}/symwalk.py', sites['exe'], '--blob-va', hex(sites['blob_va']),
                  '--site', fn, '--hdr-global', hex(sites['hdr_global']), '--json', sw_p])
+            # emulation fallback (R71): follows real control flow into callees,
+            # catches movabs+imul chains that window walks miss. Chains are
+            # merged into the walk artifact so downstream solvers see both.
+            meta = f'{a.sample_root}/{a.version}/YuanShen_Data/Managed/Metadata/global-metadata.dat'
+            emu_p = f'{a.out_dir}/{a.version}.{name}.emu.json'
+            er = run([PY, f'{HERE}/emu_chain.py', sites['exe'], '--metadata', meta,
+                      '--blob-va', hex(sites['blob_va']), '--hdr-global', hex(sites['hdr_global']),
+                      '--site', fn, '--fn-start', fn, '--max-insns', '60000', '--json', emu_p])
+            if not er.returncode and os.path.exists(emu_p):
+                try:
+                    emu = json.load(open(emu_p))
+                    sw0 = json.load(open(sw_p)) if os.path.exists(sw_p) else {'chains': [], 'columns': [], 'anchors': []}
+                    have = {json.dumps(c.get('expr')) for c in sw0.get('chains', [])}
+                    for c in emu.get('chains', []):
+                        if json.dumps(c.get('expr')) not in have:
+                            sw0.setdefault('chains', []).append(c)
+                    json.dump(sw0, open(sw_p, 'w'))
+                    entry['emu_chains'] = len(emu.get('chains', []))
+                except Exception as ex:
+                    entry['emu_error'] = str(ex)
             try:
                 sw = json.load(open(sw_p))
                 from symwalk import expr_str, expr_syms, expr_has  # noqa
