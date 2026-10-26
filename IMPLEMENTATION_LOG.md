@@ -5939,3 +5939,13 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
 - **验收**：6.6 指纹 4253/4254 site 逐 token 全同（99.98%）；唯一分歧=1 个 `sal r8d` vs `shl r8d`（capstone 在该处编码上的命名怪癖，探针复现不了，对 Jaccard 无影响）。`mhydump derive` 输出 schema 与 Python derive.json 逐键同（首锚逐字段同）。
 - 至此六个子命令全链无 Python：loadsites → derive → strings → auto-tables → dump-gen（+tables/rowtable 调试面）。battle_rust.sh 改为自产 sites/derive。
 - 方法论沉淀：跨反汇编器指纹对齐必须「首分歧 token」聚合统计——zip 对比在 token 数不同时整体错位，会把后续无关 token 当分歧（`sal` 假象浪费一轮）。
+
+## R81b（2026-10-26）：首轮战役结果 + name-only 拼接（不是需求，方案记录）
+
+- **HeapIndex.starts_with 平方黑洞**（2992ca3）：原实现每次调用全量 sort 47 万条目，pin 循环内被调数万次——可解版本侥幸早停（6.6 solve ~3min 真凶也是它），不可解版本穷举 59min+。预排序 by_text + 二分前缀扫描：6.0 solve 59min→4s。
+- **L5 derive 互证门**（2992ca3）：弱匹配（score<0.3）须目标 derive 锚含同 (slot,op,imm) 才拼接；否则拒。6.6 field_names 实证：Rust 弱选 0x4^0x46E79FE3 无锚被拒（此前会拼进垃圾基座），Python 侧 0xDC+0x9623F4C7 有 confirmed 锚。
+- **name-only 拼接**：count/start 未解（6.2 疑 mask2 变体）时仅拼 stride+链+name 列——dump 方法名即可正确，参数列留种子。6.2 实弹 20s：引擎 256 行 100%。
+- **战役 6.0–6.6 结果**（旧 binary、heap 修复后）：
+  - typeDef 结构解 **6/6 全对**（行数与 oracle 类型数吻合：6.3 76399≈76397、6.5 80164≈80166、6.6 82222；样本全部 corelib 正确序）。
+  - 方法表：6.5/6.6 全解（引擎 100%）；6.2 name-only；6.0/6.1/6.3 链池无解（转移分 0.01–0.4，函数定位是弱环——Python 时代 6.1 是 emu 在已知函数地址解的，零接触转移到不了那里）。
+  - **6.5 oracle 13.75% 定性**：非解码错误——第 83676 行起 oracle 显示 BeeByte 去混淆名（JDIOCKICHNB→get_txtTitle，oracle 目录有 BeeByte-6.0/ 映射），前 89924 行 lockstep 逐位全同；R72 时代只比前 5k 行才全绿。后续 oracle 比对应过滤映射名或用 raw dump。

@@ -257,6 +257,28 @@ pub fn splice_profile(
                 ));
             }
         }
+        // name-only splice: the name column + chain alone put correct method
+        // names in the dump; params stay seed-decoded (6.2's count/start use
+        // a second-stage mask the u8/u32 solvers do not model yet)
+        Some((rep, name)) if crate::rowtable::name_column_ok(name, 4000) => {
+            p.md_stride = rep.stride as u32;
+            p.md_mask_expr = Some(rep.chain.clone());
+            if !transferred.contains("md_size") {
+                p.md_size = None;
+            }
+            p.md_name = Column {
+                offset: name.off as u32,
+                kind: ColKind::from_fam(name.family),
+                c: name.c as u32,
+            };
+            m.solved
+                .push("method_defs.slice (PARTIAL: stride + mask chain + name only)".into());
+            m.notes.push(
+                "method slice: count/start columns unsolved (likely a mask2 variant); \
+                 param columns stay seed data"
+                    .into(),
+            );
+        }
         _ => m.notes.push("method table not solved; md_* columns stay seed data".into()),
     }
 
