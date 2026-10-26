@@ -16,6 +16,7 @@ pub mod dump;
 pub mod expr;
 pub mod rowtable;
 pub mod profile_splice;
+pub mod loadsites;
 pub mod symwalk;
 pub mod emu_chain;
 pub mod shape_transfer;

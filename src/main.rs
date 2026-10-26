@@ -235,6 +235,19 @@ enum Cmd {
         #[arg(short, long, default_value = "typedefs.txt")]
         out: String,
     },
+    /// Recover every rip-relative load site of the MHY header global plus a
+    /// constant-stripped function fingerprint for each (Rust port of
+    /// tools/version-triage/loadsites.py). This is the substrate the
+    /// shape transfer matches across versions.
+    Loadsites {
+        #[arg(short, long)]
+        exe: String,
+        #[arg(short, long)]
+        out: String,
+        /// Bytes of code per fingerprint (default 0x180).
+        #[arg(long, default_value = "384")]
+        fp_len: usize,
+    },
     /// Locate il2cpp runtime API functions (il2cpp_init & friends) via anchor strings + call graph.
     Il2CppFns {
         /// Path to the main PE image (the game executable).
@@ -409,6 +422,21 @@ fn main() -> Result<()> {
         Cmd::HeaderDump { exe, metadata } => header_dump(&exe, &metadata),
         Cmd::TypesDump { exe, metadata, out } => types_dump(&exe, &metadata, &out),
         Cmd::Derive { exe, metadata, out } => derive_cmd(&exe, &metadata, out.as_deref()),
+        Cmd::Loadsites { exe, out, fp_len } => {
+            let d = std::fs::read(&exe)?;
+            let t0 = std::time::Instant::now();
+            let ls = static_mhy_dumper::loadsites::loadsites(&d, &exe, fp_len)?;
+            std::fs::write(&out, serde_json::to_string(&ls)?)?;
+            println!(
+                "{}: blob={:#x} hg={:#x} sites={} t={:.1}s",
+                exe,
+                ls.blob_va,
+                ls.hdr_global,
+                ls.sites.len(),
+                t0.elapsed().as_secs_f32()
+            );
+            Ok(())
+        }
         Cmd::Il2CppFns { exe } => il2cpp_fns(&exe),
         Cmd::DumpGen { exe, metadata, out, profile_in, profile_out, no_cipher_check, images_out, attributes_out, dummy_out } =>
             dump_gen_cmd(

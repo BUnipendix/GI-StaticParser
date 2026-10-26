@@ -5931,3 +5931,11 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
 - dump_gen 分组：decl 列在范围内照旧（7.1 逐字节不变，`cmp ~/gire/out/71/dump.cs` 实证），出界才回退 methodStart 区间推导 decl——拼接 profile（decl 是种子乱码）的方法靠区间救回。
 - **6.6 实弹**：td 引擎验证 82222 行 256/256 标识符（corelib 序）；dump-gen exit 0：**82222 types / 404886 fields / 671951 methods**（世代规模）；方法名+RVA 正确（GetText/InstallSignalHandlers/.ctor），参数名/namespace/flags 仍种子乱码（inherited，待 ③ 后续）。
 - 事故记录：/tmp 被 host 清空一次+配额写满一次——战役产物一律走 ~/gire/out/zero-touch/battle/（持久盘）；tmpfs 只放临时。
+
+## R80（2026-10-26）：改进⑤——loadsites.py 移植，全链单二进制（不是需求，方案记录）
+
+- src/loadsites.rs + `mhydump loadsites`：rip 扫描（逐字节推进匹配 numpy 掩码含重叠假阳性，site 集与 Python 逐位同）、hdr_global（lea→store 双 rip 模式）、iced 指纹。
+- **指纹逐字节对齐 capstone**（与既有 Python 种子文件混用前提），六轮迭代：①IntelFormatter 排版选项（hex_prefix/大小写/逗号空格/内存 +- 空格/rip_relatives/MemorySizeOptions::Always）；②负立即数符号规则——capstone 实测真值表：原生宽度恒无符号，符号扩展编码（imm8→16/32/64、imm32→64）仅 add/adc/sub/sbb/cmp 有符号、or/and/xor 无符号（按助记符+OpKind 双条件逐指令切换 set_signed_immediate_operands）；③段前缀仅非默认时注入（iced 自动显示 fs/gs，会双写）；④movabs（mov r64,imm64）/imul 三操作数补显式 dst/0x90→nop（iced 记 Nop+0 操作数但格式器印 xchg ax,ax）；⑤零操作数尾随空格（capstone 恒 `mnemonic + ' '`）；⑥**无效字节：capstone 停止、iced 印 `(bad)`——is_invalid() 即停**（此条曾致 3192/4254 site 差 1 token，是最大单项）。
+- **验收**：6.6 指纹 4253/4254 site 逐 token 全同（99.98%）；唯一分歧=1 个 `sal r8d` vs `shl r8d`（capstone 在该处编码上的命名怪癖，探针复现不了，对 Jaccard 无影响）。`mhydump derive` 输出 schema 与 Python derive.json 逐键同（首锚逐字段同）。
+- 至此六个子命令全链无 Python：loadsites → derive → strings → auto-tables → dump-gen（+tables/rowtable 调试面）。battle_rust.sh 改为自产 sites/derive。
+- 方法论沉淀：跨反汇编器指纹对齐必须「首分歧 token」聚合统计——zip 对比在 token 数不同时整体错位，会把后续无关 token 当分歧（`sal` 假象浪费一轮）。

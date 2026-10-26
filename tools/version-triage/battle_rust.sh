@@ -7,10 +7,15 @@ set -u
 OUT="${1:-/tmp/battle}"
 REPO=/home/yangsanyi/Documents/git-repo/GI-StaticParser
 MHY=$REPO/target/release/mhydump
-SITES=~/gire/out/cross/sites
+# Full single-binary chain: sites + derive + strings all produced by mhydump
+# itself (R80); the Python loadsites artifacts are byte-compatible fallbacks.
+SITES="$OUT/sites"
 SEED=~/gire/out/zero-touch/seed_6.7.0.json
-SEEDS=~/gire/out/cross/sites/6.7.0.json
-SEEDD=~/gire/out/cross/6.7.0.derive.json
+SEEDS="$OUT/sites/6.7.0.json"
+SEEDD="$OUT/6.7.0.derive.json"
+mkdir -p "$SITES"
+[ -s "$SEEDS" ] || "$MHY" loadsites --exe ~/gire/sample/gi/6.7.0/YuanShen.exe --out "$SEEDS" > /dev/null
+[ -s "$SEEDD" ] || "$MHY" derive --exe ~/gire/sample/gi/6.7.0/YuanShen.exe --metadata ~/gire/sample/gi/6.7.0/YuanShen_Data/Managed/Metadata/global-metadata.dat --out "$SEEDD" 2>&1 | tail -1
 mkdir -p "$OUT"
 : > "$OUT/summary.txt"
 
@@ -23,6 +28,9 @@ for V in 6.0 6.1 6.2 6.3 6.5 6.6; do
   LOG="$OUT/$V.log"
   echo "=== $V ===" | tee -a "$OUT/summary.txt"
   {
+    if [ ! -s "$SITES/$V.0.json" ]; then
+      "$MHY" loadsites --exe "$EXE" --out "$SITES/$V.0.json" 2>&1 | tail -1
+    fi
     if [ ! -f "$OUT/$V.strings.txt" ]; then
       "$MHY" strings --exe "$EXE" --metadata "$DAT" --out "$OUT/$V.strings.txt" 2>&1 | sed -n '1,3p'
     else
