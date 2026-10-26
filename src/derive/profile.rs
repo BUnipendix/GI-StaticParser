@@ -110,6 +110,40 @@ impl MaskChain {
     }
 }
 
+/// Static-family column decode (no per-row mask): every typeDef column in the
+/// generations measured so far is a plain XorC/AddC. `Gen*` kinds also work
+/// (mask 0), so a spliced profile can carry them. Unknown kinds keep the
+/// historical default (`raw ^ c`) so old profiles behave exactly as before.
+#[inline]
+pub fn col_value32(c: &Column, raw: u32) -> u32 {
+    match c.kind {
+        ColKind::XorC => raw ^ c.c,
+        ColKind::AddC => raw.wrapping_add(c.c),
+        ColKind::GenSubMaskAddC
+        | ColKind::GenAddCSubMask
+        | ColKind::GenXorCXorMask
+        | ColKind::GenAddCXorMask
+        | ColKind::GenXorCSubMask
+        | ColKind::GenCountXor8
+        | ColKind::GenCountSub8
+        | ColKind::GenCountAdd8 => gen_col_value(c.kind, raw, 0, c.c),
+        _ => raw ^ c.c,
+    }
+}
+
+/// u16 variant of [`col_value32`].
+#[inline]
+pub fn col_value16(c: &Column, raw: u16) -> u32 {
+    match c.kind {
+        ColKind::XorC => (raw ^ c.c as u16) as u32,
+        ColKind::AddC => raw.wrapping_add(c.c as u16) as u32,
+        ColKind::GenCountXor8 | ColKind::GenCountSub8 | ColKind::GenCountAdd8 => {
+            gen_col_value(c.kind, raw as u32, 0, c.c)
+        }
+        _ => (raw ^ c.c as u16) as u32,
+    }
+}
+
 /// A table located relative to the metadata body, keyed by an obfuscated header slot.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableBase {
@@ -370,6 +404,12 @@ pub struct Profile {
     /// trimmed after the division. 7.1.0: header slot 0x60 ^ 0x15335474 = 6,223,280.
     #[serde(default)]
     pub td_size: Option<TableBase>,
+    /// Zero-touch override: typeDef row count straight from the structural
+    /// walk (tiling run incl. trailing padding; td_count trims sentinels).
+    /// Used when `td_size` has no header anchor — the magic-walk fallback is
+    /// seed-version data and returns garbage on any other build.
+    #[serde(default)]
+    pub td_rows_direct: Option<u32>,
     pub method_defs: TableBase,
     /// Method-table BYTE SIZE (not an offset): `rows = size / md_stride`. Needed because the
     /// method-pointer array covers only the methods that have a direct code pointer
@@ -377,6 +417,11 @@ pub struct Profile {
     /// 7.1.0: header slot 0x134 + 0x8EEFDB56 = 19,070,516 -> 733,481 rows.
     #[serde(default)]
     pub md_size: Option<TableBase>,
+    /// Zero-touch override: method-row count. The typeDef structural solve
+    /// yields it for free (`max methodStart + 1`); the mptrs-array fallback is
+    /// only a lower bound (7.1.0: 460,282 of 733,481 rows have a pointer).
+    #[serde(default)]
+    pub md_rows_direct: Option<u32>,
     pub fields: TableBase,
     pub params: TableBase,
     pub slot_table: TableBase,

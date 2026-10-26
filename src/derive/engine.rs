@@ -199,14 +199,17 @@ impl<'a> Meta<'a> {
         let body_cap = (body.size().saturating_sub(profile.method_defs.resolve(&header_bytes))) / md_stride;
         let md_rows = match &profile.md_size {
             Some(t) => (t.resolve(&header_bytes) / md_stride).min(body_cap),
-            None => methodptrs_len.min(body_cap),
+            None => profile
+                .md_rows_direct
+                .map(|r| (r as usize).min(body_cap))
+                .unwrap_or_else(|| methodptrs_len.min(body_cap)),
         };
         // typeDef-row count: same rule; the chain walk undercounts (7.1.0: 88,872 vs 88,904).
         let td_stride = profile.td_stride.max(1) as usize;
         let td_cap = body.size().saturating_sub(profile.type_defs.resolve(&header_bytes)) / td_stride;
         let td_rows = match &profile.td_size {
             Some(t) => (t.resolve(&header_bytes) / td_stride).min(td_cap),
-            None => 0, // 0 = fall back to the chain walk in td_count()
+            None => profile.td_rows_direct.map(|r| (r as usize).min(td_cap)).unwrap_or(0),
         };
         // Field default values (12-byte rows {valueOff, fieldIdx, typeIdx}) + shared value blob.
         let mut field_defaults = std::collections::HashMap::new();
@@ -420,9 +423,10 @@ impl<'a> Meta<'a> {
                 let rec = self.td_base + (n - 1) * stride;
                 let raw_name = self.body.read_u32(rec + p.td_name.offset as usize);
                 let name_empty = raw_name == p.td_name_sentinel
-                    || self.decode_str(raw_name.wrapping_add(p.td_name.c)).is_empty();
-                let ms = self.body.read_u32(rec + p.td_method_start.offset as usize)
-                    ^ p.td_method_start.c;
+                    || self
+                        .decode_str(super::profile::col_value32(&p.td_name, raw_name))
+                        .is_empty();
+                let ms = self.td_method_start(n - 1);
                 let fs_raw = self.body.read_u32(rec + p.td_field_start.offset as usize);
                 if name_empty && ms == u32::MAX && fs_raw == p.td_fs_sentinel_raw {
                     n -= 1;
@@ -457,6 +461,14 @@ impl<'a> Meta<'a> {
         n
     }
 
+    /// typeDef methodStart (u32, 0xFFFFFFFF = no methods), kind-aware.
+    #[inline]
+    pub fn td_method_start(&self, i: usize) -> u32 {
+        let rec = self.td_base + self.profile.td_stride as usize * i;
+        let raw = self.body.read_u32(rec + self.profile.td_method_start.offset as usize);
+        super::profile::col_value32(&self.profile.td_method_start, raw)
+    }
+
     /// Decoded (fieldStart, fieldCount) for typeDef slot `i` (no chain validation).
     /// `fieldStart == u32::MAX` means "no fields".
     #[inline]
@@ -467,10 +479,10 @@ impl<'a> Meta<'a> {
         let fs = if raw == p.td_fs_sentinel_raw {
             u32::MAX
         } else {
-            raw ^ p.td_field_start.c
+            super::profile::col_value32(&p.td_field_start, raw)
         };
         let raw_fc = self.body.read_u16(rec + p.td_field_count.offset as usize);
-        (fs, (raw_fc ^ p.td_field_count.c as u16) as u32)
+        (fs, super::profile::col_value16(&p.td_field_count, raw_fc))
     }
 
     /// Chain-walk the typeDef table: real slots tile the field rows exactly

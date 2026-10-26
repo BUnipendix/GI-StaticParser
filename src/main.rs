@@ -176,6 +176,10 @@ enum Cmd {
         /// Solve the method table end-to-end after the transfer.
         #[arg(long)]
         solve_method: bool,
+        /// Also solve the typeDef table structurally (start/count pairs +
+        /// name column + anchored base/size) — no seed semantics needed.
+        #[arg(long)]
+        solve_td: bool,
         #[arg(long, default_value_t = 675_000)]
         rows: usize,
         #[arg(long)]
@@ -192,6 +196,11 @@ enum Cmd {
         /// path on the spliced profile and report the identifier rate.
         #[arg(long)]
         verify_rows: Option<usize>,
+        /// Write every method name decoded through the ENGINE path as
+        /// `row<TAB>name` (battle artifact for oracle comparison). Implies
+        /// the splice step; row count = `--rows`.
+        #[arg(long)]
+        names_out: Option<String>,
     },
     /// Milestone (a): parse a PE image, print its section table, ImageBase, and flag BSS globals.
     PeValidate {
@@ -391,8 +400,8 @@ fn main() -> Result<()> {
             }
             Ok(())
         }
-        Cmd::AutoTables { exe, metadata, sites, seed, seed_sites, seed_derive, strings, solve_method, rows, out, profile_out, seed_profile, verify_rows } => {
-            auto_tables_cmd(&exe, &metadata, &sites, &seed, &seed_sites, &seed_derive, strings.as_deref(), solve_method, rows, out.as_deref(), profile_out.as_deref(), seed_profile.as_deref(), verify_rows)?;
+        Cmd::AutoTables { exe, metadata, sites, seed, seed_sites, seed_derive, strings, solve_method, solve_td, rows, out, profile_out, seed_profile, verify_rows, names_out } => {
+            auto_tables_cmd(&exe, &metadata, &sites, &seed, &seed_sites, &seed_derive, strings.as_deref(), solve_method, solve_td, rows, out.as_deref(), profile_out.as_deref(), seed_profile.as_deref(), verify_rows, names_out.as_deref())?;
             Ok(())
         }
         Cmd::PeValidate { exe } => pe_validate(&exe),
@@ -1247,11 +1256,13 @@ fn auto_tables_cmd(
     seed_derive_path: &str,
     strings_path: Option<&str>,
     solve_method: bool,
+    solve_td: bool,
     rows: usize,
     out_path: Option<&str>,
     profile_out: Option<&str>,
     seed_profile_path: Option<&str>,
     verify_rows: Option<usize>,
+    names_out: Option<&str>,
 ) -> anyhow::Result<()> {
     use static_mhy_dumper::emu_chain;
     use static_mhy_dumper::expr::Expr;
@@ -1324,59 +1335,128 @@ fn auto_tables_cmd(
         None => println!("{}", serde_json::to_string_pretty(&payload)?),
     }
 
-    // optional: splice into a Profile for dump-gen
-    if let Some(pp) = profile_out {
+    // optional: splice into a Profile for dump-gen / engine-path verification
+    if profile_out.is_some() || verify_rows.is_some() || names_out.is_some() {
         let seedp = match seed_profile_path {
             Some(sp) => static_mhy_dumper::profile_splice::load_seed_profile(sp)
                 .map_err(|e| anyhow::anyhow!("seed profile {sp}: {e}"))?,
             None => static_mhy_dumper::derive::layout71::gen71(),
         };
         let derived = static_mhy_dumper::derive::cipher::derive_build(&d, &md)?;
-        let (spliced, manifest) =
-            static_mhy_dumper::profile_splice::splice_profile(seedp, &report, solved_rep.as_ref(), derived.as_ref());
-        let mut v = serde_json::to_value(&spliced)?;
-        v["_splice"] = serde_json::to_value(&manifest)?;
-        std::fs::write(pp, serde_json::to_string_pretty(&v)?)?;
-        println!(
-            "wrote profile {pp}: {} solved, {} partial bases, {} inherited groups",
-            manifest.solved.len(),
-            manifest.partial.len(),
-            manifest.inherited.len()
-        );
-        for n in &manifest.notes {
-            println!("  note: {n}");
-        }
-
-        if let Some(n) = verify_rows {
-            // Engine-path verification: load the TARGET under the spliced
-            // profile and decode method names through the same accessors
-            // dump-gen uses (md_col + decode_str), so the slice that will
-            // feed the real dump is what gets checked.
-            let m = static_mhy_dumper::derive::engine::Meta::load_with_startup(&d, &md, None, spliced)?;
-            let p = &m.profile;
-            let (mut ok, mut good) = (0usize, 0usize);
-            let mut sample: Vec<String> = Vec::new();
-            for i in 0..n {
-                let idx = m.md_col(&p.md_name, i as u32);
-                let s = m.decode_str(idx);
-                if s.is_empty() {
-                    continue;
-                }
-                ok += 1;
-                if static_mhy_dumper::rowtable::is_identifier(&s) {
-                    good += 1;
-                }
-                if sample.len() < 8 {
-                    sample.push(s);
+        // structural typeDef solve: needs no seed semantics, only the target
+        let td = if solve_td {
+            match static_mhy_dumper::profile_splice::solve_typedef(&d, &md, derived.as_ref().ok_or_else(|| anyhow::anyhow!("no embedded MHY header"))?) {
+                Ok(t) => t,
+                Err(e) => {
+                    println!("td solve failed: {e}");
+                    None
                 }
             }
-            let rate = good as f64 / ok.max(1) as f64;
+        } else {
+            None
+        };
+        let (spliced, manifest) = static_mhy_dumper::profile_splice::splice_profile(
+            seedp,
+            &report,
+            solved_rep.as_ref(),
+            td.as_ref(),
+            derived.as_ref(),
+        );
+        if let Some(t) = &td {
             println!(
-                "engine verify: {}/{} rows named, identifier rate {:.1}%, sample {}",
-                ok, n, 100.0 * rate, sample.join(", ")
+                "td solve: base {:#x} stride {} rows≥{} maxMethodIdx {} name +{:#x} c={:#X} anchored={}",
+                t.base, t.stride, t.rows, t.max_method_index, t.name.offset, t.name.c,
+                t.type_defs.is_some()
             );
-            if rate < 0.9 {
-                println!("engine verify: identifier rate below 90% — treat the method slice as broken");
+        }
+        if let Some(pp) = profile_out {
+            let mut v = serde_json::to_value(&spliced)?;
+            v["_splice"] = serde_json::to_value(&manifest)?;
+            std::fs::write(pp, serde_json::to_string_pretty(&v)?)?;
+            println!(
+                "wrote profile {pp}: {} solved, {} partial bases, {} inherited groups",
+                manifest.solved.len(),
+                manifest.partial.len(),
+                manifest.inherited.len()
+            );
+            for n in &manifest.notes {
+                println!("  note: {n}");
+            }
+        }
+
+        // Engine-path verification on the spliced profile: load the TARGET
+        // and decode method names through the same accessors dump-gen uses
+        // (md_col + decode_str), so the slice that will feed the real dump is
+        // what gets checked.
+        let want_names = names_out.is_some();
+        if verify_rows.is_some() || want_names {
+            let m = static_mhy_dumper::derive::engine::Meta::load_with_startup(&d, &md, None, spliced)?;
+            let p = &m.profile;
+            if let Some(np) = names_out {
+                let mut buf = String::with_capacity(rows * 24);
+                for i in 0..rows {
+                    let idx = m.md_col(&p.md_name, i as u32);
+                    buf.push_str(&format!("{}\t{}\n", i, m.decode_str(idx)));
+                }
+                std::fs::write(np, buf)?;
+                println!("wrote names {np}: {rows} rows through the engine path");
+            }
+            if let Some(n) = verify_rows {
+                let (mut ok, mut good) = (0usize, 0usize);
+                let mut sample: Vec<String> = Vec::new();
+                for i in 0..n {
+                    let idx = m.md_col(&p.md_name, i as u32);
+                    let s = m.decode_str(idx);
+                    if s.is_empty() {
+                        continue;
+                    }
+                    ok += 1;
+                    if static_mhy_dumper::rowtable::is_identifier(&s) {
+                        good += 1;
+                    }
+                    if sample.len() < 8 {
+                        sample.push(s);
+                    }
+                }
+                let rate = good as f64 / ok.max(1) as f64;
+                println!(
+                    "engine verify: {}/{} rows named, identifier rate {:.1}%, sample {}",
+                    ok, n, 100.0 * rate, sample.join(", ")
+                );
+                if rate < 0.9 {
+                    println!("engine verify: identifier rate below 90% — treat the method slice as broken");
+                }
+                // typeDef slice check through the same engine path
+                let n_td = m.td_count();
+                let (mut tok, mut tgood) = (0usize, 0usize);
+                let mut tsample: Vec<String> = Vec::new();
+                for i in 0..n_td.min(n) {
+                    let rec = m.td_base + p.td_stride as usize * i;
+                    let raw = m.body.read_u32_opt(rec + p.td_name.offset as usize).unwrap_or(0xFFFF_FFFF);
+                    let idx = if raw == p.td_name_sentinel {
+                        0xFFFF_FFFF
+                    } else {
+                        static_mhy_dumper::derive::profile::col_value32(&p.td_name, raw)
+                    };
+                    let s = m.decode_str(idx);
+                    if s.is_empty() {
+                        continue;
+                    }
+                    tok += 1;
+                    if static_mhy_dumper::rowtable::is_identifier(&s) {
+                        tgood += 1;
+                    }
+                    if tsample.len() < 8 {
+                        tsample.push(s);
+                    }
+                }
+                println!(
+                    "engine verify (td): {} rows, {}/{} named rows identifier, sample {}",
+                    n_td,
+                    tgood,
+                    tok,
+                    tsample.join(", ")
+                );
             }
         }
     }

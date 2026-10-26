@@ -5922,3 +5922,12 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
 - **实弹捉到并修复的真 bug**：转移成功后 `rec.op` 是符号形式（"+"，shape_transfer.rs:375 `a.op.name()`），splice 首版只认词形式（"add"）→ method_defs 的 imm 静默丢失 → 引擎验证乱码暴露。parse_op 双形式归一化修复+回归测试（`params` 符号 op 用例）。又一例「op 表示不一致」家族（R77 已踩过同根）。
 - **勘误（R77/TOOLS.md）**：6.6 name 列记为 XorCSubMask 0xA6C26AFF——本轮同链实测 len=181 乱码；本轮解 AddCXorMask c=0xA6BBF48D（idrate 1.0、2580 行、exact-prior 门过、引擎路径 100%+精确 corelib 前缀）。旧记录疑为转写误差，以本轮可复现证据为准（auto.json/profile.json 在 ~/gire/out/zero-touch/）。
 - 未验证项：`--seed-profile` 外部 JSON 路径未实弹（默认 gen71 路径已验）；startup-metadata 表 partial 接线（表基座可换、掩码仍种子）未验——掩码属改进③。
+
+## R79（2026-10-26）：改进③-td——typeDef 表结构化求解 + 引擎通用列（不是需求，方案记录）
+
+- `profile_splice::solve_typedef`：**不靠种子语义**——candidate_bases（代码自带 base+index*stride 位点→锚点兜底，抽到 tables.rs 公共函数）→ tables::find 平铺谓词（start/count 对）→ 字符串列发现器选 name → 回锚 TableBase（含 td_size 探测）。两对按 max_index 排序：大者=methodStart 对，小者=fieldStart 对（6.6: +4 add c=0x565FC12F max 671950；+0x20 xor c=0x9A2F3E83 max 404882）。IndexTransform Add→ColKind::AddC 带负 c 换算（profile 用 raw+c，IndexTable 用 raw-c）。
+- engine 通用化：td_name/td_ns/td_method_start/td_field_start/td_field_count 消费点全部改走 `profile::col_value32/16`（kind 化）；新增 `td_method_start` 访问器。
+- Profile 新数据字段：`td_rows_direct`/`md_rows_direct`（无 size 锚时的行数来源：td 结构走查行数 / maxMethodIdx+1）。**两处种子残留教训**：splice 清了 td_rows_direct 但没清种子 td_size——engine 优先 td_size → 6.6 解析出 144714 垃圾行；md_size 同理。修复=求解成功而 size 槽未转移时显式 `p.td_size=None`/`p.md_size=None`。
+- dump_gen 分组：decl 列在范围内照旧（7.1 逐字节不变，`cmp ~/gire/out/71/dump.cs` 实证），出界才回退 methodStart 区间推导 decl——拼接 profile（decl 是种子乱码）的方法靠区间救回。
+- **6.6 实弹**：td 引擎验证 82222 行 256/256 标识符（corelib 序）；dump-gen exit 0：**82222 types / 404886 fields / 671951 methods**（世代规模）；方法名+RVA 正确（GetText/InstallSignalHandlers/.ctor），参数名/namespace/flags 仍种子乱码（inherited，待 ③ 后续）。
+- 事故记录：/tmp 被 host 清空一次+配额写满一次——战役产物一律走 ~/gire/out/zero-touch/battle/（持久盘）；tmpfs 只放临时。

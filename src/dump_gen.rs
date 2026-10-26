@@ -50,11 +50,18 @@ pub fn collect<'a>(m: &'a Meta) -> (Vec<Td>, Vec<Md>) {
     for i in 0..n_td {
         let rec = m.td_base + p.td_stride as usize * i;
         let raw = m.body.read_u32(rec + p.td_name.offset as usize);
-        let idx = if raw == p.td_name_sentinel { 0xFFFF_FFFF } else { raw.wrapping_add(p.td_name.c) };
+        let idx = if raw == p.td_name_sentinel {
+            0xFFFF_FFFF
+        } else {
+            crate::derive::profile::col_value32(&p.td_name, raw)
+        };
         let name = m.decode_str(idx);
         let ns_raw = m.body.read_u32(rec + p.td_ns.offset as usize);
-        let ns = m.decode_str(ns_raw ^ p.td_ns.c);
-        let ms = m.body.read_u32(rec + p.td_method_start.offset as usize) ^ p.td_method_start.c;
+        let ns = m.decode_str(crate::derive::profile::col_value32(
+            &p.td_ns,
+            ns_raw,
+        ));
+        let ms = m.td_method_start(i);
         let (fs, fc) = m.td_fs_fc(i);
         let parent = m.td_parent(i);
         let iface = m.td_iface_start(i);
@@ -723,10 +730,14 @@ fn write_type_attrs<W: Write>(
 
 pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(usize, usize, usize)> {
     let (tds, mds) = collect(m);
-    // group methods by declaring type (method_start order), hidden rows keep slots
+    // group methods by declaring type. Primary: the typeDef methodStart
+    // ranges (constant-free, and the only source that works on a spliced
+    // profile whose md_decl column is still seed data). Fallback: the decoded
+    // decl column, for rows the ranges do not cover.
     let mut per_type: Vec<Vec<usize>> = vec![Vec::new(); tds.len()];
     // derive method counts from methodStart monotonic order
     let mut counts = vec![0u32; tds.len()];
+    let mut range_starts: Vec<(u32, usize)> = Vec::new();
     {
         let mut sorted: Vec<u32> = tds.iter().map(|t| t.method_start).filter(|&s| s != u32::MAX).collect();
         sorted.sort_unstable();
@@ -741,9 +752,31 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
             };
             counts[i] = next.map(|n| n.saturating_sub(t.method_start)).unwrap_or(0);
         }
+        // invert methodStart -> type index for the range lookup
+        let mut owner: Vec<usize> = vec![usize::MAX; sorted.len()];
+        for (i, t) in tds.iter().enumerate() {
+            if t.method_start == u32::MAX {
+                continue;
+            }
+            if let Ok(k) = sorted.binary_search(&t.method_start) {
+                owner[k] = i;
+            }
+        }
+        range_starts = sorted.into_iter().zip(owner).collect();
     }
+    let range_decl = |mi: usize| -> Option<usize> {
+        // the greatest start <= mi, when its owner is known
+        let k = range_starts.partition_point(|(s, _)| (*s as usize) <= mi);
+        let k = k.checked_sub(1)?;
+        let (_, ty) = range_starts[k];
+        (ty != usize::MAX).then_some(ty)
+    };
     for (gmi, md) in mds.iter().enumerate() {
-        let decl = md.decl as usize;
+        // decl column first (exact when the profile's md_decl is real data);
+        // range-derived grouping only rescues rows whose decoded decl is out
+        // of range — the signature of a spliced profile with seed md_decl.
+        let d = md.decl as usize;
+        let decl = if d < per_type.len() { d } else { range_decl(gmi).unwrap_or(d) };
         if decl < per_type.len() {
             per_type[decl].push(gmi);
         }

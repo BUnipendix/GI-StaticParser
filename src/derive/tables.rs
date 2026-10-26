@@ -41,6 +41,41 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Candidate table bases for a build, constant-free: first choice is what the
+/// code itself computes (`base + index*stride` sites), fallback is every anchor
+/// the recovery found. Returns the bases plus a source label for logging.
+pub fn candidate_bases(
+    exe: &[u8],
+    derived: Option<&super::cipher::BuildDerivation>,
+) -> (Vec<usize>, &'static str) {
+    let code = super::anchor::recover(exe)
+        .ok()
+        .and_then(|r| {
+            super::anchor::recover_tables(exe, r.hdr_global)
+                .ok()
+                .map(|t| (r, t))
+        })
+        .map(|(r, t)| {
+            let mut v: Vec<usize> = t
+                .iter()
+                .filter_map(|d| d.resolve(&r.header))
+                .filter(|o| *o > 0)
+                .map(|o| o as usize)
+                .collect();
+            v.sort_unstable();
+            v.dedup();
+            v
+        });
+    if let Some(v) = code.filter(|v| !v.is_empty()) {
+        return (v, "code-defined table sites");
+    }
+    let v: Vec<usize> = derived
+        .map(|b| b.body_offsets().into_iter().map(|o| o as usize).collect())
+        .unwrap_or_default();
+    (v, "anchor recovery")
+}
+
+
 /// A row table whose first `u32` column is a dense row index with a sentinel, plus
 /// the `u16` column that gives the per-row run length.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

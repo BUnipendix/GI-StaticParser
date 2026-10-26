@@ -65,6 +65,7 @@ pub fn splice_profile(
     mut p: Profile,
     report: &TransferReport,
     method: Option<&TableReport>,
+    td: Option<&TdSolve>,
     derived: Option<&BuildDerivation>,
 ) -> (Profile, SpliceManifest) {
     let mut m = SpliceManifest::default();
@@ -82,6 +83,7 @@ pub fn splice_profile(
     }
 
     // ---- table bases from the shape transfer ----
+    let mut transferred = std::collections::HashSet::new();
     for (name, rec) in &report.semantics {
         if rec.resolved.is_none() {
             if rec.matched_fn == 0 {
@@ -178,6 +180,7 @@ pub fn splice_profile(
             }
         }
         m.partial.push(partial);
+        transferred.insert(name.clone());
     }
 
     // ---- method-table slice (the only fully machine-solved table today) ----
@@ -191,6 +194,12 @@ pub fn splice_profile(
             };
             p.md_stride = rep.stride as u32;
             p.md_mask_expr = Some(rep.chain.clone());
+            // the method slice is target data; a seed md_size would resolve
+            // against the target header to garbage, and the engine prefers it
+            // over everything — drop it when the transfer did not carry one.
+            if !transferred.contains("md_size") {
+                p.md_size = None;
+            }
             p.md_name = Column {
                 offset: name.off as u32,
                 kind: ColKind::from_fam(name.family),
@@ -219,6 +228,11 @@ pub fn splice_profile(
         _ => m.notes.push("method table not solved; md_* columns stay seed data".into()),
     }
 
+    // ---- typeDef slice (structural solve; no seed semantics needed) ----
+    if let Some(td) = td {
+        splice_td(&mut p, td, &mut m);
+    }
+
     m.inherited.extend([
         "td columns (td_name/td_ns/td_method_start/td_field_start/td_field_count/...)".into(),
         "md other columns (md_ret_type/md_decl/md_slot/md_flags)".into(),
@@ -237,6 +251,249 @@ pub fn load_seed_profile(path: &str) -> Result<Profile, String> {
     serde_json::from_str(&std::fs::read_to_string(path).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())
 }
+
+// ===========================================================================
+// typeDef table: solved entirely from structure (no seed, no transfer)
+// ===========================================================================
+
+/// The typeDef table as recovered by the constant-free structural scan:
+/// `tables::find` gives the two (start, count) pairs, the string-column finder
+/// gives the name column, and the build's own anchors turn the body offsets
+/// back into Profile `TableBase` slot forms.
+#[derive(Clone, Serialize)]
+pub struct TdSolve {
+    pub base: usize,
+    pub stride: u32,
+    /// Rows in the tiling run, INCLUDING trailing all-sentinel padding.
+    pub rows: usize,
+    pub name: Column,
+    pub method_start: Column,
+    pub field_start: Column,
+    pub field_count: Column,
+    /// Raw fieldStart value that decodes to "no fields" (None = none seen).
+    pub fs_sentinel_raw: Option<u32>,
+    /// Highest methodStart seen + 1 — a lower bound/cross-check on method rows.
+    pub max_method_index: u32,
+    /// Header-slot form of the table base, when an anchor resolves to it.
+    pub type_defs: Option<TableBase>,
+    /// Header-slot form of the table byte size, when an anchor resolves to a
+    /// plausible multiple of the stride just past the run.
+    pub td_size: Option<TableBase>,
+    pub notes: Vec<String>,
+}
+
+fn anchor_table_base(a: &crate::derive::anchor::Anchor) -> TableBase {
+    use crate::derive::anchor::AnchorOp;
+    TableBase {
+        hdr_off: a.hdr_off,
+        sub: (a.op == AnchorOp::Sub).then_some(a.imm),
+        xor: (a.op == AnchorOp::Xor).then_some(a.imm),
+        add: (a.op == AnchorOp::Add).then_some(a.imm),
+    }
+}
+
+fn pair_column(t: &crate::derive::tables::IndexTable, idx: bool) -> Column {
+    use crate::derive::tables::IndexTransform;
+    // IndexTable decodes `plain = raw - c` (Add) or `raw ^ c` (Xor); the
+    // profile's static kinds are `raw + c`, so Add carries the negated c.
+    let (tr, c) = if idx {
+        (t.transform, t.idx_c)
+    } else {
+        (t.cnt_transform, t.cnt_c as u32)
+    };
+    let off = if idx { t.idx_off } else { t.cnt_off };
+    match tr {
+        IndexTransform::Xor => Column { offset: off, kind: ColKind::XorC, c },
+        IndexTransform::Add => Column {
+            offset: off,
+            kind: ColKind::AddC,
+            c: c.wrapping_neg(),
+        },
+    }
+}
+
+/// Solve the typeDef table for one build, structurally:
+/// 1. candidate bases from the code's own table sites,
+/// 2. `tables::find` (start/count tiling predicate),
+/// 3. pick the group that also has a string-index name column,
+/// 4. map both pairs + name back onto Profile columns and anchor the bases.
+pub fn solve_typedef(
+    exe: &[u8],
+    dat: &[u8],
+    derived: &BuildDerivation,
+) -> Result<Option<TdSolve>, String> {
+    use crate::derive::tables::{self, IndexTable, StringTransform};
+    let body = dat.get(0x210..).unwrap_or(&[]);
+    let (bases, src) = tables::candidate_bases(exe, Some(derived));
+    if bases.is_empty() {
+        return Err("no candidate table bases (neither code sites nor anchors)".into());
+    }
+    let found = tables::find(body, &bases);
+    if found.is_empty() {
+        return Ok(None);
+    }
+    // group by (base, stride); the typeDef table is the group with >= 2
+    // start/count pairs (methods + fields) AND a valid name column.
+    let mut groups: std::collections::BTreeMap<(usize, u32), Vec<&IndexTable>> =
+        std::collections::BTreeMap::new();
+    for t in &found {
+        groups.entry((t.base, t.stride)).or_default().push(t);
+    }
+    let Some(cipher) = &derived.cipher else {
+        return Err("no derived string cipher; name column cannot be verified".into());
+    };
+    let strsec = cipher.strsec as usize;
+    let mut notes = Vec::new();
+    let mut best: Option<(Vec<&IndexTable>, tables::StringColumn)> = None;
+    for ((base, stride), entries) in &groups {
+        if entries.len() < 2 {
+            continue;
+        }
+        let rows = entries[0].rows;
+        if !(20_000..=400_000).contains(&rows) {
+            continue;
+        }
+        let sample = rows.min(4096);
+        let mut cols = tables::find_additive_string_columns(
+            body, strsec, &cipher.schedule, *base, *stride, sample,
+        );
+        cols.extend(tables::find_xor_string_columns(
+            body, strsec, &cipher.schedule, *base, *stride, sample,
+        ));
+        let Some(name) = cols
+            .iter()
+            .filter(|c| c.rows_tested > 0 && c.rows_ok as f64 / c.rows_tested as f64 >= 0.9)
+            .max_by_key(|c| c.rows_ok)
+        else {
+            continue;
+        };
+        let better = best
+            .as_ref()
+            .map(|(e, _)| entries[0].real_rows > e[0].real_rows)
+            .unwrap_or(true);
+        if better {
+            if best.is_some() {
+                notes.push(format!(
+                    "multiple typeDef candidates; kept base {base:#x} (most real rows)"
+                ));
+            }
+            best = Some((entries.clone(), name.clone()));
+        }
+    }
+    let Some((entries, name_col)) = best else {
+        return Ok(None);
+    };
+    let mut entries: Vec<&IndexTable> = entries;
+    // methods outnumber fields by ~1.5x in every build measured; the pair with
+    // the larger max index is the methodStart/methodCount pair.
+    entries.sort_by_key(|t| t.max_index);
+    let field_pair = entries[entries.len() - 2];
+    let method_pair = entries[entries.len() - 1];
+    if method_pair.max_index < 100_000 {
+        notes.push(format!(
+            "methodStart max index only {} — expected several hundred thousand",
+            method_pair.max_index
+        ));
+    }
+    let name = Column {
+        offset: name_col.off,
+        kind: match name_col.transform {
+            StringTransform::Add => ColKind::AddC,
+            StringTransform::Xor => ColKind::XorC,
+        },
+        c: name_col.c,
+    };
+    // anchor the base and the byte size back to header slots
+    let hdr = &derived.header;
+    let mut type_defs = None;
+    let mut td_size = None;
+    let stride = entries[0].stride;
+    let rows = entries[0].rows;
+    for a in &derived.anchors {
+        let Some(off) = a.resolve(hdr) else { continue };
+        let off = off as usize;
+        if off == entries[0].base && type_defs.is_none() {
+            type_defs = Some(anchor_table_base(a));
+        }
+        if td_size.is_none() && off % stride as usize == 0 {
+            let r = off / stride as usize;
+            if (rows..rows + 512).contains(&r) {
+                td_size = Some(anchor_table_base(a));
+            }
+        }
+    }
+    if type_defs.is_none() {
+        notes.push(format!(
+            "typeDef base {:#x} has no matching header anchor — cannot express as TableBase",
+            entries[0].base
+        ));
+    }
+    if td_size.is_none() {
+        notes.push("no td_size anchor: row count carried as td_rows_direct (structural walk)".into());
+    }
+    Ok(Some(TdSolve {
+        base: entries[0].base,
+        stride,
+        rows,
+        name,
+        method_start: pair_column(method_pair, true),
+        field_start: pair_column(field_pair, true),
+        field_count: pair_column(field_pair, false),
+        fs_sentinel_raw: field_pair.sentinel_raw,
+        max_method_index: method_pair.max_index,
+        type_defs,
+        td_size,
+        notes,
+    }))
+}
+
+/// Splice a solved typeDef table into the profile (solved-grade fields only;
+/// td_ns / parent / flags columns stay seed data and are reported as such).
+pub fn splice_td(p: &mut Profile, td: &TdSolve, m: &mut SpliceManifest) {
+    let Some(tb) = td.type_defs.clone() else {
+        m.notes.push("typeDef solve dropped: base has no header anchor".into());
+        for n in &td.notes {
+            m.notes.push(format!("td: {n}"));
+        }
+        return;
+    };
+    p.type_defs = tb;
+    if let Some(sz) = &td.td_size {
+        p.td_size = Some(sz.clone());
+    } else {
+        // no size anchor: the SEED's td_size must go — it resolves against the
+        // target header to garbage (the 144714-row live-run lesson). Carry the
+        // walk row count directly instead (td_count trims trailing padding).
+        p.td_size = None;
+        p.td_rows_direct = Some(td.rows as u32);
+    }
+    p.td_stride = td.stride;
+    p.td_name = td.name.clone();
+    p.td_method_start = td.method_start.clone();
+    p.td_field_start = td.field_start.clone();
+    if let Some(s) = td.fs_sentinel_raw {
+        p.td_fs_sentinel_raw = s;
+    }
+    p.td_field_count = td.field_count.clone();
+    // the typeDef tiling gives the method-row count for free (highest
+    // methodStart + 1). Used only when no md_size survived the splice: the
+    // size slot is exact, this is a lower bound that still beats mptrs.
+    if p.md_size.is_none() {
+        p.md_rows_direct = Some(td.max_method_index.wrapping_add(1));
+    }
+    m.solved.push(format!(
+        "type_defs.slice (stride {} + name/method_start/field_start/field_count{}, rows≥{})",
+        td.stride,
+        if td.td_size.is_some() { " + td_size" } else { " + walk rows" },
+        td.rows
+    ));
+    for n in &td.notes {
+        m.notes.push(format!("td: {n}"));
+    }
+    m.inherited.retain(|s| !s.contains("td_name/td_ns"));
+    m.inherited.push("td_ns / td_parent / td_flags / td_bitfield columns (seed data)".into());
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -276,7 +533,7 @@ mod tests {
             "str".into(),
             rec(0x150, "add", 0xC854_2DD2, 0xDEAD_BEEF, 1.0),
         );
-        let (p, m) = splice_profile(seed_profile(), &report, None, None);
+        let (p, m) = splice_profile(seed_profile(), &report, None, None, None);
         assert_eq!(p.str_hdr_off, 0x150);
         assert_eq!(p.str_sub, 0x37AB_D22E);
         assert!(m.solved.iter().any(|s| s.contains("str_hdr_off")));
@@ -331,7 +588,7 @@ mod tests {
         report
             .semantics
             .insert("method_defs".into(), rec(0x1E0, "xor", 0x2EEC_3A0B, 0x1000, 1.0));
-        let (p, m) = splice_profile(seed_profile(), &report, Some(&rep), None);
+        let (p, m) = splice_profile(seed_profile(), &report, Some(&rep), None, None);
 
         assert_eq!(p.md_stride, 26);
         assert!(p.md_mask_expr.is_some());
@@ -397,7 +654,7 @@ mod tests {
         report
             .semantics
             .insert("params".into(), rec(0x1D0, "+", 0x08F4_E5DB, 0x5000, 0.9));
-        let (p, m) = splice_profile(seed_profile(), &report, None, None);
+        let (p, m) = splice_profile(seed_profile(), &report, None, None, None);
         assert_eq!(p.field_names.hdr_off, 0xDC);
         assert_eq!(p.field_names.add, Some(0xE5D3_E43F));
         assert!(m.partial.iter().any(|s| s == "field_names.base"));
