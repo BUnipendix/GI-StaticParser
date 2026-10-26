@@ -35,6 +35,11 @@ pub const PRIOR_METHOD_NAMES: &str = include_str!("../assets/prior_method_names.
 /// String-start offsets from `mhydump strings --out` (`0xOFF<TAB>text`).
 pub struct HeapIndex {
     text: HashMap<u32, String>,
+    /// (text, off) pre-sorted once — `starts_with` binary-searches the prefix
+    /// range. Sorting per call (the first implementation) made `solve_table`
+    /// quadratic: tens of thousands of prefix queries × an O(n log n) sort of
+    /// ~500k entries each, which is why unsolvable builds ground for an hour.
+    by_text: Vec<(String, u32)>,
 }
 
 impl HeapIndex {
@@ -52,29 +57,37 @@ impl HeapIndex {
                 }
             }
         }
-        HeapIndex { text }
+        let mut by_text: Vec<(String, u32)> =
+            text.iter().map(|(o, t)| (t.clone(), *o)).collect();
+        by_text.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+        HeapIndex { text, by_text }
     }
 
     pub fn text(&self, off: u32) -> Option<&str> {
         self.text.get(&off).map(|s| &s[..])
     }
 
-    /// Offsets whose decoded text begins with `prefix` (string starts).
+    /// Offsets whose decoded text begins with `prefix` (string starts),
+    /// ascending, at most `limit`.
     pub fn starts_with(&self, prefix: &str, limit: usize) -> Vec<u32> {
-        let mut out = Vec::new();
         if prefix.is_empty() {
-            return out;
+            return Vec::new();
         }
-        let mut offs: Vec<_> = self.text.iter().collect();
-        offs.sort_by_key(|(o, _)| **o);
-        for (off, t) in offs {
-            if t.starts_with(prefix) {
-                out.push(*off);
-                if out.len() >= limit {
-                    break;
-                }
+        // first key >= prefix, then walk while the prefix still matches
+        let mut lo = self.by_text.partition_point(|(t, _)| t.as_str() < prefix);
+        let mut out = Vec::new();
+        while lo < self.by_text.len() {
+            let (t, o) = &self.by_text[lo];
+            if !t.starts_with(prefix) {
+                break;
             }
+            out.push(*o);
+            if out.len() >= limit {
+                break;
+            }
+            lo += 1;
         }
+        out.sort_unstable();
         out
     }
 }

@@ -94,7 +94,39 @@ pub fn splice_profile(
             continue;
         }
         if rec.score < 0.3 && rec.matched_fn != 0 {
-            m.notes.push(format!("{name}: WEAK match score {:.3} — treat base as unverified", rec.score));
+            // L5 gate: a WEAK fingerprint match proves nothing about the
+            // ordinal pick. Accept it only when the target's own derive
+            // anchors contain the exact (slot, op, imm) — code-level
+            // confirmation independent of the transfer. Verified on 6.6
+            // field_names: the weak pick (slot 0x4 ^ 0x46E79FE3) has no
+            // derive anchor, the correct one (0xDC + 0x9623F4C7) does.
+            let op = parse_op(&rec.op);
+            let confirmed = derived
+                .map(|dv| {
+                    dv.anchors.iter().any(|a| {
+                        a.hdr_off == rec.slot
+                            && a.imm as u64 == rec.imm
+                            && matches!(
+                                (a.op, op),
+                                (crate::derive::anchor::AnchorOp::Add, AnchorOp::Add)
+                                    | (crate::derive::anchor::AnchorOp::Sub, AnchorOp::Sub)
+                                    | (crate::derive::anchor::AnchorOp::Xor, AnchorOp::Xor)
+                            )
+                    })
+                })
+                .unwrap_or(false);
+            if confirmed {
+                m.notes.push(format!(
+                    "{name}: WEAK match score {:.3} but CONFIRMED by a target derive anchor",
+                    rec.score
+                ));
+            } else {
+                m.notes.push(format!(
+                    "{name}: WEAK match score {:.3} with NO derive anchor for slot {:#x} {} {:#X} — base REJECTED, seed value kept",
+                    rec.score, rec.slot, op.name(), rec.imm
+                ));
+                continue;
+            }
         }
         let tb = table_base(rec);
         let partial = format!("{name}.base");
