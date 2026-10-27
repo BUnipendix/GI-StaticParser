@@ -32,7 +32,7 @@ for V in 6.0 6.1 6.2 6.3 6.5 6.6; do
       "$MHY" loadsites --exe "$EXE" --out "$SITES/$V.0.json" 2>&1 | tail -1
     fi
     if [ ! -f "$OUT/$V.strings.txt" ]; then
-      "$MHY" strings --exe "$EXE" --metadata "$DAT" --out "$OUT/$V.strings.txt" 2>&1 | sed -n '1,3p'
+      "$MHY" strings --exe "$EXE" --metadata "$DAT" --min-len 3 --out "$OUT/$V.strings.txt" 2>&1 | sed -n '1,3p'
     else
       echo "strings cache reused: $(wc -l < "$OUT/$V.strings.txt") entries"
     fi

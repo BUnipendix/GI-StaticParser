@@ -5961,3 +5961,10 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
 - **td_ns**：字符串列发现器的第二列=namespace（7.1 off24 XorC 0x666769B5 与 oracle 逐位同）。
 - **L6 基座解码门（field_names）**：L5（锚存在）在 7.1 放行了错锚——转移选了 0xDC=typeDef 槽（真锚、错表）。L6=候基座用种子链解码字段名，标识符率≥0.98 才收，不过则扫 derive 锚全量找过验者。7.1：转移基 0x48f3fd8(TD表) 被拒，锚基 0x4580d78 率 1.00 → slot 76（与 oracle 同槽、add/sub 写法等价）。
 - 7.1 零接触 34s 全链：机器解出 cipher/strsec/td 全套+ns/方法表四列+md_size/field_names 基座，全部与 oracle 语义等价；种子继承列（7.1 场景下=oracle）由 manifest 如实标注。**跨版本时继承列=种子值（会错），属已知边界——关闭它需要 fields/param/prop/event 列求解（下轮）。**
+
+## R83（2026-10-27）：param_defs 表零接触求解（跨版本继承列第一块）（不是需求，方案记录）
+
+- **行数**=方法求解的 sum_counts（精确）；**链**=param 转移池（7.1 全 7 常数链在池内，数值验证=oracle mask 逐位同）；**name 列**=solve_name_column 复用（engine `param_name` 公式 `(raw^xor)-mask` 恰=XorCSubMask 族）。
+- **短串盲区根因**：参数名 msg/fmt/args（3 字节）后跟非打印间隙，run<8 不入堆枚举（strings --out 只录 run≥8 起点）→ pin/exact 门全灭。修法三件：①`strings --min-len N`（string_starts_min，printable_prefix_len 参数化；7.1 min3 堆 67万→158万条）；②solve_name_column pin 行**按先验名长度降序**（长名钉常数更锐且短名恰是堆缺失区）；③Profile `param_def_name_off/type_off` 数据化（6.6 实测 name 列在 +0 与 7.1 的 +4 换位——engine 硬编码 +4 是 6.6 dump 乱码的直接原因）。
+- **先验资产**：assets/prior_param_names.json（48 个 corelib 参数名，7.1 oracle 常数提取：msg/fmt/args/resourceFormat/exception/flag/obj/klass/ptr...）。
+- **验收**：7.1 name_xor=1804988680=oracle、零接触 dump 仍 2,417,104 行 100%；**6.6 跨版本实弹：`private object GetText(object fmt, object args)`——参数名正确**（name 列 +0 c=0x37C37EA 482602 行；类型列仍种子=object，type 列求解留下轮）。默认 7.1 dump 逐字节回归一致。

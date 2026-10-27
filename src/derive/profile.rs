@@ -650,6 +650,24 @@ pub struct Profile {
     pub param_def_type_xor: u32,
     #[serde(default)]
     pub param_def_mask: Option<ParamMaskChain>,
+    /// Zero-touch override: generic per-row mask chain for the PARAMETER
+    /// table. When set it supersedes `param_def_mask` (the fixed
+    /// ParamMaskChain shape cannot express every real chain).
+    #[serde(default)]
+    pub param_def_mask_expr: Option<Expr>,
+    /// Column offsets inside a parameter row (7.1: name@4, type@0). The
+    /// solver pins the name column per build — 6.6 carries it at +0.
+    #[serde(default = "default_param_name_off")]
+    pub param_def_name_off: u32,
+    #[serde(default = "default_param_type_off")]
+    pub param_def_type_off: u32,
+}
+
+fn default_param_name_off() -> u32 {
+    4
+}
+fn default_param_type_off() -> u32 {
+    0
 }
 
 #[cfg(test)]

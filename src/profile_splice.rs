@@ -99,6 +99,7 @@ pub fn splice_profile(
     td: Option<&TdSolve>,
     derived: Option<&BuildDerivation>,
     body: &[u8],
+    heap: Option<&crate::rowtable::HeapIndex>,
 ) -> (Profile, SpliceManifest) {
     let mut m = SpliceManifest::default();
 
@@ -405,6 +406,60 @@ pub fn splice_profile(
     // ---- typeDef slice (structural solve; no seed semantics needed) ----
     if let Some(td) = td {
         splice_td(&mut p, td, &mut m);
+    }
+
+    // ---- parameter slice: rows come from the method solve (sum of
+    // paramCount), the chain pool from the param transfer, the name column
+    // from the heap + cross-version stable corelib parameter names ----
+    if let (Some(heap), Some(rep), Some(st)) = (
+        heap,
+        method,
+        method.and_then(|r| r.starts.first()),
+    ) {
+        if st.sum_counts > 0 {
+            if let Some(prec) = report.semantics.get("param_defs") {
+                if let Some(base) = prec.resolved.map(|r| (r & 0xFFFF_FFFF) as usize) {
+                    let prior: Vec<String> = serde_json::from_str(
+                        include_str!("../assets/prior_param_names.json"),
+                    )
+                    .unwrap_or_default();
+                    let sample = std::cmp::min(st.sum_counts as usize, 4000);
+                    let mut solved_param = false;
+                    for chain in &prec.chains {
+                        let Ok(mask) = crate::rowtable::eval_rows(chain, sample) else {
+                            continue;
+                        };
+                        if let Some(name) = crate::rowtable::solve_name_column(
+                            body, base, 8, st.sum_counts as usize, &mask, heap, &prior, sample,
+                        ) {
+                            if !crate::rowtable::name_column_ok(&name, sample) {
+                                continue;
+                            }
+                            // engine param_name form is exactly XorCSubMask:
+                            // idx = (raw ^ name_xor) - mask
+                            if name.family == crate::expr::Fam::XorCSubMask {
+                                p.param_defs = Some(table_base(prec));
+                                p.param_def_stride = 8;
+                                p.param_def_mask_expr = Some(chain.clone());
+                                p.param_def_name_xor = name.c as u32;
+                                p.param_def_name_off = name.off as u32;
+                                // type column sits at the other u32 slot
+                                p.param_def_type_off = if name.off == 4 { 0 } else { 4 };
+                                m.solved.push(format!(
+                                    "param_defs.slice (name column +{:#x} c={:#X}, {} rows)",
+                                    name.off, name.c, st.sum_counts
+                                ));
+                                solved_param = true;
+                                break;
+                            }
+                        }
+                    }
+                    if !solved_param {
+                        m.notes.push("param table name column unsolved; params stay seed data".into());
+                    }
+                }
+            }
+        }
     }
 
     m.inherited.extend([
@@ -726,7 +781,7 @@ mod tests {
             "str".into(),
             rec(0x150, "add", 0xC854_2DD2, 0xDEAD_BEEF, 1.0),
         );
-        let (p, m) = splice_profile(seed_profile(), &report, None, None, None, &[]);
+        let (p, m) = splice_profile(seed_profile(), &report, None, None, None, &[], None);
         assert_eq!(p.str_hdr_off, 0x150);
         assert_eq!(p.str_sub, 0x37AB_D22E);
         assert!(m.solved.iter().any(|s| s.contains("str_hdr_off")));
@@ -781,7 +836,7 @@ mod tests {
         report
             .semantics
             .insert("method_defs".into(), rec(0x1E0, "xor", 0x2EEC_3A0B, 0x1000, 1.0));
-        let (p, m) = splice_profile(seed_profile(), &report, Some(&rep), None, None, &[]);
+        let (p, m) = splice_profile(seed_profile(), &report, Some(&rep), None, None, &[], None);
 
         assert_eq!(p.md_stride, 26);
         assert!(p.md_mask_expr.is_some());
@@ -847,7 +902,7 @@ mod tests {
         report
             .semantics
             .insert("params".into(), rec(0x1D0, "+", 0x08F4_E5DB, 0x5000, 0.9));
-        let (p, m) = splice_profile(seed_profile(), &report, None, None, None, &[]);
+        let (p, m) = splice_profile(seed_profile(), &report, None, None, None, &[], None);
         // L6 gate: with no decodable body the transfer pick cannot be
         // validated, so the SEED base stays and the failure is noted.
         assert_eq!(p.field_names.hdr_off, seed_profile().field_names.hdr_off);

@@ -52,6 +52,11 @@ enum Cmd {
         /// How many leading entries to print.
         #[arg(long, default_value_t = 16)]
         head: usize,
+        /// Minimum printable-run length for an offset to be recorded
+        /// (default 8; lower values expose short strings like parameter
+        /// names at the cost of a higher noise share).
+        #[arg(long, default_value_t = 8)]
+        min_len: usize,
     },
     /// Constant-free: locate metadata row tables from structure alone (no constant,
     /// no address, no column name).
@@ -332,7 +337,7 @@ fn main() -> Result<()> {
     match cli.cmd {
         Cmd::Anchors { exe, metadata, json, site } => anchors_cmd(&exe, metadata.as_deref(), json, site),
         Cmd::Cipher { exe, metadata, json } => cipher_cmd(&exe, &metadata, json),
-        Cmd::Strings { exe, metadata, out, head } => strings_cmd(&exe, &metadata, out.as_deref(), head),
+        Cmd::Strings { exe, metadata, out, head, min_len } => strings_cmd(&exe, &metadata, out.as_deref(), head, min_len),
         Cmd::Tables { exe, metadata, base, json } => tables_cmd(&exe, &metadata, base, json),
         Cmd::StrCols { exe, metadata, base, stride, rows } => strcols_cmd(&exe, &metadata, base, stride, rows),
 
@@ -508,7 +513,7 @@ fn cipher_cmd(exe: &str, metadata: &str, json: bool) -> Result<()> {
 /// This is the end-to-end check on the cipher that needs no table constants at
 /// all: entry 0 must be `mscorlib`, every entry must terminate, and the walk must
 /// reach the end of the heap. A wrong schedule stops after a handful of entries.
-fn strings_cmd(exe: &str, metadata: &str, out: Option<&str>, head: usize) -> Result<()> {
+fn strings_cmd(exe: &str, metadata: &str, out: Option<&str>, head: usize, min_len: usize) -> Result<()> {
     let ga = std::fs::read(exe)?;
     let gm = std::fs::read(metadata)?;
     let body = gm.get(0x210..).unwrap_or(&[]);
@@ -520,7 +525,7 @@ fn strings_cmd(exe: &str, metadata: &str, out: Option<&str>, head: usize) -> Res
         .ok_or_else(|| anyhow::anyhow!("no string cipher derived from this image"))?;
     let t0 = std::time::Instant::now();
     let limit = body.len().saturating_sub(c.strsec as usize);
-    let heap = static_mhy_dumper::decode_str::string_starts(body, c.strsec as usize, &c.schedule, limit);
+    let heap = static_mhy_dumper::decode_str::string_starts_min(body, c.strsec as usize, &c.schedule, limit, min_len);
     println!("strsec=0x{:X}  step=0x{:016X}  key(off) = {}", c.strsec, c.schedule.step, c.schedule.formula());
     println!("scanned=0x{:X} bytes of heap, found {} offsets that start a string of length >= 8 (+ ~0.04% noise)",
         limit, heap.len());
@@ -1332,11 +1337,16 @@ fn auto_tables_cmd(
         report.semantics.insert(name.clone(), rec);
     }
 
+    // heap enumeration, loaded once and reused by every solver below
+    let heap_holder = match strings_path {
+        Some(sp) => Some(static_mhy_dumper::rowtable::HeapIndex::load(sp)?),
+        None => None,
+    };
     // optional: solve the method table end-to-end
     let mut solved: Option<serde_json::Value> = None;
     let mut solved_rep: Option<static_mhy_dumper::rowtable::TableReport> = None;
     if solve_method {
-        if let Some(sp) = strings_path {
+        if let Some(heap) = &heap_holder {
             let Some(mrec) = report.semantics.get("method_defs").or_else(|| report.semantics.get("method_defs")) else {
                 anyhow::bail!("seed has no method_defs semantic");
             };
@@ -1344,10 +1354,9 @@ fn auto_tables_cmd(
                 anyhow::bail!("method transfer unresolved");
             };
             let base = (resolved & 0xFFFF_FFFF) as usize;
-            let heap = static_mhy_dumper::rowtable::HeapIndex::load(sp)?;
             let prior = static_mhy_dumper::rowtable::load_prior(None).map_err(|e| anyhow::anyhow!(e))?;
             let chains: Vec<Expr> = mrec.chains.clone();
-            if let Some(rep) = static_mhy_dumper::rowtable::solve_table(body, base, 26, rows, &chains, &heap, &prior) {
+            if let Some(rep) = static_mhy_dumper::rowtable::solve_table(body, base, 26, rows, &chains, heap, &prior) {
                 solved = Some(serde_json::to_value(&rep)?);
                 solved_rep = Some(rep);
             }
@@ -1390,6 +1399,7 @@ fn auto_tables_cmd(
             td.as_ref(),
             derived.as_ref(),
             body,
+            heap_holder.as_ref(),
         );
         if let Some(t) = &td {
             println!(

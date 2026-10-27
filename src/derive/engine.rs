@@ -685,6 +685,9 @@ impl<'a> Meta<'a> {
     /// Parameter-definition row mask (parameter index space).
     #[inline]
     pub fn param_def_mask(&self, i: u32) -> Option<u32> {
+        if let Some(e) = &self.profile.param_def_mask_expr {
+            return Some(e.eval(i as u64, &self.header, &|_, _| 0).unwrap_or(0) as u32);
+        }
         Some(self.profile.param_def_mask.as_ref()?.eval(i))
     }
 
@@ -694,7 +697,7 @@ impl<'a> Meta<'a> {
         self.profile.param_defs.as_ref()?;
         let mask = self.param_def_mask(i)?;
         let row = self.param_def_base + stride * i as usize;
-        let raw = self.body.read_u32(row + 4);
+        let raw = self.body.read_u32(row + self.profile.param_def_name_off as usize);
         let idx = (raw ^ self.profile.param_def_name_xor).wrapping_sub(mask);
         Some(self.decode_str(idx))
     }
@@ -706,7 +709,7 @@ impl<'a> Meta<'a> {
         self.profile.param_defs.as_ref()?;
         let mask = self.param_def_mask(i)?;
         let row = self.param_def_base + stride * i as usize;
-        let raw = self.body.read_u32(row);
+        let raw = self.body.read_u32(row + self.profile.param_def_type_off as usize);
         let v = (raw ^ self.profile.param_def_type_xor).wrapping_sub(mask);
         Some(if v == u32::MAX { None } else { Some(v) })
     }

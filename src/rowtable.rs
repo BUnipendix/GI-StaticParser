@@ -203,15 +203,17 @@ pub fn solve_name_column(
         Fam::AddCXorMask,
         Fam::XorCSubMask,
     ];
-    // pin rows: first few rows whose prior name has heap starts
+    // pin rows: prior rows whose name has heap starts, LONGEST names first —
+    // a long name pins the constant far more sharply (and short names are
+    // exactly the ones the heap enumeration may not carry)
     let mut pin_rows: Vec<usize> = Vec::new();
-    for r in 0..std::cmp::min(prior.len(), 8) {
-        if !heap.starts_with(&prior[r], 1).is_empty() {
-            pin_rows.push(r);
-            if pin_rows.len() >= 4 {
-                break;
-            }
-        }
+    {
+        let mut cand: Vec<(usize, &String)> = (0..std::cmp::min(prior.len(), 12))
+            .filter(|&r| !heap.starts_with(&prior[r], 1).is_empty())
+            .map(|r| (r, &prior[r]))
+            .collect();
+        cand.sort_by_key(|(_, n)| std::cmp::Reverse(n.len()));
+        pin_rows.extend(cand.into_iter().map(|(r, _)| r).take(4));
     }
     let mut best: Option<NameCol> = None;
     for off in 0..stride.saturating_sub(3) {

@@ -194,12 +194,21 @@ pub struct HeapString {
 /// the schedule. This is the predicate the derivation is scored on.
 #[inline]
 pub fn is_printable_qword(body: &[u8], strsec: usize, off: usize, sched: &CipherSchedule) -> bool {
+    printable_prefix_len(body, strsec, off, sched) >= 8
+}
+
+/// Number of leading printable bytes at a heap offset (0..=8).
+pub fn printable_prefix_len(body: &[u8], strsec: usize, off: usize, sched: &CipherSchedule) -> usize {
     let src = match strsec.checked_add(off) {
         Some(s) if s + 8 <= body.len() => s,
-        _ => return false,
+        _ => return 0,
     };
     let enc = u64::from_le_bytes(body[src..src + 8].try_into().unwrap());
-    (enc ^ sched.key(off as u64)).to_le_bytes().iter().all(|&b| (0x20..=0x7E).contains(&b))
+    (enc ^ sched.key(off as u64))
+        .to_le_bytes()
+        .iter()
+        .take_while(|&b| (0x20..=0x7E).contains(b))
+        .count()
 }
 
 /// Enumerate every heap offset that starts a string of length >= 8, plus the ~0.04%
@@ -210,11 +219,25 @@ pub fn is_printable_qword(body: &[u8], strsec: usize, off: usize, sched: &Cipher
 /// truncating it needs the real length, which lives in the metadata index. Callers
 /// that need exact strings must use [`decode_str_sched`] with a real index.
 pub fn string_starts(body: &[u8], strsec: usize, sched: &CipherSchedule, limit: usize) -> Vec<HeapString> {
+    string_starts_min(body, strsec, sched, limit, 8)
+}
+
+/// Same enumeration with a configurable minimum run length. Short strings
+/// (parameter names like `msg`/`fmt` sit in 3-byte runs bounded by
+/// non-printable gaps) need `min_len < 8` to be visible to the solvers;
+/// the noise share rises as the threshold falls (measured ~0.04% at 8).
+pub fn string_starts_min(
+    body: &[u8],
+    strsec: usize,
+    sched: &CipherSchedule,
+    limit: usize,
+    min_len: usize,
+) -> Vec<HeapString> {
     let mut out = Vec::new();
     let end = body.len().saturating_sub(8);
     let mut off = 0usize;
     while off < body.len().saturating_sub(strsec) && off < limit {
-        if !is_printable_qword(body, strsec, off, sched) {
+        if printable_prefix_len(body, strsec, off, sched) < min_len {
             off += 1;
             continue;
         }
