@@ -640,13 +640,19 @@ impl<'a> Meta<'a> {
     /// Per-row field-table mask.
     #[inline]
     pub fn field_mask(&self, i: u32) -> u32 {
+        if let Some(e) = &self.profile.field_mask_expr {
+            return e.eval(i as u64, &self.header, &|_, _| 0).unwrap_or(0) as u32;
+        }
         self.profile.field_mask.eval(i)
     }
 
     /// Field name index for row `i` of the full field table.
     #[inline]
     pub fn field_name_idx(&self, i: u32) -> u32 {
-        let raw = self.body.read_u32(self.field_base + self.profile.field_stride as usize * i as usize);
+        let raw = self.body.read_u32(
+            self.field_base + self.profile.field_stride as usize * i as usize
+                + self.profile.field_name_off as usize,
+        );
         raw ^ self.field_mask(i) ^ self.profile.field_name_xor
     }
 
@@ -659,7 +665,8 @@ impl<'a> Meta<'a> {
     #[inline]
     pub fn field_type_idx(&self, i: u32) -> u32 {
         let raw = self.body.read_u32(
-            self.field_base + self.profile.field_stride as usize * i as usize + 4,
+            self.field_base + self.profile.field_stride as usize * i as usize
+                + self.profile.field_type_off as usize,
         );
         (raw.wrapping_add(self.profile.field_type_add)) ^ self.field_mask(i) ^ self.profile.field_type_xor
     }

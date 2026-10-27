@@ -408,6 +408,57 @@ pub fn splice_profile(
         splice_td(&mut p, td, &mut m);
     }
 
+    // ---- field slice: rows = total typeDef fieldCount, chains from the
+    // field_names transfer, name column via heap + corelib field-name prior
+    // (engine form `raw ^ mask ^ xor` is exactly XorCXorMask) ----
+    if let (Some(heap), Some(td), Some(dv)) = (heap, td, derived) {
+        let field_base = p.field_names.resolve(&dv.header);
+        if td.field_rows_total > 0 && field_base > 0 {
+            if let Some(frec) = report.semantics.get("field_names") {
+                let prior: Vec<String> = serde_json::from_str(
+                    include_str!("../assets/prior_field_names.json"),
+                )
+                .unwrap_or_default();
+                let sample = std::cmp::min(td.field_rows_total as usize, 4000);
+                let mut solved_field = false;
+                for chain in &frec.chains {
+                    let Ok(mask) = crate::rowtable::eval_rows(chain, sample) else {
+                        continue;
+                    };
+                    if let Some(name) = crate::rowtable::solve_name_column(
+                        body,
+                        field_base,
+                        p.field_stride as usize,
+                        td.field_rows_total as usize,
+                        &mask,
+                        heap,
+                        &prior,
+                        sample,
+                    ) {
+                        if !crate::rowtable::name_column_ok(&name, sample) {
+                            continue;
+                        }
+                        if name.family == crate::expr::Fam::XorCXorMask {
+                            p.field_mask_expr = Some(chain.clone());
+                            p.field_name_xor = name.c as u32;
+                            p.field_name_off = name.off as u32;
+                            p.field_type_off = if name.off == 0 { 4 } else { 0 };
+                            m.solved.push(format!(
+                                "field_names.slice (name column +{:#x} c={:#X}, {} rows)",
+                                name.off, name.c, td.field_rows_total
+                            ));
+                            solved_field = true;
+                            break;
+                        }
+                    }
+                }
+                if !solved_field {
+                    m.notes.push("field table name column unsolved; field names stay seed data".into());
+                }
+            }
+        }
+    }
+
     // ---- parameter slice: rows come from the method solve (sum of
     // paramCount), the chain pool from the param transfer, the name column
     // from the heap + cross-version stable corelib parameter names ----
@@ -499,6 +550,9 @@ pub struct TdSolve {
     /// Namespace column (the OTHER string-index column), when a second one
     /// survives the printable-run finder.
     pub ns: Option<Column>,
+    /// Total field rows (sum of the typeDef fieldCount column) — the row
+    /// count of the global field table.
+    pub field_rows_total: u64,
     pub method_start: Column,
     pub field_start: Column,
     pub field_count: Column,
@@ -674,12 +728,16 @@ pub fn solve_typedef(
     if td_size.is_none() {
         notes.push("no td_size anchor: row count carried as td_rows_direct (structural walk)".into());
     }
+    let field_rows_total: u64 = (0..rows)
+        .map(|r| field_pair.count(body, r).unwrap_or(0) as u64)
+        .sum();
     Ok(Some(TdSolve {
         base: entries[0].base,
         stride,
         rows,
         name,
         ns,
+        field_rows_total,
         method_start: pair_column(method_pair, true),
         field_start: pair_column(field_pair, true),
         field_count: pair_column(field_pair, false),

@@ -5968,3 +5968,10 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
 - **短串盲区根因**：参数名 msg/fmt/args（3 字节）后跟非打印间隙，run<8 不入堆枚举（strings --out 只录 run≥8 起点）→ pin/exact 门全灭。修法三件：①`strings --min-len N`（string_starts_min，printable_prefix_len 参数化；7.1 min3 堆 67万→158万条）；②solve_name_column pin 行**按先验名长度降序**（长名钉常数更锐且短名恰是堆缺失区）；③Profile `param_def_name_off/type_off` 数据化（6.6 实测 name 列在 +0 与 7.1 的 +4 换位——engine 硬编码 +4 是 6.6 dump 乱码的直接原因）。
 - **先验资产**：assets/prior_param_names.json（48 个 corelib 参数名，7.1 oracle 常数提取：msg/fmt/args/resourceFormat/exception/flag/obj/klass/ptr...）。
 - **验收**：7.1 name_xor=1804988680=oracle、零接触 dump 仍 2,417,104 行 100%；**6.6 跨版本实弹：`private object GetText(object fmt, object args)`——参数名正确**（name 列 +0 c=0x37C37EA 482602 行；类型列仍种子=object，type 列求解留下轮）。默认 7.1 dump 逐字节回归一致。
+
+## R84（2026-10-28）：field 切片脚手架 + 全战役回归（不是需求，方案记录）
+
+- field 切片接线完成（field_mask_expr/列偏移数据化、TdSolve.field_rows_total=平铺计数和、prior_field_names.json 资产、XorCXorMask 门）——**但 7.1 实测链池无真链**：字段访问器函数的 symwalk 产物全是 r13^r13 自消常数伪影（链对每个 i 恒定），oracle 六常数只以伪影形式共现。**缺口在提取层不在求解层**：需要该函数的循环变量追踪修复或 emu 定点。代码保留（门控自动激活，无副作用）。
+- 全战役回归（min3 堆+param 切片）：td 6/6、6.5/6.6 方法全解、6.2 name-only（ok 2585→3670 提升）、oracle 前缀一致——无回退。**param 切片跨版落地：6.6 ✓（name@+0，482602 行）；6.5 链池无解；6.2 方法 name-only 无 sum_counts 不触发**（门正确）。
+- L6 门跨版行为如设计：6.5/6.6 种子 field_mask（7.1 的）在目标上解不出字段名 → 全候选拒 → 保种子基座+显式 note。
+- 遗留清单（按优先级）：①字段链提取修复（r13 追踪）→字段名跨版；②6.5/6.2 param 链提取；③prop/event 表；④转移弱环 6.0/6.1/6.3（chain_hunt 移植或全镜像找链）；⑤param type 列（typearr 上界区间交集）。

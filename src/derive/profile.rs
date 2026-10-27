@@ -574,6 +574,16 @@ pub struct Profile {
     pub default_value_data: Option<TableBase>,
     /// Per-row mask shared by both field columns.
     pub field_mask: FieldMaskChain,
+    /// Zero-touch override: generic per-row mask chain for the FIELD table;
+    /// supersedes `field_mask` when set.
+    #[serde(default)]
+    pub field_mask_expr: Option<Expr>,
+    /// Field column offsets (7.1: name@0, type@4); data-driven so a build
+    /// that swaps the slots needs no code change.
+    #[serde(default)]
+    pub field_name_off: u32,
+    #[serde(default = "default_field_type_off")]
+    pub field_type_off: u32,
     /// `name_idx = name_raw ^ mask ^ field_name_xor`.
     pub field_name_xor: u32,
     /// `type_idx = (type_raw + field_type_add) ^ mask ^ field_type_xor`.
@@ -668,6 +678,9 @@ fn default_param_name_off() -> u32 {
 }
 fn default_param_type_off() -> u32 {
     0
+}
+fn default_field_type_off() -> u32 {
+    4
 }
 
 #[cfg(test)]
