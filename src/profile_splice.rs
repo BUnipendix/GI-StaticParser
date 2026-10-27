@@ -412,43 +412,96 @@ pub fn splice_profile(
     // field_names transfer, name column via heap + corelib field-name prior
     // (engine form `raw ^ mask ^ xor` is exactly XorCXorMask) ----
     if let (Some(heap), Some(td), Some(dv)) = (heap, td, derived) {
-        let field_base = p.field_names.resolve(&dv.header);
-        if td.field_rows_total > 0 && field_base > 0 {
-            if let Some(frec) = report.semantics.get("field_names") {
+        if let Some(frec) = report.semantics.get("field_names") {
+            if td.field_rows_total > 0 {
                 let prior: Vec<String> = serde_json::from_str(
                     include_str!("../assets/prior_field_names.json"),
                 )
                 .unwrap_or_default();
                 let sample = std::cmp::min(td.field_rows_total as usize, 4000);
+                // Base candidates, best first: the L6-validated transfer base,
+                // then every derive anchor inside the matched function's
+                // window. On 6.6 the transfer's ordinal pick is wrong while
+                // the true anchor sits in the same function — base and mask
+                // must be solved JOINTLY, because the seed mask cannot
+                // validate a cross-version base on its own.
+                let b0 = p.field_names.resolve(&dv.header);
+                let mut bases: Vec<usize> = vec![];
+                if b0 > 0 {
+                    bases.push(b0);
+                }
+                let mut anchored: Vec<usize> = dv
+                    .anchors
+                    .iter()
+                    .filter(|a| a.site.abs_diff(frec.matched_fn) < 0x800)
+                    .filter_map(|a| a.resolve(&dv.header).map(|r| r as usize))
+                    .filter(|&b| b != b0 && body.len().saturating_sub(b) > 4096)
+                    .collect();
+                anchored.sort_unstable();
+                anchored.dedup();
+                bases.extend(anchored);
                 let mut solved_field = false;
-                for chain in &frec.chains {
-                    let Ok(mask) = crate::rowtable::eval_rows(chain, sample) else {
-                        continue;
-                    };
-                    if let Some(name) = crate::rowtable::solve_name_column(
-                        body,
-                        field_base,
-                        p.field_stride as usize,
-                        td.field_rows_total as usize,
-                        &mask,
-                        heap,
-                        &prior,
-                        sample,
-                    ) {
-                        if !crate::rowtable::name_column_ok(&name, sample) {
+                'base: for field_base in bases {
+                    for chain in &frec.chains {
+                        let Ok(mask) = crate::rowtable::eval_rows(chain, sample) else {
                             continue;
-                        }
-                        if name.family == crate::expr::Fam::XorCXorMask {
-                            p.field_mask_expr = Some(chain.clone());
-                            p.field_name_xor = name.c as u32;
-                            p.field_name_off = name.off as u32;
-                            p.field_type_off = if name.off == 0 { 4 } else { 0 };
-                            m.solved.push(format!(
-                                "field_names.slice (name column +{:#x} c={:#X}, {} rows)",
-                                name.off, name.c, td.field_rows_total
-                            ));
-                            solved_field = true;
-                            break;
+                        };
+                        if let Some(name) = crate::rowtable::solve_name_column(
+                            body,
+                            field_base,
+                            p.field_stride as usize,
+                            td.field_rows_total as usize,
+                            &mask,
+                            heap,
+                            &prior,
+                            sample,
+                        ) {
+                            if !crate::rowtable::name_column_ok(&name, sample) {
+                                continue;
+                            }
+                            if name.family == crate::expr::Fam::XorCXorMask {
+                                // the pool may carry the name constant BAKED into
+                                // the chain (`mask ^ nameC` — equivalent decode for
+                                // the name column, but it corrupts the TYPE column
+                                // which shares the raw mask). Split a trailing
+                                // Xor(inner, imm) back out: mask=inner, C^=imm.
+                                let mut mask_chain = chain.clone();
+                                let mut c = name.c as u32;
+                                // look through the Lo wrapper the walker adds
+                                let top = match chain.clone() {
+                                    crate::expr::Expr::Lo(_, inner) => *inner,
+                                    e => e,
+                                };
+                                if let crate::expr::Expr::Op2(op, inner, immexpr) = &top {
+                                    if *op == crate::expr::BinOp::Xor {
+                                        if let crate::expr::Expr::Imm(k) = **immexpr {
+                                            mask_chain = crate::expr::fold(inner);
+                                            c ^= k as u32;
+                                        }
+                                    }
+                                }
+                                p.field_mask_expr = Some(mask_chain);
+                                p.field_name_xor = c;
+                                p.field_name_off = name.off as u32;
+                                p.field_type_off = if name.off == 0 { 4 } else { 0 };
+                                // carry the winning base when it came from the
+                                // in-function anchor sweep, not from L6
+                                if field_base != b0 {
+                                    if let Some(a) = dv
+                                        .anchors
+                                        .iter()
+                                        .find(|a| a.resolve(&dv.header) == Some(field_base as u32))
+                                    {
+                                        p.field_names = anchor_table_base(a);
+                                    }
+                                }
+                                m.solved.push(format!(
+                                    "field_names.slice (base {:#x}, name column +{:#x} c={:#X}, {} rows)",
+                                    field_base, name.off, c, td.field_rows_total
+                                ));
+                                solved_field = true;
+                                break 'base;
+                            }
                         }
                     }
                 }

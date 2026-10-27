@@ -242,15 +242,23 @@ impl<'a> Walker<'a> {
     }
 
     fn record_chain(&mut self, addr: u64, e: &Expr) {
-        let syms = expr_syms_set(e);
+        let mut cand = e.clone();
+        if expr_syms_set(&cand).len() == 2 {
+            // base+counter row index: collapse the single Add(Sym, Sym) node
+            // into `i` so the chain becomes pure for the row solver
+            if let Some(c) = crate::expr::collapse_index_sum(&cand) {
+                cand = c;
+            }
+        }
+        let syms = expr_syms_set(&cand);
         if syms.len() == 1
-            && !expr_has(e, false)
-            && !expr_has(e, true)
-            && expr_size(e) >= 3
+            && !expr_has(&cand, false)
+            && !expr_has(&cand, true)
+            && expr_size(&cand) >= 3
             && syms.iter().all(|s| !bad_sym(s))
         {
-            let key = format!("{}", e);
-            self.chains.entry(key).or_insert(ChainRec { addr, expr: e.clone() });
+            let key = format!("{}", cand);
+            self.chains.entry(key).or_insert(ChainRec { addr, expr: cand });
         }
     }
 

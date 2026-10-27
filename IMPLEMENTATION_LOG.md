@@ -5975,3 +5975,13 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
 - 全战役回归（min3 堆+param 切片）：td 6/6、6.5/6.6 方法全解、6.2 name-only（ok 2585→3670 提升）、oracle 前缀一致——无回退。**param 切片跨版落地：6.6 ✓（name@+0，482602 行）；6.5 链池无解；6.2 方法 name-only 无 sum_counts 不触发**（门正确）。
 - L6 门跨版行为如设计：6.5/6.6 种子 field_mask（7.1 的）在目标上解不出字段名 → 全候选拒 → 保种子基座+显式 note。
 - 遗留清单（按优先级）：①字段链提取修复（r13 追踪）→字段名跨版；②6.5/6.2 param 链提取；③prop/event 表；④转移弱环 6.0/6.1/6.3（chain_hunt 移植或全镜像找链）；⑤param type 列（typearr 上界区间交集）。
+
+## R85（2026-10-28）：字段链提取修复——7.1 字段名零接触解出（不是需求，方案记录）
+
+三层根因逐个修掉，7.1 字段表（440172 行）零接触解出，dump 保持 2,417,104 行 100%：
+
+1. **fold 缺自消规则**：`xor r13d,r13d`（循环变量清零惯用法）被记为 `Xor(Sym,Sym)` 而非 0——下游一切经 r13 的表达式变成双符号且 r13 出现两次，任何坍缩/纯度门都过不了（R84 的「r13 伪影」确切成因）。fold 加 `X^X→0 / A-A→0`（Expr derive PartialEq）。
+2. **emu 不处理 Lea**：`lea edx,[r14+r13]`（行地址惯用法）直接跳过，rdx 保持陈旧值——整个掩码链建立在错的输入上。emu_tracker 补 Lea 符号求值（base+index×scale+disp）。修复后 emu 一次产出完整 oracle 六常数链＋含 `^0x48e6373` 的整列公式。
+3. **链内烘焙列常数**：池里 `mask^nameC` 变体让 name 求解给出 c=0（解码等价）但类型列共用掩码被连坐（`MonoClass* value`→`object value`，3.31% 崩）。拼接处拆分：顶层（穿透 Lo 包裹）`Xor(inner,imm)` → mask=inner、C^=imm。修后 field_name_xor=0x48E6373=oracle 逐位同、7.1 dump 回 100%。
+- 附：expr::collapse_index_sum（base+counter 双符号求和节点坍缩为 Sym("i")，symwalk/emu 两处 record 门接入）+ 单测；本轮它未成为主修复路径（Lea+fold 已让链单符号化）但作为通用保险保留。
+- **6.6 字段**：联合基座+链求解（匹配函数窗口内 derive 锚 ×链池）已实现，但 6.6 链形态不同（movabs-imul 家族 `×0x4f0c708494a8>>0x12`，与其方法链同族），name 列族也非 XorCXorMask——需要 engine 字段列 Gen* 化（照 md 列模式）＝下轮。参数名 6.6 已全对（fmt/args/obj/parser 实证）。

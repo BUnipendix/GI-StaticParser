@@ -47,7 +47,7 @@ pub enum BinOp {
 /// (`["imm", v]`, `["op2", op, a, b]`, ...): current serde (1.0.229) maps
 /// tuple variants to `{"imm": v}` objects, but the Python tools emit and
 /// consume arrays, and artifacts on disk use that shape.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Imm(u64),
     Sym(String),
@@ -336,6 +336,65 @@ pub fn expr_syms_set(e: &Expr) -> std::collections::BTreeSet<String> {
     s
 }
 
+fn count_syms(e: &Expr, out: &mut std::collections::BTreeMap<String, u32>) {
+    match e {
+        Expr::Sym(n) => *out.entry(n.clone()).or_insert(0) += 1,
+        Expr::Imm(_) | Expr::Hdr(_, _) | Expr::Raw(_, _) => {}
+        Expr::Op2(_, a, b) => {
+            count_syms(a, out);
+            count_syms(b, out);
+        }
+        Expr::Lo(_, a) | Expr::Ext(_, a, _) => count_syms(a, out),
+    }
+}
+
+/// Collapse the base+counter row index of a table loop into a single symbol.
+///
+/// Mask chains are indexed by the GLOBAL row number, but the code computes it
+/// as `lea edx, [rBase + rCounter]` — two unknown registers whose only joint
+/// occurrence is that one sum node (7.1 field builder at 0x14051394A:
+/// `lo32(r14 + r13)` feeding `imul rdx, 0x23CF ...`). When the expression has
+/// exactly two symbols, each appearing exactly once, and they meet in a single
+/// `Add(Sym, Sym)` node, that node becomes `Sym("i")` — the global row index
+/// — and the chain turns pure for the row solver.
+pub fn collapse_index_sum(e: &Expr) -> Option<Expr> {
+    let mut cnt = std::collections::BTreeMap::new();
+    count_syms(e, &mut cnt);
+    if cnt.len() != 2 || cnt.values().any(|&n| n != 1) {
+        return None;
+    }
+    let names: Vec<&String> = cnt.keys().collect();
+    let (a, b) = (names[0].clone(), names[1].clone());
+    rewrite_sum(e, &a, &b)
+}
+
+fn rewrite_sum(e: &Expr, a: &str, b: &str) -> Option<Expr> {
+    if let Expr::Op2(BinOp::Add, x, y) = e {
+        if let (Expr::Sym(s1), Expr::Sym(s2)) = (x.as_ref(), y.as_ref()) {
+            if (s1 == a && s2 == b) || (s1 == b && s2 == a) {
+                return Some(Expr::Sym("i".into()));
+            }
+        }
+    }
+    // subtrees without symbols stay unchanged; one containing a symbol
+    // outside the single sum node aborts the collapse (caller checks counts)
+    let inner_syms = expr_syms_set(e);
+    if inner_syms.is_empty() {
+        return Some(e.clone());
+    }
+    match e {
+        Expr::Sym(_) | Expr::Hdr(_, _) | Expr::Raw(_, _) => None,
+        Expr::Imm(_) => unreachable!("imm has no syms"),
+        Expr::Op2(op, x, y) => {
+            let rx = rewrite_sum(x, a, b)?;
+            let ry = rewrite_sum(y, a, b)?;
+            Some(Expr::Op2(*op, Box::new(rx), Box::new(ry)))
+        }
+        Expr::Lo(n, x) => rewrite_sum(x, a, b).map(|v| Expr::Lo(*n, Box::new(v))),
+        Expr::Ext(n, x, sg) => rewrite_sum(x, a, b).map(|v| Expr::Ext(*n, Box::new(v), *sg)),
+    }
+}
+
 /// kind=true: contains Hdr; kind=false: contains Raw.
 pub fn expr_has(e: &Expr, hdr: bool) -> bool {
     match e {
@@ -406,6 +465,16 @@ pub fn fold(e: &Expr) -> Expr {
             let (a, b) = (fold(a), fold(b));
             if let (Expr::Imm(x), Expr::Imm(y)) = (&a, &b) {
                 return Expr::Imm(eval_binop_pub(op, *x, *y));
+            }
+            // self-cancellation: `xor reg, reg` / `sub reg, reg` are the
+            // canonical zero idioms; leaving them symbolic turns every chain
+            // through that register into a two-symbol expression that no
+            // solver can use (the 7.1 field-mask chain was lost exactly here)
+            if *op == BinOp::Xor && a == b {
+                return Expr::Imm(0);
+            }
+            if *op == BinOp::Sub && a == b {
+                return Expr::Imm(0);
             }
             if matches!(op, BinOp::Add | BinOp::Sub) {
                 if let Some(out) = fold_lin_merge(*op, &a, &b) {
@@ -585,6 +654,30 @@ mod tests {
             let v = fam_value(fam, raw, mask, c, u32::MAX as u64);
             assert_eq!(v, idx, "family {:?} roundtrip", fam);
         }
+    }
+
+    /// base+counter collapse: `lo32(r14 + r13)` as the only place the two
+    /// symbols meet becomes `i` (7.1 field-builder loop shape).
+    #[test]
+    fn collapse_index_sum_two_symbols() {
+        use std::collections::BTreeSet;
+        let sum = Expr::Op2(
+            BinOp::Add,
+            Box::new(Expr::Sym("r14".into())),
+            Box::new(Expr::Sym("r13".into())),
+        );
+        let chain = Expr::Op2(
+            BinOp::Xor,
+            Box::new(Expr::Op2(BinOp::Mul, Box::new(Expr::Lo(32, Box::new(sum))), Box::new(Expr::Imm(0x23CF)))),
+            Box::new(Expr::Imm(0x3D27_C42E)),
+        );
+        let c = collapse_index_sum(&chain).expect("collapses");
+        assert_eq!(expr_syms_set(&c), BTreeSet::from(["i".into()]));
+        // value: i * 0x23CF ^ 0x3D27C42E for row 1
+        assert_eq!(c.eval(1, &[0u8; 0x210], &|_, _| 0).unwrap(), 0x23CF ^ 0x3D27_C42E);
+        // three symbols / repeated symbols do not collapse
+        let three = Expr::Op2(BinOp::Add, Box::new(chain.clone()), Box::new(Expr::Sym("rbp".into())));
+        assert!(collapse_index_sum(&three).is_none());
     }
 
     /// 6.7 name column ground truth: XorCSubMask with C = 0x06BBF48D decodes

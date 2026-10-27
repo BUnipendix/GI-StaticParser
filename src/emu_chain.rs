@@ -92,15 +92,24 @@ impl Tracker {
     }
 
     fn set(&mut self, canon: &str, e: Expr, addr: u64) {
-        let syms = expr_syms_set(&e);
+        let mut cand = e.clone();
+        if expr_syms_set(&cand).len() == 2 {
+            // base+counter row index (e.g. the 7.1 field builder's
+            // `lea edx,[r14+r13]`): collapse the single Add(Sym,Sym) node
+            // into `i` so the mask chain becomes pure
+            if let Some(c) = crate::expr::collapse_index_sum(&cand) {
+                cand = c;
+            }
+        }
+        let syms = expr_syms_set(&cand);
         if syms.len() == 1
-            && !expr_has(&e, false)
-            && !expr_has(&e, true)
-            && expr_size(&e) >= 3
+            && !expr_has(&cand, false)
+            && !expr_has(&cand, true)
+            && expr_size(&cand) >= 3
             && syms.iter().all(|s| !bad_sym(s))
         {
-            let key = format!("{}", e);
-            self.chains.entry(key).or_insert(ChainRec { addr, expr: e.clone() });
+            let key = format!("{}", cand);
+            self.chains.entry(key).or_insert(ChainRec { addr, expr: cand });
         }
         self.regs.insert(canon.to_string(), e);
     }
@@ -156,6 +165,46 @@ impl Tracker {
                 if ins.op_kind(1) == OpKind::Register {
                     let src = self.get(&reg_cb(ins.op_register(1)).0);
                     self.set(&dst.0, src, addr);
+                }
+            }
+            Mnemonic::Lea => {
+                // `lea reg, [base + index*scale + disp]` — the row-address
+                // idiom every table loop uses (`lea edx, [r14 + r13]`); without
+                // symbolic evaluation the destination keeps a stale value and
+                // the whole mask chain built on it is lost
+                if ins.op_count() != 2 || ins.op_kind(0) != OpKind::Register {
+                    return;
+                }
+                let dst = reg_cb(ins.op_register(0)).0;
+                let mut e: Option<Expr> = None;
+                let base = ins.memory_base();
+                if base != iced_x86::Register::None {
+                    e = Some(self.get(&reg_cb(base).0));
+                }
+                let index = ins.memory_index();
+                if index != iced_x86::Register::None {
+                    let idx = self.get(&reg_cb(index).0);
+                    let scale = ins.memory_index_scale() as u64;
+                    let scaled = if scale == 1 {
+                        idx
+                    } else {
+                        Expr::Op2(BinOp::Mul, Box::new(idx), Box::new(Expr::Imm(scale)))
+                    };
+                    e = Some(match e {
+                        Some(b) => Expr::Op2(BinOp::Add, Box::new(b), Box::new(scaled)),
+                        None => scaled,
+                    });
+                }
+                let disp = ins.memory_displacement64();
+                if disp != 0 {
+                    e = Some(match e {
+                        Some(b) => Expr::Op2(BinOp::Add, Box::new(b), Box::new(Expr::Imm(disp))),
+                        None => Expr::Imm(disp),
+                    });
+                }
+                if let Some(e) = e {
+                    let e = fold(&e);
+                    self.set(&dst, e, addr);
                 }
             }
             Mnemonic::Imul => {
