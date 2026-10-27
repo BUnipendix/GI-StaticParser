@@ -1,260 +1,42 @@
-//! The 7.1-generation layout shape: every constant was recovered from the 7.1.0
+//! The 7.1-generation profile, now shipped as DATA (R82): every constant
+//! lives in `assets/profile-7.1.0.json`, loaded here once. The historical
+//! in-code constant table was retired because a data-driven dumper should not
+//! embed per-build constants in code — a profile file is the only carrier.
+//!
+//! Provenance of the constants (unchanged): recovered from the 7.1.0
 //! YuanShen.exe metadata accessors (kuna decompilation, cross-checked with the
 //! 6.4 community dump oracle) and validated structurally over the full tables.
-//!
-//! Future builds with the same layout but rotated constants are handled by
-//! `discover` (constant-pool re-derivation); a layout change surfaces as a
-//! validator failure naming the broken step.
 
-use super::profile::{
-    ColKind, Column, EventMaskChain, FieldMaskChain, MaskChain, ParamMaskChain, Profile, TableBase,
-};
+use super::profile::Profile;
 
-/// The 7.1 layout with its measured constants.
+/// The JSON export of the retired in-code table (generated 2026-10-27 from the
+/// last gen71() build; the two are checked byte-for-byte by
+/// `profile_matches_retired_gen71` in the derive tests).
+pub const PROFILE_71_JSON: &str = include_str!("../../assets/profile-7.1.0.json");
+
+/// The 7.1 profile from the data file. Panics only on a corrupted asset.
 pub fn gen71() -> Profile {
-    Profile {
-        // The legacy triple below is the same schedule `derive::cipher` recovers from
-        // 7.1.0 (verified bit-identical: ((off & 0xFFFFFF) * M1 + X1) ^ X2, step M4),
-        // so it is left in the legacy form on purpose -- it is the oracle the derived
-        // form is checked against.
-        cipher: None,
-        strsec_direct: None,
-        md_mask_expr: None,
-        td_rows_direct: None,
-        md_rows_direct: None,
-        str_m1: 0xB33E_4042_7D56_68C0,
-        str_x1: 0x6D8C_4AAB_00FE_8E27,
-        str_x2: 0x30EE_5B43_130F_E0CD,
-        str_m4: 0x0889_EEEA_326A_FB36,
-        str_hdr_off: 0x150,
-        str_sub: 0x37AB_D22E,
+    serde_json::from_str(PROFILE_71_JSON).expect("assets/profile-7.1.0.json is valid JSON")
+}
 
-        type_defs: TableBase { hdr_off: 0xDC, sub: None, xor: Some(0x5278_CA3B), add: None },
-        // typeDef-table BYTE SIZE (hdr[0x60] ^ 0x15335474 = 6,223,280); rows = /0x46 = 88,904.
-        // The structural chain walk stops early (88,872); the last two rows are padding.
-        td_size: Some(TableBase { hdr_off: 0x60, sub: None, xor: Some(0x1533_5474), add: None }),
-        method_defs: TableBase { hdr_off: 0x1E0, sub: None, xor: Some(0x2EE4_80FB), add: None },
-        // Method-table BYTE SIZE (hdr[0x134] + 0x8EEFDB56 -> 19,070,516); rows = size/0x1A =
-        // 733,481, verified against the data (last valid row 733,480). The method-pointer
-        // array only covers 460,282 methods that have direct code pointers, so it cannot
-        // be used as the row count (that truncation silently dropped 273,199 methods).
-        md_size: Some(TableBase { hdr_off: 0x134, sub: None, xor: None, add: Some(0x8EEF_DB56) }),
-        fields: TableBase { hdr_off: 0x158, sub: Some(0x1D54_5CCC), xor: None, add: None },
-        params: TableBase { hdr_off: 0x1D0, sub: None, xor: Some(0x07D0_BBF9), add: None },
-        // MEASURED WRONG, and currently dead: `derive::anchor` recovers the real code as
-        // `mov edx,[r13+0x200] ; mov eax,0xB43E0EB1 ; add edx,eax` (=> body + 0xA03E64),
-        // whereas this `sub` resolves to 0x9824_2102, outside the body. `Meta::slot_base`
-        // has no reader, so nothing consumes it today; left as-is on purpose (changing a
-        // shared constant is a behaviour change, not a fix). See IMPLEMENTATION_LOG §12.
-        slot_table: TableBase { hdr_off: 0x200, sub: Some(0xB43E_0EB1), xor: None, add: None },
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-        td_stride: 0x46,
-        td_magic: -0x2145_AFB7,
-        td_name: Column { offset: 0x14, kind: ColKind::AddC, c: 0xE811_F779 },
-        td_name_sentinel: 0x17EE_0886,
-        td_ns: Column { offset: 0x18, kind: ColKind::XorC, c: 0x6667_69B5 },
-        td_method_start: Column { offset: 0x08, kind: ColKind::XorC, c: 0x0478_AF59 },
-        // typeDef fieldStart/fieldCount (validated: chain-walk tiles [0, 440172) exactly
-        // over slots 0..88903; cross-checked against 6.4Dump.cs field sets at 2747 anchors).
-        td_field_start: Column { offset: 0x00, kind: ColKind::XorC, c: 0x7262_8007 },
-        td_fs_sentinel_raw: 0x8D9D_7FF8,
-        td_field_count: Column { offset: 0x30, kind: ColKind::XorC, c: 0x9A6B },
-        // Nested-type links: start u16@0x36 ^ 0xC87C, count u8@0x45 ^ 0xAB, table hdr[0x1B8] ^ 0x586ABAF1.
-        td_nested_start: Some(Column { offset: 0x36, kind: ColKind::XorC, c: 0xC87C }),
-        td_nested_count: Some(Column { offset: 0x45, kind: ColKind::XorC, c: 0xAB }),
-        nested_types: Some(TableBase { hdr_off: 0x1B8, sub: None, xor: Some(0x586A_BAF1), add: None }),
-        // Property-definition table: body + (hdr[0x158] - 0x1D545CCC), 10-byte rows.
-        // Decoded from the runtime cache builder at 0x140515FC0 (fills klass->fields array):
-        //   name = ((raw@+0 u32 + 0xEE8895EA) ^ mask(row)) -- packed string index
-        //   getter = ((raw@+4 u16 - 0x238F) ^ mask) & 0xFFFF
-        //   setter = ((raw@+8 u16 ^ mask) ^ 0xDB1) & 0xFFFF
-        // mask(row) = (((row*0xA593) ^ 0x3CA3FFA0) * 0x5CD0B62E + 0x63A341E6) ^ 0x2411ED71
-        // typeDef propertyStart = u32@0x24 + 0xCE2141CC; propertyCount = u8@0x43 ^ 0x86.
-        // Full-table validation: 115,596 rows tile [0, 115596) exactly over all 88,902 typeDefs,
-        // getter/setter indexes all < methodCount, names decode (DateTimeFormatInfo anchor).
-        property_defs: Some(TableBase { hdr_off: 0x158, sub: Some(0x1D54_5CCC), xor: None, add: None }),
-        property_stride: 10,
-        td_property_start: Some(Column { offset: 0x24, kind: ColKind::AddC, c: 0xCE21_41CC }),
-        td_property_count: Some(Column { offset: 0x43, kind: ColKind::XorC, c: 0x86 }),
-        property_mask: Some(MaskChain {
-            mul1: 0xA593,
-            xor1: 0x3CA3_FFA0,
-            mul2: 0x5CD0_B62E,
-            add1: 0x63A3_41E6,
-            xor2: 0x2411_ED71,
-            mul_last: 0,
-        }),
-        property_name_add: 0xEE88_95EA,
-        property_get_sub: 0x238F,
-        property_set_xor: 0x0DB1,
-        // Event-definition table: body + (hdr[0x64] + 0xE6130C67), 14-byte rows
-        // {name u32, type u32, remove u16, raise u16, add u16}.
-        // Decoded from the runtime EventInfo cache builder 0x140515AE0 (klass->events at +0x38,
-        // element size 0x30):
-        //   mask(i) = ((i*0x9C54 ^ 0x1F0DA79F) * 0x1BF89D8B64959BB7 + 0x295EE0EBA6CAFAEA) >> 15
-        //   name = (raw ^ mask) ^ 0x05C273ED;  type = (raw + 0x979C7DA9) ^ mask
-        //   remove = ((raw + 0x38EB) ^ mask) & 0xFFFF; raise = ((raw + 0xFFFFE40A) ^ mask) & 0xFFFF
-        //   add = ((raw ^ mask) ^ 0x7D45) & 0xFFFF
-        // typeDef eventStart = u16@0x38 + 0xFFFFD6AB; eventCount = u8@0x44 ^ 0xB5.
-        // Full-table validation: 628 rows tile exactly over all 88,902 typeDefs; add/remove
-        // resolve to add_*/remove_* methods on un-obfuscated types.
-        event_defs: Some(TableBase { hdr_off: 0x64, sub: None, xor: None, add: Some(0xE613_0C67) }),
-        event_stride: 14,
-        td_event_start: Some(Column { offset: 0x38, kind: ColKind::AddC, c: 0xFFFF_D6AB }),
-        td_event_count: Some(Column { offset: 0x44, kind: ColKind::XorC, c: 0xB5 }),
-        event_mask: Some(EventMaskChain {
-            mul1: 0x9C54,
-            xor1: 0x1F0D_A79F,
-            mul2: 0x1BF8_9D8B_6495_9BB7,
-            add1: 0x295E_E0EB_A6CA_FAEA,
-            shift: 15,
-        }),
-        event_name_xor: 0x05C2_73ED,
-        event_type_add: 0x979C_7DA9,
-        event_remove_add: 0x38EB,
-        event_raise_add: 0xE40A,
-        event_add_xor: 0x7D45,
-        // Generic-class rows live in startup-metadata.dat (loader 0x1405365BE..0x140536660):
-        //   base = startup + (i32(hdr[0x120]) ^ 0x1C3F68EA); rows = {defTdi u32, genericInstIndex i32}
-        // GenericInst structs: registration+0x28 -> 16B {argc, pad, Il2CppType** argv}.
-        attribute_types_off: Some(0x9B_ACA4),
-        attribute_count: Some(74_864),
-        attribute_instance_tag: Some(0x0100_0000),
-        startup_images: Some(crate::derive::profile::StartupNameTable {
-            table: TableBase { hdr_off: 0x84, sub: None, xor: Some(0x582F_3633), add: None },
-            stride: 0x28,
-            name_off: 0x18,
-            name_op: "xor-sub".to_string(),
-            name_c: 0x5E89_98A9,
-            mask_mul: 0xBD1E_70EB_664,
-            mask_shift: 16,
-            mask_mul2: None,
-            mask_add2: None,
-            mask_add: Some(0x724F_4CCB),
-            mask_xor: Some(0x2BE0_2F3D),
-        }),
-        startup_assemblies: Some(crate::derive::profile::StartupNameTable {
-            table: TableBase { hdr_off: 0x6C, sub: None, xor: None, add: Some(0xE028_E1F0) },
-            stride: 44,
-            name_off: 0x1C,
-            name_op: "add-xor".to_string(),
-            name_c: 0xFE3F_0D29,
-            mask_mul: 0x42DC_DAFE_4FA8,
-            mask_shift: 20,
-            mask_mul2: Some(0x1E70_F997),
-            mask_add2: Some(0x50F1_2A02),
-            mask_add: None,
-            mask_xor: None,
-        }),
-        generic_class_rows: Some(TableBase { hdr_off: 0x120, sub: None, xor: Some(0x1C3F_68EA), add: None }),
-        generic_insts_va: Some(0x1_4234_4A40),
-        nested_stride: 4,
-        // flags = raw + 0xDFA09F90 (mod 2^32) — decoded from the .upx0 mutated class
-        // builder 0x159F63C4D: `mov edx,0xDFA09F90; add edx,[row+0xC]; mov [klass+0xAC],edx`.
-        // Validated statistically (iface 0.0181/abs 0.089/sealed 0.505/pub 0.790) and
-        // row-by-row against the calibrated rows 0..4 (log §28).
-        td_flags: Some(Column { offset: 0x0C, kind: ColKind::AddC, c: 0xDFA0_9F90 }),
-        // bitfield = u16@0x32 ^ 0x8BA4 — bit0 IsValueType (rate 0.1464), bit1 IsEnum
-        // (0.0916); row4 Mono.RuntimeClassHandle decodes sealed|vt as expected.
-        td_bitfield: Some(Column { offset: 0x32, kind: ColKind::XorC, c: 0x8BA4 }),
-
-        // Full field table (all images): stride 8 {name_raw@0, type_raw@4}; per-row mask
-        // with a 64-bit add (add1 > 2^32) and a pre-truncation shift. 440172 rows.
-        field_names: TableBase { hdr_off: 0x4C, sub: Some(0xE5D2_49BFu32.wrapping_neg()), xor: None, add: None },
-        field_stride: 8,
-        // Field default-value table (12B rows {valueOff, fieldIdx, typeIdx}) + shared value blob.
-        // From the runtime accessor at 0x1404C7C00: base = hdr[0x164] ^ 0x03893506,
-        // count = (hdr[0x144] + 0xD1F800F2) / 12, values at body + (hdr[0x128] ^ 0x371354A2) + off.
-        field_defaults: Some(TableBase { hdr_off: 0x164, sub: None, xor: Some(0x0389_3506), add: None }),
-        field_defaults_size: Some(TableBase { hdr_off: 0x144, sub: None, xor: None, add: Some(0xD1F8_00F2) }),
-        default_value_data: Some(TableBase { hdr_off: 0x128, sub: None, xor: Some(0x3713_54A2), add: None }),
-        // Parameter definition table (8B rows): base = hdr[0x68] ^ 0x146BE503 (accessor 0x1405297EE).
-        // name = (raw@+4 ^ 0x6B95F108) - mask(i); type = (raw@+0 ^ 0x76621606) - mask(i), -1 = none.
-        // Parameter-default table: base = hdr[0x1D0] ^ 0x07D0BBF9 (profile.params, 12B rows), size
-        // = hdr[0x18] + 0xA1C835BE. Accessor 0x1405287A0 searches a sorted key column
-        // (= global parameter index) and yields {valueTypeIndex u32@+4, dataOffset i32@+8};
-        // the value lives in the same shared blob as field defaults (hdr[0x128] ^ 0x371354A2).
-        // Full-table check: 25,374 rows, all keys < 548,400, all corresponding parameters carry
-        // Optional|HasDefault, 15,595 rows have a value and 9,779 have dataOffset = -1.
-        param_defaults_size: Some(TableBase { hdr_off: 0x18, sub: None, xor: None, add: Some(0xA1C8_35BE) }),
-        param_defs: Some(TableBase { hdr_off: 0x68, sub: None, xor: Some(0x146B_E503), add: None }),
-        param_def_stride: 8,
-        param_def_name_xor: 0x6B95_F108,
-        param_def_type_xor: 0x7662_1606,
-        param_def_mask: Some(ParamMaskChain {
-            mul1: 0x4A23,
-            xor1: 0x5F26_8FCF,
-            mul2: 0x2B03_52A0,
-            shift: 9,
-            xor2: 0x1028_EA75,
-            add: 0x68B3_76F1,
-            xor3: 0x4F86_A723,
-        }),
-        field_mask: FieldMaskChain {
-            mul1: 0x23CF,
-            xor1: 0x3D27_C42E,
-            mul2: 0x7F76_A166,
-            add1: 0x0F06_651F_C0B8_A,
-            shift: 16,
-            add2: 0x49AC_DCBC,
-        },
-        field_name_xor: 0x048E_6373,
-        field_type_add: 0xB36B_852D,
-        field_type_xor: 0x4F6E_2A1D,
-
-        // typeDef parent: parent_tarr = raw@0x2C ^ 0x5FCD8771 (a FIXED mask; verified on all
-        // 88,902 rows: 87,244 decode to a valid typearr index). The earlier formula
-        // `raw ^ tag@0x1C ^ 0x8177D738` only coincided with this on rows whose element-type
-        // column holds the 0xDEBA5049 sentinel — 25,981 rows (= every type with a real
-        // element-type tag) decoded to garbage and silently lost their base class.
-        // 0xFFFFFFFF = no base (interfaces, System.Object).
-        td_parent_off: 0x2C,
-        td_parent_xor: 0x5FCD_8771,
-        // Interface-offsets table hdr[0x70] - 0x6EA5B3FD, stride 6 {typeIdx i32, off i16};
-        // per-type start = u16@0x3A ^ 0x4BCE (0xFFFF = none); count = next distinct start
-        // (offsets list includes interfaces inherited from bases).
-        iface_table: TableBase { hdr_off: 0x70, sub: Some(0x6EA5_B3FD), xor: None, add: None },
-        iface_stride: 6,
-        td_iface_start_off: 0x3A,
-        td_iface_start_xor: 0x4BCE,
-        // interfacesCount: u8@0x42 + 0xA2 (validated: count == next-start run length for 86,587
-        // types; sum 108,758 ~= run total 109,607). Removes the run-length approximation.
-        td_iface_count_off: Some(0x42),
-        td_iface_count_add: 0xA2,
-
-        md_stride: 0x1A,
-        md_ret_type: Column { offset: 0x00, kind: ColKind::AddCSubMask2, c: 0xE5EE_4081 },
-        md_name: Column { offset: 0x04, kind: ColKind::XorCAddMask, c: 0x0613_ACE3 },
-        md_param_start: Column { offset: 0x08, kind: ColKind::XorCSubMask2, c: 0x20D5_5D01 },
-        md_decl: Column { offset: 0x0E, kind: ColKind::XorCAddMask, c: 0x0394_729C },
-        md_slot: Column { offset: 0x0C, kind: ColKind::XorCSubMask2I16, c: 0x1E2A },
-        md_flags: Column { offset: 0x12, kind: ColKind::SubMask2AddC16, c: 0x8D17 },
-        md_param_count: Column { offset: 0x18, kind: ColKind::SubMask2AddC8, c: 0x8C },
-        md_pmask: MaskChain {
-            mul1: 0x4E94,
-            xor1: 0x62D8_B7B8,
-            mul2: 0x7572_748A,
-            add1: 0x1F4D_9EEA,
-            xor2: 0x6E89_31D6,
-            mul_last: 0xC6FC_9C8B,
-        },
-        md_mask2_mul: 0x3903_6375,
-        md_param_extra: 0,
-
-        fd_stride: 10,
-        fd_name: Column { offset: 0x00, kind: ColKind::AddC, c: 0xEE88_95EA_u32.wrapping_neg() },
-        fd_type: Column { offset: 0x04, kind: ColKind::SubMask2AddC16, c: 0x238F },
-        fd_attrs: Column { offset: 0x06, kind: ColKind::SubMask2AddC16, c: 0x720A_u32.wrapping_neg() },
-        fd_pmask: MaskChain {
-            mul1: 0xA593,
-            xor1: 0x3CA3_FFA0,
-            mul2: 0x5CD0_B62E,
-            add1: 0x63A3_41E6,
-            xor2: 0x2411_ED71,
-            mul_last: 0,
-        },
-        param_stride: 12,
-        param_key_c: 0x20D5_5D01,
-        param_extra_is_slot: false,
+    /// The data file must round-trip through the Profile schema with every
+    /// optional field intact (anchor regression for the retirement).
+    #[test]
+    fn profile_json_loads_fully() {
+        let p = gen71();
+        assert_eq!(p.td_stride, 70);
+        assert_eq!(p.td_name.offset, 0x14);
+        assert_eq!(p.td_name.c, 0xE811_F779);
+        assert_eq!(p.md_stride, 26);
+        assert_eq!(p.md_name.offset, 4);
+        assert_eq!(p.md_mask2_mul, 0x3903_6375);
+        assert_eq!(p.td_size.as_ref().unwrap().hdr_off, 0x60);
+        assert_eq!(p.md_size.as_ref().unwrap().hdr_off, 0x134);
+        assert!(p.property_defs.is_some() && p.event_defs.is_some() && p.param_defs.is_some());
+        assert_eq!(p.startup_images.as_ref().unwrap().stride, 40);
     }
 }

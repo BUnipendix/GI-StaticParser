@@ -14,7 +14,7 @@
 
 use crate::derive::cipher::BuildDerivation;
 use crate::derive::profile::{ColKind, Column, Profile, TableBase};
-use crate::rowtable::TableReport;
+use crate::rowtable::{is_identifier, TableReport};
 use crate::shape_transfer::{parse_op, AnchorOp, TransferRec, TransferReport};
 use serde::Serialize;
 
@@ -30,6 +30,37 @@ pub struct SpliceManifest {
     pub inherited: Vec<String>,
     /// Anomalies worth a human look (weak matches, cross-check failures).
     pub notes: Vec<String>,
+}
+
+
+/// Field-name decode rate over the first `n` rows of a candidate field-table
+/// base, using the profile's own field mask + name xor: the share of decodable
+/// rows whose name is a plausible identifier. A WRONG base (e.g. the typeDef
+/// table, which the transfer can pick on a weak match) decodes to noise.
+fn field_name_rate(body: &[u8], base: usize, p: &Profile, n: usize) -> f64 {
+    let sched = p.schedule();
+    let (mut ok, mut good) = (0usize, 0usize);
+    for i in 0..n {
+        let at = base + i * p.field_stride as usize;
+        let Some(b) = body.get(at..at + 4) else { break };
+        let raw = u32::from_le_bytes(b.try_into().unwrap());
+        let m = p.field_mask.eval(i as u32);
+        let idx = raw ^ m ^ p.field_name_xor;
+        let s = crate::decode_str::decode_str_sched(
+            &crate::mem::Buffer::new(body),
+            p.strsec_direct.map(|v| v as usize).unwrap_or(0),
+            idx,
+            &sched,
+        );
+        if s.is_empty() {
+            continue;
+        }
+        ok += 1;
+        if is_identifier(&s) {
+            good += 1;
+        }
+    }
+    good as f64 / ok.max(1) as f64
 }
 
 fn table_base(rec: &TransferRec) -> TableBase {
@@ -67,6 +98,7 @@ pub fn splice_profile(
     method: Option<&TableReport>,
     td: Option<&TdSolve>,
     derived: Option<&BuildDerivation>,
+    body: &[u8],
 ) -> (Profile, SpliceManifest) {
     let mut m = SpliceManifest::default();
 
@@ -139,7 +171,55 @@ pub fn splice_profile(
             "params" => p.params = tb,
             "nested_types" => p.nested_types = Some(tb),
             "event_defs" => p.event_defs = Some(tb),
-            "field_names" => p.field_names = tb,
+            "field_names" => {
+                // L6 decode gate: the base must yield identifier-looking
+                // field names under the profile's own field mask. L5 alone
+                // accepted the TYPE-DEF anchor here on 7.1 (a real anchor,
+                // wrong table). On failure, sweep the derive anchors for a
+                // base that does decode.
+                let cand = rec.resolved.map(|r| (r & 0xFFFF_FFFF) as usize);
+                let mut chosen: Option<(TableBase, usize, f64)> = None;
+                let mut cands: Vec<(usize, TableBase)> = vec![];
+                if let Some(b) = cand {
+                    cands.push((b, tb.clone()));
+                }
+                if let Some(dv) = derived {
+                    for a in &dv.anchors {
+                        if let Some(r) = a.resolve(&dv.header) {
+                            cands.push((r as usize, anchor_table_base(a)));
+                        }
+                    }
+                }
+                for (b, tbx) in cands {
+                    if body.len().saturating_sub(b) < 4096 {
+                        continue;
+                    }
+                    let rate = field_name_rate(body, b, &p, 256);
+                    if rate >= 0.98 {
+                        chosen = Some((tbx, b, rate));
+                        break;
+                    }
+                }
+                match chosen {
+                    Some((tbx, b, rate)) => {
+                        if cand != Some(b) {
+                            m.notes.push(format!(
+                                "field_names: transfer base {:#x} failed the decode gate; anchor base {:#x} passes (rate {:.2})",
+                                cand.unwrap_or(0), b, rate
+                            ));
+                        }
+                        p.field_names = tbx;
+                        m.partial.push(partial);
+                        transferred.insert(name.clone());
+                    }
+                    None => {
+                        m.notes.push(
+                            "field_names: no candidate base decodes as field names; seed base kept".into(),
+                        );
+                    }
+                }
+                continue;
+            }
             "field_defaults" => p.field_defaults = Some(tb),
             "field_defaults_size" => p.field_defaults_size = Some(tb),
             "default_value_data" => p.default_value_data = Some(tb),
@@ -231,6 +311,27 @@ pub fn splice_profile(
             // over everything — drop it when the transfer did not carry one.
             if !transferred.contains("md_size") {
                 p.md_size = None;
+                // structural size probe: an anchor resolving to a byte count
+                // that divides by the stride into [lower bound, +512) rows.
+                // Lower bound = the typeDef tiling's max methodStart+1 (the
+                // exact row count minus at most trailing padding).
+                if let Some(dv) = derived {
+                    let lo = td
+                        .map(|t| t.max_method_index.wrapping_add(1) as usize)
+                        .unwrap_or(st.sum_counts as usize)
+                        .max(1);
+                    for a in &dv.anchors {
+                        let Some(off) = a.resolve(&dv.header) else { continue };
+                        let off = off as usize;
+                        if off % rep.stride != 0 || off / rep.stride < lo {
+                            continue;
+                        }
+                        if off / rep.stride < lo + 512 {
+                            p.md_size = Some(anchor_table_base(a));
+                            break;
+                        }
+                    }
+                }
             }
             p.md_name = Column {
                 offset: name.off as u32,
@@ -265,6 +366,25 @@ pub fn splice_profile(
             p.md_mask_expr = Some(rep.chain.clone());
             if !transferred.contains("md_size") {
                 p.md_size = None;
+                // structural size probe (same as the full-slice branch, but no
+                // start column exists here to bound rows from below)
+                if let Some(dv) = derived {
+                    let lo = td
+                        .map(|t| t.max_method_index.wrapping_add(1) as usize)
+                        .unwrap_or(1)
+                        .max(1);
+                    for a in &dv.anchors {
+                        let Some(off) = a.resolve(&dv.header) else { continue };
+                        let off = off as usize;
+                        if off % rep.stride != 0 || off / rep.stride < lo {
+                            continue;
+                        }
+                        if off / rep.stride < lo + 512 {
+                            p.md_size = Some(anchor_table_base(a));
+                            break;
+                        }
+                    }
+                }
             }
             p.md_name = Column {
                 offset: name.off as u32,
@@ -321,6 +441,9 @@ pub struct TdSolve {
     /// Rows in the tiling run, INCLUDING trailing all-sentinel padding.
     pub rows: usize,
     pub name: Column,
+    /// Namespace column (the OTHER string-index column), when a second one
+    /// survives the printable-run finder.
+    pub ns: Option<Column>,
     pub method_start: Column,
     pub field_start: Column,
     pub field_count: Column,
@@ -398,7 +521,7 @@ pub fn solve_typedef(
     };
     let strsec = cipher.strsec as usize;
     let mut notes = Vec::new();
-    let mut best: Option<(Vec<&IndexTable>, tables::StringColumn)> = None;
+    let mut best: Option<(Vec<&IndexTable>, tables::StringColumn, Option<tables::StringColumn>)> = None;
     for ((base, stride), entries) in &groups {
         if entries.len() < 2 {
             continue;
@@ -421,9 +544,18 @@ pub fn solve_typedef(
         else {
             continue;
         };
+        // namespace = the best OTHER accepted string column (the td row has
+        // exactly two: name and namespace)
+        let ns = cols
+            .iter()
+            .filter(|c| {
+                c.off != name.off && c.rows_tested > 0 && c.rows_ok as f64 / c.rows_tested as f64 >= 0.9
+            })
+            .max_by_key(|c| c.rows_ok)
+            .cloned();
         let better = best
             .as_ref()
-            .map(|(e, _)| entries[0].real_rows > e[0].real_rows)
+            .map(|(e, _, _)| entries[0].real_rows > e[0].real_rows)
             .unwrap_or(true);
         if better {
             if best.is_some() {
@@ -431,10 +563,10 @@ pub fn solve_typedef(
                     "multiple typeDef candidates; kept base {base:#x} (most real rows)"
                 ));
             }
-            best = Some((entries.clone(), name.clone()));
+            best = Some((entries.clone(), name.clone(), ns));
         }
     }
-    let Some((entries, name_col)) = best else {
+    let Some((entries, name_col, ns_col)) = best else {
         return Ok(None);
     };
     let mut entries: Vec<&IndexTable> = entries;
@@ -449,14 +581,16 @@ pub fn solve_typedef(
             method_pair.max_index
         ));
     }
-    let name = Column {
-        offset: name_col.off,
-        kind: match name_col.transform {
+    let mk_col = |c: &tables::StringColumn| Column {
+        offset: c.off,
+        kind: match c.transform {
             StringTransform::Add => ColKind::AddC,
             StringTransform::Xor => ColKind::XorC,
         },
-        c: name_col.c,
+        c: c.c,
     };
+    let name = mk_col(&name_col);
+    let ns = ns_col.as_ref().map(&mk_col);
     // anchor the base and the byte size back to header slots
     let hdr = &derived.header;
     let mut type_defs = None;
@@ -490,6 +624,7 @@ pub fn solve_typedef(
         stride,
         rows,
         name,
+        ns,
         method_start: pair_column(method_pair, true),
         field_start: pair_column(field_pair, true),
         field_count: pair_column(field_pair, false),
@@ -523,6 +658,10 @@ pub fn splice_td(p: &mut Profile, td: &TdSolve, m: &mut SpliceManifest) {
     }
     p.td_stride = td.stride;
     p.td_name = td.name.clone();
+    if let Some(ns) = &td.ns {
+        p.td_ns = ns.clone();
+        m.solved.push("td_ns (second string column)".into());
+    }
     p.td_method_start = td.method_start.clone();
     p.td_field_start = td.field_start.clone();
     if let Some(s) = td.fs_sentinel_raw {
@@ -587,7 +726,7 @@ mod tests {
             "str".into(),
             rec(0x150, "add", 0xC854_2DD2, 0xDEAD_BEEF, 1.0),
         );
-        let (p, m) = splice_profile(seed_profile(), &report, None, None, None);
+        let (p, m) = splice_profile(seed_profile(), &report, None, None, None, &[]);
         assert_eq!(p.str_hdr_off, 0x150);
         assert_eq!(p.str_sub, 0x37AB_D22E);
         assert!(m.solved.iter().any(|s| s.contains("str_hdr_off")));
@@ -642,7 +781,7 @@ mod tests {
         report
             .semantics
             .insert("method_defs".into(), rec(0x1E0, "xor", 0x2EEC_3A0B, 0x1000, 1.0));
-        let (p, m) = splice_profile(seed_profile(), &report, Some(&rep), None, None);
+        let (p, m) = splice_profile(seed_profile(), &report, Some(&rep), None, None, &[]);
 
         assert_eq!(p.md_stride, 26);
         assert!(p.md_mask_expr.is_some());
@@ -708,10 +847,12 @@ mod tests {
         report
             .semantics
             .insert("params".into(), rec(0x1D0, "+", 0x08F4_E5DB, 0x5000, 0.9));
-        let (p, m) = splice_profile(seed_profile(), &report, None, None, None);
-        assert_eq!(p.field_names.hdr_off, 0xDC);
-        assert_eq!(p.field_names.add, Some(0xE5D3_E43F));
-        assert!(m.partial.iter().any(|s| s == "field_names.base"));
+        let (p, m) = splice_profile(seed_profile(), &report, None, None, None, &[]);
+        // L6 gate: with no decodable body the transfer pick cannot be
+        // validated, so the SEED base stays and the failure is noted.
+        assert_eq!(p.field_names.hdr_off, seed_profile().field_names.hdr_off);
+        assert!(m.notes.iter().any(|n| n.contains("field_names: no candidate base decodes")));
+        assert!(!m.partial.iter().any(|s| s == "field_names.base"));
         assert!(m.notes.iter().any(|n| n.contains("generic_params")));
         // weak type_defs match: still spliced, but flagged
         assert!(m.notes.iter().any(|n| n.contains("type_defs") && n.contains("WEAK")));

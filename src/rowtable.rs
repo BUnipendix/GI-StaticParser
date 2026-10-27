@@ -470,7 +470,11 @@ pub fn solve_start_column(
                     }
                 })
                 .count();
-            if bad > 8 {
+            // Real tables carry a handful of irregular rows (7.1: 39 of
+            // 733,481 = hidden/wrapper methods whose paramStart is not the
+            // running sum) — a constant gate would reject the CORRECT
+            // constant at scale. Rate-scaled: 0.1% + a small floor.
+            if bad > rows / 1000 + 16 {
                 continue;
             }
             out.push(StartCol {
@@ -502,7 +506,10 @@ pub struct TableReport {
 }
 
 /// End-to-end: pick the first chain that yields an accepted name column, then
-/// solve count/start on that (base, chain).
+/// solve count/start on that (base, chain). Start is validated against EACH
+/// count candidate in turn — the count scan can surface a spurious earlier
+/// byte column that passes the mode gate, and pairing starts with it fails
+/// wholesale (the 7.1 mask2 run: counts hit a decoy, real count at +24).
 pub fn solve_table(
     body: &[u8],
     base: usize,
@@ -523,10 +530,16 @@ pub fn solve_table(
             // full-length mask for count/start
             if let Ok(full_mask) = eval_rows(chain, rows) {
                 let counts = solve_count_column(body, base, stride, rows, &full_mask, stride, 20_000);
-                let starts = counts
-                    .first()
-                    .map(|c| solve_start_column(body, base, stride, rows, &full_mask, c))
-                    .unwrap_or_default();
+                let mut starts = Vec::new();
+                for c in counts.iter().take(4) {
+                    // the internal gate already tolerates a rate of irregular
+                    // rows; any survivor here is a valid start column
+                    let st = solve_start_column(body, base, stride, rows, &full_mask, c);
+                    if !st.is_empty() {
+                        starts = st;
+                        break;
+                    }
+                }
                 return Some(TableReport {
                     base,
                     stride,

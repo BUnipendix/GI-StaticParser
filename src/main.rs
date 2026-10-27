@@ -1389,6 +1389,7 @@ fn auto_tables_cmd(
             solved_rep.as_ref(),
             td.as_ref(),
             derived.as_ref(),
+            body,
         );
         if let Some(t) = &td {
             println!(

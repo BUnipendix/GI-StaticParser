@@ -5949,3 +5949,15 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
   - typeDef 结构解 **6/6 全对**（行数与 oracle 类型数吻合：6.3 76399≈76397、6.5 80164≈80166、6.6 82222；样本全部 corelib 正确序）。
   - 方法表：6.5/6.6 全解（引擎 100%）；6.2 name-only；6.0/6.1/6.3 链池无解（转移分 0.01–0.4，函数定位是弱环——Python 时代 6.1 是 emu 在已知函数地址解的，零接触转移到不了那里）。
   - **6.5 oracle 13.75% 定性**：非解码错误——第 83676 行起 oracle 显示 BeeByte 去混淆名（JDIOCKICHNB→get_txtTitle，oracle 目录有 BeeByte-6.0/ 映射），前 89924 行 lockstep 逐位全同；R72 时代只比前 5k 行才全绿。后续 oracle 比对应过滤映射名或用 raw dump。
+
+## R82（2026-10-27）：7.1 独立 dump 达成——layout71 退役 + 四门补全（不是需求，方案记录）
+
+**用户设计判据**：dumper 二进制零常数；常数只允许 Profile 数据文件携带；7.1 全程自主求解出 dump。**验收：7.1 零接触 dump 与内置 oracle dump 2,417,104 行 100% 逐行一致。**
+
+- **layout71 退役**：全部常数移 `assets/profile-7.1.0.json`（gen71 改 include_str+serde；默认 dump 路径逐字节回归一致；36 测试全绿）。代码里不再有任何版本常数（prior 名单也是 assets）。
+- **count 候选迭代**：solve_start_column 此前只对 counts[0] 验证——伪列在前则 start 全灭（7.1 实弹）。改为迭代前 4 个候选取首个非空 starts。
+- **start 链违例比例门**：绝对门 bad>8 在 73 万行下把正确解拒了——7.1 真实数据有 39 行不规则（隐藏/包装方法 paramStart≠累计和；哨兵 411465/411467 全对、c 与 oracle 逐位同实证）。改 `bad > rows/1000+16`。
+- **md_size 结构锚探**：行数下界=td 平铺 maxMethodIdx+1，扫 derive 锚找 byte size ∈ [lo, lo+512)×stride——7.1 命中 slot 0x134+0x8EEFDB56=oracle 精确。
+- **td_ns**：字符串列发现器的第二列=namespace（7.1 off24 XorC 0x666769B5 与 oracle 逐位同）。
+- **L6 基座解码门（field_names）**：L5（锚存在）在 7.1 放行了错锚——转移选了 0xDC=typeDef 槽（真锚、错表）。L6=候基座用种子链解码字段名，标识符率≥0.98 才收，不过则扫 derive 锚全量找过验者。7.1：转移基 0x48f3fd8(TD表) 被拒，锚基 0x4580d78 率 1.00 → slot 76（与 oracle 同槽、add/sub 写法等价）。
+- 7.1 零接触 34s 全链：机器解出 cipher/strsec/td 全套+ns/方法表四列+md_size/field_names 基座，全部与 oracle 语义等价；种子继承列（7.1 场景下=oracle）由 manifest 如实标注。**跨版本时继承列=种子值（会错），属已知边界——关闭它需要 fields/param/prop/event 列求解（下轮）。**

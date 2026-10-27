@@ -1,0 +1,380 @@
+{
+ "cipher": {
+  "ops": [
+   {
+    "op": "And",
+    "v": 16777215
+   },
+   {
+    "op": "Mul",
+    "v": 12915831435659995328
+   },
+   {
+    "op": "Add",
+    "v": 7893766345190182439
+   },
+   {
+    "op": "Xor",
+    "v": 3525855901918421197
+   }
+  ],
+  "step": 615285513748413238
+ },
+ "str_m1": 12915831435659995328,
+ "str_x1": 7893766345190182439,
+ "str_x2": 3525855901918421197,
+ "str_m4": 615285513748413238,
+ "str_hdr_off": 336,
+ "str_sub": 934007342,
+ "strsec_direct": null,
+ "type_defs": {
+  "hdr_off": 220,
+  "sub": null,
+  "xor": 1383647803,
+  "add": null
+ },
+ "td_size": {
+  "hdr_off": 96,
+  "sub": null,
+  "xor": 355685492,
+  "add": null
+ },
+ "td_rows_direct": null,
+ "method_defs": {
+  "hdr_off": 480,
+  "sub": null,
+  "xor": 786727163,
+  "add": null
+ },
+ "md_size": {
+  "hdr_off": 308,
+  "sub": null,
+  "xor": null,
+  "add": 2398083926
+ },
+ "md_rows_direct": null,
+ "fields": {
+  "hdr_off": 344,
+  "sub": 492068044,
+  "xor": null,
+  "add": null
+ },
+ "params": {
+  "hdr_off": 464,
+  "sub": null,
+  "xor": 131120121,
+  "add": null
+ },
+ "slot_table": {
+  "hdr_off": 512,
+  "sub": 3023965873,
+  "xor": null,
+  "add": null
+ },
+ "td_stride": 70,
+ "td_magic": -558215095,
+ "td_name": {
+  "offset": 20,
+  "kind": "AddC",
+  "c": 3893491577
+ },
+ "td_name_sentinel": 401475718,
+ "td_ns": {
+  "offset": 24,
+  "kind": "XorC",
+  "c": 1718053301
+ },
+ "td_method_start": {
+  "offset": 8,
+  "kind": "XorC",
+  "c": 75018073
+ },
+ "td_field_start": {
+  "offset": 0,
+  "kind": "XorC",
+  "c": 1919057927
+ },
+ "td_fs_sentinel_raw": 2375909368,
+ "td_field_count": {
+  "offset": 48,
+  "kind": "XorC",
+  "c": 39531
+ },
+ "td_flags": {
+  "offset": 12,
+  "kind": "AddC",
+  "c": 3751845776
+ },
+ "td_bitfield": {
+  "offset": 50,
+  "kind": "XorC",
+  "c": 35748
+ },
+ "td_nested_start": {
+  "offset": 54,
+  "kind": "XorC",
+  "c": 51324
+ },
+ "td_nested_count": {
+  "offset": 69,
+  "kind": "XorC",
+  "c": 171
+ },
+ "nested_types": {
+  "hdr_off": 440,
+  "sub": null,
+  "xor": 1483389681,
+  "add": null
+ },
+ "property_defs": {
+  "hdr_off": 344,
+  "sub": 492068044,
+  "xor": null,
+  "add": null
+ },
+ "property_stride": 10,
+ "td_property_start": {
+  "offset": 36,
+  "kind": "AddC",
+  "c": 3458286028
+ },
+ "td_property_count": {
+  "offset": 67,
+  "kind": "XorC",
+  "c": 134
+ },
+ "property_mask": {
+  "mul1": 42387,
+  "xor1": 1017380768,
+  "mul2": 1557181998,
+  "add1": 1671643622,
+  "xor2": 605154673,
+  "mul_last": 0
+ },
+ "property_name_add": 4001928682,
+ "property_get_sub": 9103,
+ "property_set_xor": 3505,
+ "event_defs": {
+  "hdr_off": 100,
+  "sub": null,
+  "xor": null,
+  "add": 3860008039
+ },
+ "event_stride": 14,
+ "td_event_start": {
+  "offset": 56,
+  "kind": "AddC",
+  "c": 4294956715
+ },
+ "td_event_count": {
+  "offset": 68,
+  "kind": "XorC",
+  "c": 181
+ },
+ "event_mask": {
+  "mul1": 40020,
+  "xor1": 520988575,
+  "mul2": 2015534055261838263,
+  "add1": 2981067306086103786,
+  "shift": 15
+ },
+ "event_name_xor": 96629741,
+ "event_type_add": 2543615401,
+ "event_remove_add": 14571,
+ "event_raise_add": 58378,
+ "event_add_xor": 32069,
+ "attribute_types_off": 10202276,
+ "attribute_count": 74864,
+ "attribute_instance_tag": 16777216,
+ "startup_images": {
+  "table": {
+   "hdr_off": 132,
+   "sub": null,
+   "xor": 1479489075,
+   "add": null
+  },
+  "stride": 40,
+  "name_off": 24,
+  "name_op": "xor-sub",
+  "name_c": 1586075817,
+  "mask_mul": 12996152571492,
+  "mask_shift": 16,
+  "mask_mul2": null,
+  "mask_add2": null,
+  "mask_add": 1917799627,
+  "mask_xor": 736112445
+ },
+ "startup_assemblies": {
+  "table": {
+   "hdr_off": 108,
+   "sub": null,
+   "xor": null,
+   "add": 3760775664
+  },
+  "stride": 44,
+  "name_off": 28,
+  "name_op": "add-xor",
+  "name_c": 4265545001,
+  "mask_mul": 73516334337960,
+  "mask_shift": 20,
+  "mask_mul2": 510720407,
+  "mask_add2": 1357982210,
+  "mask_add": null,
+  "mask_xor": null
+ },
+ "generic_class_rows": {
+  "hdr_off": 288,
+  "sub": null,
+  "xor": 473917674,
+  "add": null
+ },
+ "generic_insts_va": 5405690432,
+ "nested_stride": 4,
+ "field_names": {
+  "hdr_off": 76,
+  "sub": 439203393,
+  "xor": null,
+  "add": null
+ },
+ "field_stride": 8,
+ "field_defaults": {
+  "hdr_off": 356,
+  "sub": null,
+  "xor": 59323654,
+  "add": null
+ },
+ "field_defaults_size": {
+  "hdr_off": 324,
+  "sub": null,
+  "xor": null,
+  "add": 3522691314
+ },
+ "default_value_data": {
+  "hdr_off": 296,
+  "sub": null,
+  "xor": 924013730,
+  "add": null
+ },
+ "field_mask": {
+  "mul1": 9167,
+  "xor1": 1026016302,
+  "mul2": 2138480998,
+  "add1": 264322252802954,
+  "shift": 16,
+  "add2": 1236065468
+ },
+ "field_name_xor": 76440435,
+ "field_type_add": 3010168109,
+ "field_type_xor": 1332619805,
+ "td_parent_off": 44,
+ "td_parent_xor": 1607305073,
+ "iface_table": {
+  "hdr_off": 112,
+  "sub": 1856353277,
+  "xor": null,
+  "add": null
+ },
+ "iface_stride": 6,
+ "td_iface_start_off": 58,
+ "td_iface_start_xor": 19406,
+ "td_iface_count_off": 66,
+ "td_iface_count_add": 162,
+ "md_stride": 26,
+ "md_mask_expr": null,
+ "md_ret_type": {
+  "offset": 0,
+  "kind": "AddCSubMask2",
+  "c": 3857596545
+ },
+ "md_name": {
+  "offset": 4,
+  "kind": "XorCAddMask",
+  "c": 101952739
+ },
+ "md_param_start": {
+  "offset": 8,
+  "kind": "XorCSubMask2",
+  "c": 550853889
+ },
+ "md_decl": {
+  "offset": 14,
+  "kind": "XorCAddMask",
+  "c": 60060316
+ },
+ "md_slot": {
+  "offset": 12,
+  "kind": "XorCSubMask2I16",
+  "c": 7722
+ },
+ "md_flags": {
+  "offset": 18,
+  "kind": "SubMask2AddC16",
+  "c": 36119
+ },
+ "md_param_count": {
+  "offset": 24,
+  "kind": "SubMask2AddC8",
+  "c": 140
+ },
+ "md_pmask": {
+  "mul1": 20116,
+  "xor1": 1658369976,
+  "mul2": 1970435210,
+  "add1": 525180650,
+  "xor2": 1854484950,
+  "mul_last": 3338443915
+ },
+ "md_mask2_mul": 956523381,
+ "md_param_extra": 0,
+ "fd_stride": 10,
+ "fd_name": {
+  "offset": 0,
+  "kind": "AddC",
+  "c": 293038614
+ },
+ "fd_type": {
+  "offset": 4,
+  "kind": "SubMask2AddC16",
+  "c": 9103
+ },
+ "fd_attrs": {
+  "offset": 6,
+  "kind": "SubMask2AddC16",
+  "c": 4294938102
+ },
+ "fd_pmask": {
+  "mul1": 42387,
+  "xor1": 1017380768,
+  "mul2": 1557181998,
+  "add1": 1671643622,
+  "xor2": 605154673,
+  "mul_last": 0
+ },
+ "param_stride": 12,
+ "param_key_c": 550853889,
+ "param_extra_is_slot": false,
+ "param_defaults_size": {
+  "hdr_off": 24,
+  "sub": null,
+  "xor": null,
+  "add": 2714252734
+ },
+ "param_defs": {
+  "hdr_off": 104,
+  "sub": null,
+  "xor": 342615299,
+  "add": null
+ },
+ "param_def_stride": 8,
+ "param_def_name_xor": 1804988680,
+ "param_def_type_xor": 1986139654,
+ "param_def_mask": {
+  "mul1": 18979,
+  "xor1": 1596362703,
+  "mul2": 721638048,
+  "shift": 9,
+  "xor2": 271116917,
+  "add": 1756591857,
+  "xor3": 1334224675
+ }
+}
