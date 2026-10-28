@@ -73,6 +73,7 @@ fn table_base(rec: &TransferRec) -> TableBase {
         sub: (op == AnchorOp::Sub).then_some(imm),
         xor: (op == AnchorOp::Xor).then_some(imm),
         add: (op == AnchorOp::Add).then_some(imm),
+        direct: None,
     }
 }
 
@@ -443,21 +444,190 @@ pub fn splice_profile(
                 )
                 .unwrap_or_default();
                 let sample = std::cmp::min(td.field_rows_total as usize, 4000);
-                // Base candidates, best first: the L6-validated transfer base,
-                // then every derive anchor inside the matched function's
-                // window. On 6.6 the transfer's ordinal pick is wrong while
-                // the true anchor sits in the same function — base and mask
-                // must be solved JOINTLY, because the seed mask cannot
-                // validate a cross-version base on its own.
+                let mut solved_field = false;
+                // Fast path: differential location (C-free row-difference
+                // scan). One bounded pass over the body replaces the
+                // bases×chains sweep; zero hits means no chain in the pool
+                // reproduces the prior names under any family the sweep
+                // would try either, but keep the sweep as the fallback for
+                // the family the locator cannot model (AddCXorMask).
+                let mut diff_bases: Vec<usize> = Vec::new();
+                if !frec.chains.is_empty() {
+                    for hit in crate::rowtable::locate_name_column_differential(
+                        body,
+                        p.field_stride as usize,
+                        &frec.chains,
+                        &prior,
+                        heap,
+                        6,
+                    ) {
+                        let chain = &frec.chains[hit.chain_idx];
+                        // reproduce the locator's mask transform (the xor
+                        // classes' phase-2 hits carry a shift/negation) and
+                        // bake the SAME transform into the profile chain so
+                        // the engine evaluates the mask the C was solved for
+                        let Ok(mut mask) = crate::rowtable::eval_rows(chain, sample) else {
+                            continue;
+                        };
+                        if hit.negated {
+                            for v in &mut mask {
+                                *v = v.wrapping_neg() & 0xFFFF_FFFF;
+                            }
+                        }
+                        if hit.shift != 0 {
+                            for v in &mut mask {
+                                *v = v.wrapping_add(hit.shift) & 0xFFFF_FFFF;
+                            }
+                        }
+                        let chain = if hit.negated {
+                            crate::expr::fold(&crate::expr::Expr::Op2(
+                                crate::expr::BinOp::Sub,
+                                Box::new(crate::expr::Expr::Imm(0)),
+                                Box::new(chain.clone()),
+                            ))
+                        } else if hit.shift != 0 {
+                            crate::expr::fold(&crate::expr::Expr::Op2(
+                                crate::expr::BinOp::Add,
+                                Box::new(chain.clone()),
+                                Box::new(crate::expr::Expr::Imm(hit.shift)),
+                            ))
+                        } else {
+                            chain.clone()
+                        };
+                        // R85: the pool may carry the name constant BAKED
+                        // into the chain (`mask ^ nameC` — an equivalent
+                        // decode for the NAME column, but the TYPE column
+                        // shares the raw mask and would be corrupted by the
+                        // extra xor). Split a top-level Xor(inner, imm) back
+                        // out; only sound for unshifted, un-negated hits (a
+                        // shifted xor mask is not expressible on the raw
+                        // chain — note in the manifest when it happens).
+                        let mut c = hit.c as u32;
+                        let mut mask_chain = chain.clone();
+                        // The split is decode-equivalent ONLY for XorCXorMask
+                        // ((raw^0)^(inner^k) == (raw^k)^inner); for other
+                        // families a top-level Xor is usually the chain's own
+                        // structure and splitting it breaks the pair.
+                        if hit.shift == 0 && !hit.negated && hit.fam == crate::expr::Fam::XorCXorMask
+                        {
+                            let top = match chain.clone() {
+                                crate::expr::Expr::Lo(_, inner) => *inner,
+                                e => e,
+                            };
+                            if let crate::expr::Expr::Op2(
+                                op,
+                                inner,
+                                immexpr,
+                            ) = &top
+                            {
+                                if *op == crate::expr::BinOp::Xor {
+                                    if let crate::expr::Expr::Imm(k) = **immexpr {
+                                        mask_chain = crate::expr::fold(inner);
+                                        c ^= k as u32;
+                                    }
+                                }
+                            }
+                        } else if hit.shift != 0 || hit.negated {
+                            m.notes.push(
+                                "field differential: hit carries a shifted/negated mask —                                  the shared type column may decode wrong (baked split N/A)"
+                                    .into(),
+                            );
+                        }
+                        // The decode is identical for (base, 0) and
+                        // (base-4, 4) — the same column. Evaluate both and
+                        // prefer the interpretation a header slot anchors
+                        // exactly (the type column sits at the other u32 of
+                        // the row, so the split matters even though the name
+                        // decode does not); otherwise carry the base as a
+                        // direct offset (the game's body-pointer delta is
+                        // invisible to the resolve, and a stale transfer
+                        // base would decode a shifted column in the engine).
+                        let mut interp: Vec<(usize, usize, bool)> = Vec::new();
+                        for off in [0usize, 4] {
+                            if hit.col_pos < off {
+                                continue;
+                            }
+                            let base = hit.col_pos - off;
+                            let name = crate::rowtable::validate_solved_name(
+                                body,
+                                base,
+                                p.field_stride as usize,
+                                off,
+                                &mask,
+                                hit.fam,
+                                hit.c,
+                                heap,
+                                sample,
+                            );
+                            let exact = crate::rowtable::count_exact_prior(
+                                body,
+                                base,
+                                p.field_stride as usize,
+                                off,
+                                &mask,
+                                hit.fam,
+                                hit.c,
+                                &prior,
+                                heap,
+                            );
+                            if !(crate::rowtable::name_column_ok(&name, sample)
+                                || crate::rowtable::short_name_column_ok(
+                                    &name, &prior, exact,
+                                ))
+                            {
+                                continue;
+                            }
+                            let anchored = dv
+                                .anchors
+                                .iter()
+                                .any(|a| a.resolve(&dv.header) == Some(base as u32));
+                            interp.push((off, base, anchored));
+                        }
+                        interp.sort_by_key(|&(_, _, anchored)| std::cmp::Reverse(anchored));
+                        if let Some(&(off, base, anchored)) = interp.first() {
+                            p.field_mask_expr = Some(mask_chain);
+                            p.field_name_kind = Some(ColKind::from_fam(hit.fam));
+                            p.field_name_xor = c;
+                            p.field_name_off = off as u32;
+                            p.field_type_off = if off == 0 { 4 } else { 0 };
+                            p.field_names = if anchored {
+                                dv
+                                    .anchors
+                                    .iter()
+                                    .find(|a| a.resolve(&dv.header) == Some(base as u32))
+                                    .map(anchor_table_base)
+                                    .unwrap_or_else(|| direct_table_base(base))
+                            } else {
+                                direct_table_base(base)
+                            };
+                            m.solved.push(format!(
+                                "field_names.slice (differential: base {:#x}{}, name column +{:#x} {} c={:#X}, {} rows)",
+                                base,
+                                if anchored { " anchored" } else { " direct" },
+                                off,
+                                format!("{:?}", hit.fam),
+                                c,
+                                td.field_rows_total
+                            ));
+                            solved_field = true;
+                            break;
+                        }
+                        if solved_field {
+                            break;
+                        }
+                        diff_bases.push(hit.col_pos);
+                    }
+                }
+                // Sweep fallback (differential missed): base candidates, best
+                // first — differential-anchored positions, the L6-validated
+                // transfer base, in-function anchors, then every derive
+                // anchor, each widened by ±4/±8 (the game's body pointer
+                // contributes a small constant the resolve cannot see).
                 let b0 = p.field_names.resolve(&dv.header);
-                let mut bases: Vec<usize> = vec![];
+                let mut bases: Vec<usize> = diff_bases.clone();
                 if b0 > 0 {
                     bases.push(b0);
                 }
-                // in-function anchors first (the common case), then every
-                // derive anchor — a wrong transfer match (6.5 field scores
-                // 0.07) points at the wrong function, and the quick gate
-                // rejects a wrong base in ~10ms, so the full sweep is minutes
                 let mut anchored: Vec<usize> = dv
                     .anchors
                     .iter()
@@ -501,7 +671,7 @@ pub fn splice_profile(
                         bases.push(b);
                     }
                 }
-                let mut solved_field = false;
+                if !solved_field {
                 'base: for field_base in bases {
                     let variants: Vec<crate::expr::Expr> = frec
                         .chains
@@ -558,15 +728,17 @@ pub fn splice_profile(
                                 p.field_name_off = name.off as u32;
                                 p.field_type_off = if name.off == 0 { 4 } else { 0 };
                                 // carry the winning base when it came from the
-                                // in-function anchor sweep, not from L6
+                                // in-function anchor sweep, not from L6 — a
+                                // base no slot anchors is carried DIRECT (a
+                                // stale transfer base would decode a shifted
+                                // column in the engine)
                                 if field_base != b0 {
-                                    if let Some(a) = dv
+                                    p.field_names = dv
                                         .anchors
                                         .iter()
                                         .find(|a| a.resolve(&dv.header) == Some(field_base as u32))
-                                    {
-                                        p.field_names = anchor_table_base(a);
-                                    }
+                                        .map(anchor_table_base)
+                                        .unwrap_or_else(|| direct_table_base(field_base));
                                 }
                                 m.solved.push(format!(
                                     "field_names.slice (base {:#x}, name column +{:#x} c={:#X}, {} rows)",
@@ -578,6 +750,7 @@ pub fn splice_profile(
                         }
                     }
                 }
+                } // end sweep fallback
                 if !solved_field {
                     m.notes.push("field table name column unsolved; field names stay seed data".into());
                 }
@@ -663,6 +836,149 @@ pub fn splice_profile(
                 .unwrap_or_default();
                 let sample = std::cmp::min(rows_u as usize, 4000);
                 let mut solved_param = false;
+                // Fast path: differential location (same instrument as the
+                // field slice). When it had a fair chance to anchor (prior
+                // pairs exist) and returns ZERO hits, no chain in this pool
+                // reproduces the prior names under any scannable family —
+                // the base sweep below consumes the same pool and cannot
+                // succeed either, so skip it (the 6.2 param sweep was 30+
+                // minutes of provably wasted work).
+                let diff_hits = crate::rowtable::locate_name_column_differential(
+                    body,
+                    8,
+                    &prec.chains,
+                    &prior,
+                    heap,
+                    6,
+                );
+                if std::env::var("MHY_DEBUG").is_ok() {
+                    eprintln!(
+                        "param diff hits: {} ({})",
+                        diff_hits.len(),
+                        diff_hits
+                            .iter()
+                            .take(4)
+                            .map(|h| format!(
+                                "col={:#x} {:?} c={:#x} hits={} chain={}",
+                                h.col_pos, h.fam, h.c, h.hits, h.chain_idx
+                            ))
+                            .collect::<Vec<_>>()
+                            .join("; ")
+                    );
+                }
+                for hit in &diff_hits {
+                    let chain = &prec.chains[hit.chain_idx];
+                    // reproduce the locator's mask transform (see field slice)
+                    let Ok(mut mask) = crate::rowtable::eval_rows(chain, sample) else {
+                        continue;
+                    };
+                    if hit.negated {
+                        for v in &mut mask {
+                            *v = v.wrapping_neg() & 0xFFFF_FFFF;
+                        }
+                    }
+                    if hit.shift != 0 {
+                        for v in &mut mask {
+                            *v = v.wrapping_add(hit.shift) & 0xFFFF_FFFF;
+                        }
+                    }
+                    let chain = if hit.negated {
+                        crate::expr::fold(&crate::expr::Expr::Op2(
+                            crate::expr::BinOp::Sub,
+                            Box::new(crate::expr::Expr::Imm(0)),
+                            Box::new(chain.clone()),
+                        ))
+                    } else if hit.shift != 0 {
+                        crate::expr::fold(&crate::expr::Expr::Op2(
+                            crate::expr::BinOp::Add,
+                            Box::new(chain.clone()),
+                            Box::new(crate::expr::Expr::Imm(hit.shift)),
+                        ))
+                    } else {
+                        chain.clone()
+                    };
+                    // NOTE: no baked-constant split here. The param mask is
+                    // shared with the type column, but a top-level Xor on an
+                    // XorCSubMask chain is usually the chain's own structure
+                    // (7.1 param), and splitting it is NOT decode-equivalent
+                    // — validation would pass on (chain, hit.c) while the
+                    // profile records the broken (inner, c^k) pair.
+                    let c = hit.c as u32;
+                    let mask_chain = chain.clone();
+                    // Evaluate both (base, off) splits of the located column
+                    // (identical name decode); prefer the one a header slot
+                    // anchors exactly, else carry a direct offset.
+                    let mut interp: Vec<(usize, usize, bool)> = Vec::new();
+                    for off in [0usize, 4] {
+                        if hit.col_pos < off {
+                            continue;
+                        }
+                        let base = hit.col_pos - off;
+                        let name = crate::rowtable::validate_solved_name(
+                            body, base, 8, off, &mask, hit.fam, hit.c, heap, sample,
+                        );
+                        let exact = crate::rowtable::count_exact_prior(
+                            body, base, 8, off, &mask, hit.fam, hit.c, &prior, heap,
+                        );
+                        if !(crate::rowtable::name_column_ok(&name, sample)
+                            || crate::rowtable::short_name_column_ok(&name, &prior, exact))
+                        {
+                            continue;
+                        }
+                        let anchored = dv
+                            .anchors
+                            .iter()
+                            .any(|a| a.resolve(&dv.header) == Some(base as u32));
+                        interp.push((off, base, anchored));
+                    }
+                    interp.sort_by_key(|&(_, _, anchored)| std::cmp::Reverse(anchored));
+                    if let Some(&(off, base, anchored)) = interp.first() {
+                        if matches!(
+                            hit.fam,
+                            crate::expr::Fam::XorCSubMask
+                                | crate::expr::Fam::SubMaskAddC
+                                | crate::expr::Fam::AddMaskAddC
+                        ) {
+                            p.param_defs = Some(if anchored {
+                                dv.anchors
+                                    .iter()
+                                    .find(|a| a.resolve(&dv.header) == Some(base as u32))
+                                    .map(anchor_table_base)
+                                    .unwrap_or_else(|| direct_table_base(base))
+                            } else {
+                                direct_table_base(base)
+                            });
+                            p.param_def_stride = 8;
+                            p.param_def_mask_expr = Some(mask_chain);
+                            p.param_def_name_xor = c;
+                            p.param_def_name_off = off as u32;
+                            p.param_def_name_kind = Some(ColKind::from_fam(hit.fam));
+                            p.param_def_type_off = if off == 4 { 0 } else { 4 };
+                            m.solved.push(format!(
+                                "param_defs.slice (differential: base {:#x}{}, name column +{:#x} {} c={:#X}, {} rows)",
+                                base,
+                                if anchored { " anchored" } else { " direct" },
+                                off,
+                                format!("{:?}", hit.fam),
+                                c,
+                                rows_u
+                            ));
+                            solved_param = true;
+                        }
+                    }
+                    if solved_param {
+                        break;
+                    }
+                }
+                let pool_dead = diff_hits.is_empty();
+                if pool_dead && !solved_param {
+                    m.notes.push(
+                        "param differential probe: no pool chain reproduces the prior \
+                         names — skipping the base sweep (extraction-layer gap)"
+                            .into(),
+                    );
+                }
+                if !solved_param && !pool_dead {
                 'pbase: for base in bases {
                     let variants: Vec<crate::expr::Expr> = prec
                         .chains
@@ -703,8 +1019,10 @@ pub fn splice_profile(
                                     .find(|a| a.resolve(&dv.header) == Some(base as u32))
                                 {
                                     p.param_defs = Some(anchor_table_base(a));
-                                } else {
+                                } else if prec.resolved == Some(base as u64) {
                                     p.param_defs = Some(table_base(prec));
+                                } else {
+                                    p.param_defs = Some(direct_table_base(base));
                                 }
                                 p.param_def_stride = 8;
                                 p.param_def_mask_expr = Some(chain.clone());
@@ -727,6 +1045,7 @@ pub fn splice_profile(
                         }
                     }
                 }
+                } // end sweep fallback
                 if !solved_param {
                     m.notes.push("param table name column unsolved; params stay seed data".into());
                 }
@@ -796,7 +1115,15 @@ fn anchor_table_base(a: &crate::derive::anchor::Anchor) -> TableBase {
         sub: (a.op == AnchorOp::Sub).then_some(a.imm),
         xor: (a.op == AnchorOp::Xor).then_some(a.imm),
         add: (a.op == AnchorOp::Add).then_some(a.imm),
+        direct: None,
     }
+}
+
+/// Absolute-offset table base, for bases no header-slot transform reproduces
+/// (the differential locator's columns; the body-pointer delta the game adds
+/// on top of `hdr[slot] op imm` is invisible to the resolve).
+fn direct_table_base(off: usize) -> TableBase {
+    TableBase { hdr_off: 0, sub: None, xor: None, add: None, direct: Some(off as u32) }
 }
 
 fn pair_column(t: &crate::derive::tables::IndexTable, idx: bool) -> Column {

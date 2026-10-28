@@ -709,6 +709,289 @@ pub fn load_prior(path: Option<&str>) -> Result<Vec<String>, String> {
     }
 }
 
+// ---------------------------------------------------- differential locator
+
+/// One name column located by differential invariants.
+#[derive(Debug, Clone, Serialize)]
+pub struct DiffHit {
+    /// Byte offset of the row-0 raw u32 inside the body (4-aligned).
+    pub col_pos: usize,
+    pub fam: Fam,
+    pub c: u64,
+    /// Prior rows whose decode lands on a heap candidate for their name.
+    pub hits: usize,
+    /// Index into the chain pool of the winning chain.
+    pub chain_idx: usize,
+    /// Mask transform applied to the pool chain for this hit: the xor
+    /// classes' row difference is not invariant under an additive mask
+    /// shift, so phase 2 scans `mask = raw ± k` / `mask = -raw` variants;
+    /// the caller must reproduce the same transform before validating.
+    pub shift: u64,
+    pub negated: bool,
+}
+
+/// Locate a u32 name column without knowing its base, its family constant, or
+/// which function decodes it.
+///
+/// For every transform family the difference between two rows' raw values is
+/// independent of the family constant C (linear families differ by the packed
+/// values plus the mask delta, xor families by the masked packed values).
+/// Expected packed indices for two consecutive rows come from the prior-name
+/// list cross the heap (`(len<<24)|off` candidates); each (chain, candidate
+/// pair) fixes the expected difference, and a single pass over the body's u32
+/// words finds every column position reproducing it. C is then solved from the
+/// anchor row and verified against all prior rows.
+///
+/// This replaces the anchor-sweep enumeration (bases × chains × families,
+/// minutes on 6.2) with one bounded scan (seconds), and doubles as a POOL
+/// PROBE: zero hits means no chain in the pool reproduces the prior names
+/// under any family the sweep would try either — the sweep can be skipped.
+/// Validated against 6.5 param before wiring in (rediscovered col 0x19D8E70
+/// AddMaskAddC 0x92A9143C exactly, 28/28 prior rows).
+///
+/// `AddCXorMask` is not scanned: its row difference is NOT C-free
+/// (`(a-C)^(b-C) != a^b`); it stays covered by `solve_name_column`.
+pub fn locate_name_column_differential(
+    body: &[u8],
+    stride: usize,
+    chains: &[Expr],
+    prior: &[String],
+    heap: &HeapIndex,
+    min_hits: usize,
+) -> Vec<DiffHit> {
+    if stride % 4 != 0 || stride < 8 || chains.is_empty() {
+        return Vec::new();
+    }
+    let rows_known = std::cmp::min(prior.len(), 48);
+    if rows_known < 2 {
+        return Vec::new();
+    }
+    let n = rows_known + 8;
+    // packed candidates per prior row (heap starts cross the expected length)
+    let cands: Vec<Vec<u64>> = (0..rows_known)
+        .map(|r| {
+            heap.starts_with(&prior[r], 3)
+                .into_iter()
+                .map(|o| (((prior[r].len() as u64) << 24) | o as u64) & 0xFFFF_FFFF)
+                .collect()
+        })
+        .collect();
+    // consecutive known pairs, most-constrained first (fewest candidates)
+    let mut pairs: Vec<usize> = (0..rows_known - 1)
+        .filter(|&r| !cands[r].is_empty() && !cands[r + 1].is_empty())
+        .collect();
+    if pairs.is_empty() {
+        return Vec::new();
+    }
+    pairs.sort_by_key(|&r| cands[r].len() * cands[r + 1].len());
+    pairs.truncate(2);
+
+    let st = stride / 4;
+    let masks: Vec<Vec<u64>> = chains
+        .iter()
+        .filter_map(|c| eval_rows(c, n).ok())
+        .map(|m| m.into_iter().map(|v| v & 0xFFFF_FFFF).collect())
+        .collect();
+    if masks.is_empty() {
+        return Vec::new();
+    }
+
+    let uwords = body.len() / 4;
+    let u: Vec<u32> = body
+        .chunks_exact(4)
+        .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
+        .collect();
+    let mut out: Vec<DiffHit> = Vec::new();
+
+    // scan one diff class for one (fam, mask-set); a nested item fn so the
+    // mutable `out` doesn't hold a long-lived borrow across the phases.
+    //
+    // Classes: linear-add (SubMaskAddC == AddCSubMask), add-mask
+    // (AddMaskAddC), xor-sub (XorCSubMask), xor-xor (XorCXorMask). `meta`
+    // describes each mask row set as (chain index, additive shift, negated)
+    // — the xor classes' row difference is NOT invariant under an additive
+    // mask shift, unlike the linear classes, and the pool may carry the true
+    // mask ± a split addend (6.5 field: true = pool chain ∓ 0x847bfc89).
+    fn scan_class(
+        u: &[u32],
+        diff: &[u32],
+        st: usize,
+        rows_known: usize,
+        cands: &[Vec<u64>],
+        pairs: &[usize],
+        out: &mut Vec<DiffHit>,
+        min_hits: usize,
+        uwords: usize,
+        fam: Fam,
+        ml: &[Vec<u64>],
+        meta: &[(usize, u64, bool)],
+    ) {
+        for (m, &(ci, vshift, vneg)) in ml.iter().zip(meta) {
+            for &r0 in pairs {
+                let r1 = r0 + 1;
+                for &v0 in cands[r0].iter().take(3) {
+                    for &v1 in cands[r1].iter().take(3) {
+                        let m0 = m[r0] as u32;
+                        let m1 = m[r1] as u32;
+                        let p0: u32 = match fam {
+                            Fam::SubMaskAddC | Fam::AddCSubMask => {
+                                ((v1 as u32).wrapping_sub(v0 as u32))
+                                    .wrapping_add(m1.wrapping_sub(m0))
+                            }
+                            Fam::AddMaskAddC => ((v1 as u32).wrapping_sub(v0 as u32))
+                                .wrapping_sub(m1.wrapping_sub(m0)),
+                            Fam::XorCSubMask => {
+                                ((v1 as u32).wrapping_add(m1)) ^ ((v0 as u32).wrapping_add(m0))
+                            }
+                            _ => (v1 as u32) ^ m1 ^ (v0 as u32) ^ m0,
+                        };
+                        let mut found = 0usize;
+                        for (k, &d) in diff.iter().enumerate() {
+                            if d != p0 {
+                                continue;
+                            }
+                            let cw = k as i64 - st as i64 * r0 as i64;
+                            if cw < 0 || (cw as usize) + st * (rows_known - 1) >= uwords {
+                                continue;
+                            }
+                            let cw = cw as usize;
+                            let raw0 = u[k] as u64;
+                            let c: u64 = match fam {
+                                Fam::SubMaskAddC | Fam::AddCSubMask => {
+                                    v0.wrapping_sub(raw0).wrapping_add(m0 as u64) & 0xFFFF_FFFF
+                                }
+                                Fam::AddMaskAddC => {
+                                    v0.wrapping_sub(raw0).wrapping_sub(m0 as u64) & 0xFFFF_FFFF
+                                }
+                                Fam::XorCSubMask => {
+                                    (((raw0 as u32) ^ (v0 as u32).wrapping_add(m0)) as u64)
+                                        & 0xFFFF_FFFF
+                                }
+                                _ => (raw0 as u32 ^ m0 ^ v0 as u32) as u64,
+                            };
+                            let mut hits = 0usize;
+                            for r in 0..rows_known {
+                                if cands[r].is_empty() {
+                                    continue;
+                                }
+                                let w = cw + st * r;
+                                let v = fam_value(fam, u[w] as u64, m[r], c, u32::MAX as u64);
+                                if cands[r].contains(&(v & 0xFFFF_FFFF)) {
+                                    hits += 1;
+                                }
+                            }
+                            if hits >= min_hits {
+                                out.push(DiffHit {
+                                    col_pos: cw * 4,
+                                    fam,
+                                    c,
+                                    hits,
+                                    chain_idx: ci,
+                                    shift: vshift,
+                                    negated: vneg,
+                                });
+                            }
+                            found += 1;
+                            if found >= 8 {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let idmap: Vec<usize> = (0..masks.len()).collect();
+    let nometa: Vec<(usize, u64, bool)> =
+        masks.iter().enumerate().map(|(ci, _)| (ci, 0, false)).collect();
+
+    // Linear families share one diff array and are invariant under additive
+    // mask shifts (the shift cancels in the row difference), so the raw pool
+    // masks suffice; the negated chain is the AddMaskAddC class itself.
+    // Build lazily, drop before the xor class to keep peak memory at two
+    // body-sized buffers.
+    {
+        let add_d: Vec<u32> = (0..uwords - st)
+            .map(|k| u[k + st].wrapping_sub(u[k]))
+            .collect();
+        scan_class(&u, &add_d, st, rows_known, &cands, &pairs, &mut out, min_hits, uwords, Fam::SubMaskAddC, &masks, &nometa);
+        scan_class(&u, &add_d, st, rows_known, &cands, &pairs, &mut out, min_hits, uwords, Fam::AddMaskAddC, &masks, &nometa);
+    }
+    {
+        // XOR classes: the row difference mixes mask and value additively
+        // before the xor, so an additive mask shift does NOT cancel. Phase 1
+        // scans the raw pool masks (the common case); on zero hits phase 2
+        // retries with the same shift/negation variants chain_variants
+        // enumerates for the sweep.
+        let xor_d: Vec<u32> = (0..uwords - st).map(|k| u[k + st] ^ u[k]).collect();
+        const KS: [u64; 8] = [
+            0x847B_FC89,
+            0x6AD4_D25D,
+            0x81EC_E8F8,
+            0x20B9_E5BE,
+            0x2DD4_3D8D,
+            0x2DD4_3D8Du64.wrapping_neg(),
+            0x847B_FC89u64.wrapping_neg(),
+            0x6AD4_D25Du64.wrapping_neg(),
+        ];
+        scan_class(&u, &xor_d, st, rows_known, &cands, &pairs, &mut out, min_hits, uwords, Fam::XorCSubMask, &masks, &nometa);
+        scan_class(&u, &xor_d, st, rows_known, &cands, &pairs, &mut out, min_hits, uwords, Fam::XorCXorMask, &masks, &nometa);
+        if out.is_empty() {
+            let mut vmasks: Vec<Vec<u64>> = Vec::new();
+            let mut vmeta: Vec<(usize, u64, bool)> = Vec::new();
+            for (ci, m) in masks.iter().enumerate() {
+                let neg: Vec<u64> =
+                    m.iter().map(|v| v.wrapping_neg() & 0xFFFF_FFFF).collect();
+                vmasks.push(neg);
+                vmeta.push((ci, 0, true));
+                for k in KS {
+                    let shifted: Vec<u64> = m
+                        .iter()
+                        .map(|v| (v.wrapping_add(k)) & 0xFFFF_FFFF)
+                        .collect();
+                    vmasks.push(shifted);
+                    vmeta.push((ci, k, false));
+                }
+            }
+            // the best anchor pair only: phase 2 is the rare path
+            let keep = pairs.clone();
+            let pairs1: Vec<usize> = pairs.iter().take(1).copied().collect();
+            scan_class(&u, &xor_d, st, rows_known, &cands, &pairs1, &mut out, min_hits, uwords, Fam::XorCSubMask, &vmasks, &vmeta);
+            scan_class(&u, &xor_d, st, rows_known, &cands, &pairs1, &mut out, min_hits, uwords, Fam::XorCXorMask, &vmasks, &vmeta);
+            pairs = keep;
+        }
+    }
+    out.sort_by_key(|h| std::cmp::Reverse(h.hits));
+    out.dedup_by(|a, b| a.col_pos == b.col_pos && a.fam == b.fam && a.c == b.c);
+    out
+}
+
+/// Validate an externally-solved (off, fam, C) name column — e.g. the
+/// differential locator's output — through the same DecodeStats the
+/// pin-based solver scores with, so acceptance gates stay identical.
+pub fn validate_solved_name(
+    body: &[u8],
+    base: usize,
+    stride: usize,
+    off: usize,
+    mask: &[u64],
+    fam: Fam,
+    c: u64,
+    heap: &HeapIndex,
+    sample: usize,
+) -> NameCol {
+    let st = name_stats(body, base, stride, off, mask, fam, c, sample, heap);
+    NameCol {
+        off,
+        family: fam,
+        c,
+        pinned_row: 0,
+        ok_rows: st.ok,
+        idrate: st.good as f64 / st.ok.max(1) as f64,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -733,6 +1016,76 @@ mod tests {
     fn enc_xcsm(raw: u64, mask: u64, c: u64) -> u64 {
         // inverse of XorCSubMask value = ((raw ^ c) - mask)
         ((raw + mask) & 0xFFFFFFFF) ^ c
+    }
+
+    /// Differential locator, synthetic: a stride-8 table whose name column
+    /// sits at off 4 (XorCSubMask) next to a decoy u32 slot. The locator must
+    /// recover the column's position, family and constant from the prior
+    /// names alone.
+    #[test]
+    fn differential_locator_synthetic() {
+        let stride = 8usize;
+        let rows = 32usize;
+        let c_x = 0x06BB_F48Du64;
+        let mut body = vec![0u8; 0x1000 + stride * rows];
+        let mut heap_lines: Vec<String> = Vec::new();
+        let mut prior: Vec<String> = Vec::new();
+        for i in 0..rows {
+            let m = chain_synthetic().eval(i as u64, &[0u8; 4], &|_, _| 0).unwrap();
+            let name = if i == 0 { "msg" } else { &format!("Param{}", i) };
+            let hoff = 0x40 + i * 11;
+            heap_lines.push(format!("{:#08x}\t{}", hoff, name));
+            if i < 8 {
+                prior.push(name.to_string());
+            }
+            let idx = ((name.len() as u64) << 24) | hoff as u64;
+            // name column at off 4: XorCSubMask
+            body[i * stride + 4..i * stride + 8]
+                .copy_from_slice(&(enc_xcsm(idx, m, c_x) as u32).to_le_bytes());
+            // decoy slot at off 0: noise that must not decode anywhere
+            body[i * stride..i * stride + 4]
+                .copy_from_slice(&((0x1234_5678u32 ^ (i as u32 * 0x9E3779B1)).to_le_bytes()));
+        }
+        let heap = HeapIndex::from_lines(heap_lines.iter().map(|s| s.as_str()));
+        let chain = chain_synthetic();
+        let hits = locate_name_column_differential(&body, stride, &[chain], &prior, &heap, 6);
+        assert!(
+            hits.iter().any(|h| h.col_pos == 4 && h.fam == Fam::XorCSubMask && h.c == c_x),
+            "XorCSubMask column not located: {:?}",
+            hits
+        );
+    }
+
+    /// Same instrument against an AddMaskAddC column (6.5 param family):
+    /// `v = raw + m + C` — the mask's sign cannot fold into the constant.
+    #[test]
+    fn differential_locator_addmask() {
+        let stride = 8usize;
+        let rows = 32usize;
+        let c_a = 0x92A9_143Cu64;
+        let mut body = vec![0u8; 0x1000 + stride * rows];
+        let mut heap_lines: Vec<String> = Vec::new();
+        let mut prior: Vec<String> = Vec::new();
+        for i in 0..rows {
+            let m = chain_synthetic().eval(i as u64, &[0u8; 4], &|_, _| 0).unwrap();
+            let name = if i == 0 { "msg" } else { &format!("Arg{}", i) };
+            let hoff = 0x40 + i * 11;
+            heap_lines.push(format!("{:#08x}\t{}", hoff, name));
+            if i < 8 {
+                prior.push(name.to_string());
+            }
+            let idx = ((name.len() as u64) << 24) | hoff as u64;
+            let raw = (idx.wrapping_sub(m).wrapping_sub(c_a)) & 0xFFFF_FFFF;
+            body[i * stride..i * stride + 4].copy_from_slice(&(raw as u32).to_le_bytes());
+        }
+        let heap = HeapIndex::from_lines(heap_lines.iter().map(|s| s.as_str()));
+        let chain = chain_synthetic();
+        let hits = locate_name_column_differential(&body, stride, &[chain], &prior, &heap, 6);
+        assert!(
+            hits.iter().any(|h| h.col_pos == 0 && h.fam == Fam::AddMaskAddC && h.c == c_a),
+            "AddMaskAddC column not located: {:?}",
+            hits
+        );
     }
 
     /// Synthetic 40-row table: name col at +8 (XorCSubMask), count at +24

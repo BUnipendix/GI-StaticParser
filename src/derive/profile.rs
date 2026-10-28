@@ -158,11 +158,21 @@ pub struct TableBase {
     pub xor: Option<u32>,
     #[serde(default)]
     pub add: Option<u32>,
+    /// Absolute body offset, carried as DATA when no header-slot transform
+    /// reproduces the base (the differential locator may land on a column
+    /// whose base the code expresses as `hdr[slot] op imm + body_ptr_delta` —
+    /// the delta is invisible to the resolve). Takes precedence over the
+    /// header transform; zero means "not set" for older profiles.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direct: Option<u32>,
 }
 
 impl TableBase {
     #[inline]
     pub fn resolve(&self, hdr: &[u8]) -> usize {
+        if let Some(d) = self.direct {
+            return d as usize;
+        }
         let raw = u32::from_le_bytes(
             hdr[self.hdr_off as usize..self.hdr_off as usize + 4].try_into().unwrap(),
         );

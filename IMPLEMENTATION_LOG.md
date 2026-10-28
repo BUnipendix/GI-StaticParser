@@ -6009,3 +6009,14 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
 - **未解清单（6.2）**：param name（40 分钟全锚 sweep 无命中——链池疑缺真链，下轮差分诊断）；paramStart（6 fam×62 链×全 offset 0 命中——布局在假设空间外，疑行号语义或 mask2 形态）；dump-gen 未解列种子继承使 paramCount 乱码放大成 12GB dump（乱码串直写+255 参数/方法），待 param 解出自然消，引擎 clamp 防御暂未加。
 - **回归**：7.1 零接触 dump 与 oracle 2,417,104 行 BYTE-IDENTICAL（cmp 实证）；6.6/6.5 六切片逐值一致（field/param 基座与常数同 R86/R87）；37 测试全绿。
 - **性能债**：6.2 全程 40 分钟（param sweep 全锚×邻域×87 链）——差分定位法移植 Rust 是下轮第一优先（枚举法换数据驱动定位）。
+
+## R89（2026-10-29）：差分定位法移植 Rust——field/param 切片快路径全链（不是需求，方案记录）
+
+- **locator（rowtable::locate_name_column_differential）**：C-free 行差分全 body 扫描。四族类（线性-add、add-mask、xor-sub、xor-xor）；锚行=连续已知对按候选积排序；命中=所有已知先行行解码落堆候选≥6。单测×2（XorCSubMask/AddMaskAddC 合成列）。
+- **池探针**：零命中=该池在所有可扫族下无解 → param sweep 直接跳过（6.2 param 40min 枚举→52s 全程）。相位设计：xor 族先扫原始 mask（多数池携带真掩码），零命中再扫 ±KS/取负变体（**xor 族差分对 mask 平移不变量不成立**——6.5 field 真掩码=池链∓0x847bfc89，phase-2 命中；DiffHit 带 (shift,negated) 供快路径复现并烘焙进 profile 链）。
+- **三个真 bug（都是本轮新代码引入，各有教训）**：
+  ①scan 闭包单元素切片使 chain_idx 恒 0——快路径拿 chains[0] 验证必败。教训：索引映射要显式传参（重构为 item fn 顺带解决借用冲突）。
+  ②(TableBase,off) 二义：定位器给列位置，(base,0)/(base-4,4) 名字解码相同但**类型列相反**且锚定不同。修=双解释评估+锚定优先+TableBase 加 `direct` 字段（无锚可落时以数据携带绝对偏移；6.2 field 因此拿到**真行起点 0x18E58F0**——比 R88 sweep 的 0x18E58EC+4 更准）。sweep 路径同修（无锚落 direct，不再留转移基座=R88 的 6.2 潜在错位）。
+  ③**烘焙拆分条件**：7.1 param 的池链顶层 Xor 是链自身结构，被当 R85 烘焙常数拆掉——验证用 (原链,hit.c) 通过、profile 记 (inner,c^k) 破损对。教训：**验证与记录必须用同一 (mask,C) 对；等价变换才可拆**（XorCXorMask 的 XOR 交换拆分等价；XorCSubMask 不等价）。修=拆分限定 field+XorCXorMask+未平移未取负；param 不拆。
+- **验证矩阵**：7.1 零接触 dump **BYTE-IDENTICAL**（field c=0x48E6373=oracle、param c=0x6B95F108=oracle，全走差分快路径）；6.5 field/param anchored 双解逐值同 R87；6.6 双解逐值同 R86；6.2 field direct 真基座+param 探针跳 sweep。39 测试全绿。性能：6.2 全程 40min→52s；6.5 42s。
+- 遗留：phase-2（平移/取负）命中时共享类型列可能错（manifest 已注记）——未在已解版本出现；6.2 param 真链仍缺（提取层，下轮反汇编 param 访问器）。
