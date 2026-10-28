@@ -89,8 +89,12 @@ def main():
         print('FATAL: no consecutive known pair — differential cannot anchor')
         return
 
-    auto = json.load(open(f'{BATTLE}/6.2.auto.json'))
-    chains = auto['semantics']['param_defs']['chains']
+    if len(sys.argv) > 1 and sys.argv[1] == '--chains':
+        # chain_hunt pool: [{"expr": [...], "site": "...", "imm": "..."}]
+        chains = [it['expr'] for it in json.load(open(sys.argv[2]))]
+    else:
+        auto = json.load(open(f'{BATTLE}/6.2.auto.json'))
+        chains = auto['semantics']['param_defs']['chains']
     N = rows_known + 8
 
     def collect_syms(e, out):

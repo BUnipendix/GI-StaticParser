@@ -248,7 +248,19 @@ def _unwrap_hdr(e):
 _PE_CACHE = {}
 
 
+_PE_CACHE = {}
+
+
 def pe_map(path):
+    cached = _PE_CACHE.get(path)
+    if cached is not None:
+        return cached
+    r = _pe_map_uncached(path)
+    _PE_CACHE[path] = r
+    return r
+
+
+def _pe_map_uncached(path):
     """Parse a PE once per path; the module bytes are SHARED (never copied
     per Walker instance -- 100+ walkers over a 450MB exe must not OOM)."""
     if path in _PE_CACHE:

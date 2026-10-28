@@ -6020,3 +6020,14 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
   ③**烘焙拆分条件**：7.1 param 的池链顶层 Xor 是链自身结构，被当 R85 烘焙常数拆掉——验证用 (原链,hit.c) 通过、profile 记 (inner,c^k) 破损对。教训：**验证与记录必须用同一 (mask,C) 对；等价变换才可拆**（XorCXorMask 的 XOR 交换拆分等价；XorCSubMask 不等价）。修=拆分限定 field+XorCXorMask+未平移未取负；param 不拆。
 - **验证矩阵**：7.1 零接触 dump **BYTE-IDENTICAL**（field c=0x48E6373=oracle、param c=0x6B95F108=oracle，全走差分快路径）；6.5 field/param anchored 双解逐值同 R87；6.6 双解逐值同 R86；6.2 field direct 真基座+param 探针跳 sweep。39 测试全绿。性能：6.2 全程 40min→52s；6.5 42s。
 - 遗留：phase-2（平移/取负）命中时共享类型列可能错（manifest 已注记）——未在已解版本出现；6.2 param 真链仍缺（提取层，下轮反汇编 param 访问器）。
+
+## R89 补遗（2026-10-29）：6.2 param 访问器搜索——五路排查与意外收获（不是需求，方案记录）
+
+param 差分零命中后对提取层做了系统排查，param 访问器仍未定位，但收获三个**其他表**的 6.2 访问器常数（后续接线素材）：
+
+- **gp 访问器 ×2**（0x14044DC30 / 0x1404476E7）：gp 表基座 = hdr[0x1E0]^0x728D450D+body、**stride 16**（7.1 是 14）；gpStart = td 行+0x32 的 u16 ^0x28EA（哨兵 0xFFFF）；gp 链 = (((i×0x5C2890877728+0xB4A21FAA8FC8545)>>0x16)×0x6F41175D+0x23155180D3C03C76)^0x21E06262（一个 64 位版一个 32 位版）。→ engine gp/gc 硬编码的 6.2 修正素材。
+- **event 访问器**（0x14044AAF6 区）：基座 = hdr[0x204]+0x9B8EE445（与转移锚一致！）、stride 14、name@0 = (raw ^ mask)^C1（哨兵 -1）、type@4 同 mask ^C2，mask = (((i×0x1594F54A3868+0x18A1ED1E5C6D3B09)^0x3E56E4CD)×0x500002EC)>>0x16（64 位域取低 32）。堆解码验证未过（4 行可解非标识符）——常数抄录或 64 位域细节待复核。
+- **field 运行时路径互证**（0x14045247B）：真公式 = (raw^0x372DF988) + lo64(链×0xD27214C8) + 0xD878151F ≡ (raw^C) − chain0（代数等价）——差分解 XorCSubMask c=0x372DF988 与游戏实现逐位一致，独立佐证。
+- **decode_str 调用点普查**：全镜像 27 处（.text；il2cpp section 零调用）。已归因：field(0x4486AA)/method(0x44A67D,0x44A76B)/event(0x44AB86)/prop(0x44AFAD)/gp 邻域/0x452-0x453 运行时区/0x47B 区（0x47BD71 带 kind byte 表+stride8+链，疑似 defaults/attributes）。**param 名不经过独立 decode_str 调用点**——或为内联、或 param 表访问器结构不同（可能 GetParameterName 不走字符串缓存路径）。
+- 工具改进：symwalk.pe_map 加按路径缓存（chain_hunt 每 Walker 重读 450MB 的 5h43m 根因）；chain_hunt 62min 仍未完（逐簇 python Walker 仍慢）——Rust 化 chain_hunt 列入待办。diag62_param.py 支持 --chains 直读 chain_hunt 池。
+- 6.2 param 现状：链池缺真链（差分探针已实锤）+ 访问器未定位 = 提取层双缺口。param/paramStart 列保持种子数据（探针跳 sweep 已使其零开销）。
