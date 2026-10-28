@@ -5992,3 +5992,20 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
 - **6.6 实弹：field_names.slice（base 0x325aed0=Python 时代实证锚 0xDC+0x9623F4C7、name@+0 GenXorCSubMask c=0x3E3F44FB、404886 行）**——联合基座+链求解（R85 脚手架）在列族放开后直接命中。**6.6 共 6 个机器切片**：cipher/strsec/method/td/field/param，dump 字段名（value…）、参数名（fmt/args）、方法名全部正确。
 - 7.1 双路径回归：零接触 dump 2,417,104 行 100%；默认 dump 逐字节一致（cmp 实证）。from_fam→Gen* 映射核对无误（虚惊一场的 legacy 同名坑：from_fam 全部落 Gen 前缀变体）。
 - 全战役矩阵不变：6.2/6.5 field/param 卡各自世代的链池覆盖（提取层），6.0/6.1/6.3 卡转移——均为已记录缺口。
+
+## R87 补遗（2026-10-28，提交 7edc2fd）：6.5 param 解出与两处回归修复
+
+- **6.5 param 破解路径**：asm 直读 `idx=(raw+r14)+0x92A9143C`（r14=(((i×0x2E45)^0x54D26629)×0x27CF5FCE)^0xCF047B35）。三个缺口逐个补：①族缺失——AddMaskAddC（`raw+mask+C`，mask 符号不能折进常数）进 Fam/gen_col_value/from_fam/rowtable fams 数组；②变体生成器补 **negated 链**（`raw+chain+C ≡ raw-(-chain)+C`，同一 SubMaskAddC 反演不变）；③**短名验收门** short_name_column_ok——参数名 msg/fmt/args(3B) 在 min3 堆里 4000 行只有 9 行可确认，方法表的 ok_rows≥1800 地板必拒正确解；改 exact-prior 证据（exact+1≥min(6,len-1)）。
+- **基座来源修正**：6.5 param 真基座 0x19D8E6C=hdr[0x60]^0x2580119A（代码形态，非 confirmed 锚也参与 sweep）。
+- **两处回归（都是本轮新代码引入）**：①engine param_name 把 legacy None 路由进 gen_col_value(XorCSubMask2)——该 kind 无分支、静默返回 raw 列（7.1 崩到 2.67%）；修=None 直接算 (raw^xor)-mask。②splice 设 param_def_name_kind（AddMaskAddC 需 Gen 路径，否则同样静默 raw）。教训：**新增 kind 分发时必须核对所有 unwrap_or 回退族的分支覆盖**。
+- 终态：7.1 零接触 2,417,104 行 100%；6.5 field(396,634 行 c=0x2DD43D8D)+param(552,886 行 AddMaskAddC c=0x92A9143C)、GetText(msg/fmt/args) 全对；6.6 不回退。37 测试全绿。
+
+## R88（2026-10-28）：6.2 field+paramCount 解出——差分定位法+基座邻域+xorsub 族
+
+- **差分不变量定位法（本轮方法论核心）**：六族列变换的行间差分均与族常数 C 无关（线性族 add-diff、Xor* 族 xor-diff），用 oracle packed 序列做 v[]、链池 eval 做 mask[]，全 body u32 域搜差分模式即可 1 秒定位列（diag62_field2.py）——不依赖锚集、不依赖函数定位。对比：chain_hunt 全镜像形状扫跑 5h43m/6.7GB 未完成（被杀），差分法快 4 个数量级。
+- **6.2 field 真因与修复**：转移 resolved=0x18E58F4 与真表起点 0x18E58F0 差 4 字节（游戏访问器 `rcx=hdr[0x184]+imm+body_ptr`，body 指针贡献 0x41C 而 resolve 只见 hdr+imm）。修=splice 基座候选加 ±4/±8 邻域（exact 优先+邻域殿后两轮，快路径零回退）。命中：base 0x18E58EC+name_off 4、XorCSubMask c=0x372DF988、368293 行（diag 验证 24/24 oracle 行逐位同）。
+- **6.2 paramCount 新族 xorsub**：`(raw8 ^ C) - mask`——xor 常数在前、减链在后（xor/sub 混合，原 count_decode 三 op 均不覆盖）。count_decode/solve_count_column/ColKind::GenCountXorSub8/gen_col_value/from_count_op/engine md_col 全链接入。命中：off 16、C=0xBF（diag 512/512）、count_sum=453660。TableReport 加 count_sum（start 未解时 param 切片的行数来源），method PARTIAL 分支拼 count、param 切片触发条件用 count_sum 兜底。
+- **提取层认知**：①6.2 strsec 字符串无分隔符紧贴（default_vtable@762 与 xdomain_vtable@776 重叠），堆 text exact→off 有系统盲区（52/192 行 missing）——Rust solve_name_column 的 off→前缀方向不受影响（proxy_class@0x316 精确可解）。②6.2 method 访问器实测（0x14044a5c1 群）：count 链=`(((i×0x1A70E038E08A)>>8)^0x700A03C7)+0x4455DC19` 与池内 chain2/52 等价；name C=0x614FCEDD。
+- **未解清单（6.2）**：param name（40 分钟全锚 sweep 无命中——链池疑缺真链，下轮差分诊断）；paramStart（6 fam×62 链×全 offset 0 命中——布局在假设空间外，疑行号语义或 mask2 形态）；dump-gen 未解列种子继承使 paramCount 乱码放大成 12GB dump（乱码串直写+255 参数/方法），待 param 解出自然消，引擎 clamp 防御暂未加。
+- **回归**：7.1 零接触 dump 与 oracle 2,417,104 行 BYTE-IDENTICAL（cmp 实证）；6.6/6.5 六切片逐值一致（field/param 基座与常数同 R86/R87）；37 测试全绿。
+- **性能债**：6.2 全程 40 分钟（param sweep 全锚×邻域×87 链）——差分定位法移植 Rust 是下轮第一优先（枚举法换数据驱动定位）。

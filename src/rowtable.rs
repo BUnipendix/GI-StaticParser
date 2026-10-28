@@ -343,6 +343,9 @@ pub struct CountCol {
 fn count_decode(op: &str, raw: u8, m8: u8, c: u8) -> u8 {
     match op {
         "xor" => raw ^ m8 ^ c,
+        // (raw ^ C) - mask: 6.2's paramCount — xor the constant FIRST, then
+        // subtract the chain value (neither plain xor nor plain sub models it)
+        "xorsub" => (raw ^ c).wrapping_sub(m8),
         "sub" => raw.wrapping_sub(m8).wrapping_sub(c),
         _ => raw.wrapping_add(m8).wrapping_add(c),
     }
@@ -364,15 +367,22 @@ pub fn solve_count_column(
         if read_col_u8(body, base, stride, off, 0).is_none() {
             continue;
         }
-        for op in ["xor", "sub", "add"] {
-            // mode of (raw op mask) with C=0
+        for op in ["xor", "xorsub", "sub", "add"] {
+            // mode of the constant-free part with C=0; for xorsub the plain-0
+            // rows satisfy raw ^ m == C, so the histogram input is raw ^ m
+            // (identical to xor's) and the mode IS the constant.
             let mut hist = [0usize; 256];
             let mut cnt = 0usize;
             for i in 0..n {
                 if let (Some(raw), Some(&m)) =
                     (read_col_u8(body, base, stride, off, i as u64), mask.get(i))
                 {
-                    hist[count_decode(op, raw, (m & 0xFF) as u8, 0) as usize] += 1;
+                    let key = if op == "xorsub" {
+                        raw ^ (m & 0xFF) as u8
+                    } else {
+                        count_decode(op, raw, (m & 0xFF) as u8, 0)
+                    };
+                    hist[key as usize] += 1;
                     cnt += 1;
                 }
             }
@@ -386,7 +396,7 @@ pub fn solve_count_column(
                 .map(|(v, _)| v)
                 .unwrap_or(0) as u8;
             let c = match op {
-                "xor" => mode,
+                "xor" | "xorsub" => mode,
                 "sub" => mode,
                 _ => mode.wrapping_neg(),
             };
@@ -552,6 +562,12 @@ pub struct TableReport {
     pub name: Option<NameCol>,
     pub counts: Vec<CountCol>,
     pub starts: Vec<StartCol>,
+    /// Sum of the decoded count column over ALL rows (counts[0]). Carries the
+    /// parameter-table row count even when the start column stays unsolved
+    /// (6.2: count solved via the xorsub family, start uses a layout the u32
+    /// solver does not model yet) — the param slice needs this row count.
+    #[serde(default)]
+    pub count_sum: u64,
 }
 
 /// End-to-end: pick the first chain that yields an accepted name column, then
@@ -579,6 +595,15 @@ pub fn solve_table(
             // full-length mask for count/start
             if let Ok(full_mask) = eval_rows(chain, rows) {
                 let counts = solve_count_column(body, base, stride, rows, &full_mask, stride, 20_000);
+                let count_sum = counts.first().map(|c| {
+                    (0..rows as u64)
+                        .filter_map(|i| {
+                            let raw = read_col_u8(body, base, stride, c.off, i)?;
+                            let m = full_mask.get(i as usize)?;
+                            Some(count_decode(&c.op, raw, (m & 0xFF) as u8, c.c) as u64)
+                        })
+                        .sum::<u64>()
+                }).unwrap_or(0);
                 let mut starts = Vec::new();
                 for c in counts.iter().take(4) {
                     // the internal gate already tolerates a rate of irregular
@@ -597,6 +622,7 @@ pub fn solve_table(
                     name: Some(name),
                     counts,
                     starts,
+                    count_sum,
                 });
             }
         }

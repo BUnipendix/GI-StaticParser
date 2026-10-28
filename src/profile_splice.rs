@@ -392,11 +392,35 @@ pub fn splice_profile(
                 kind: ColKind::from_fam(name.family),
                 c: name.c as u32,
             };
-            m.solved
-                .push("method_defs.slice (PARTIAL: stride + mask chain + name only)".into());
+            // count column without a start column (6.2: the u8 count solves
+            // via the xorsub family while paramStart uses an unsolved
+            // layout). Splicing the count still gives the dump correct
+            // parameter counts AND frees the param slice: its row count is
+            // exactly the sum of the decoded counts.
+            let mut spliced_count = false;
+            if let Some(cnt) = rep.counts.first() {
+                if rep.count_sum > 0 {
+                    if let Some(kind) = ColKind::from_count_op(&cnt.op) {
+                        p.md_param_count = Column {
+                            offset: cnt.off as u32,
+                            kind,
+                            c: cnt.c as u32,
+                        };
+                        m.solved.push(format!(
+                            "method_defs.slice (PARTIAL: stride + mask chain + name + param_count, sum={})",
+                            rep.count_sum
+                        ));
+                        spliced_count = true;
+                    }
+                }
+            }
+            if !spliced_count {
+                m.solved
+                    .push("method_defs.slice (PARTIAL: stride + mask chain + name only)".into());
+            }
             m.notes.push(
-                "method slice: count/start columns unsolved (likely a mask2 variant); \
-                 param columns stay seed data"
+                "method slice: start column unsolved (likely a mask2 variant); \
+                 param_start stays seed data"
                     .into(),
             );
         }
@@ -453,6 +477,30 @@ pub fn splice_profile(
                 rest.sort_unstable();
                 rest.dedup();
                 bases.extend(rest);
+                // The anchor's resolved value may sit a few bytes off the
+                // true row-0 start: 6.2 field resolves to base+4 because the
+                // game's body pointer contributes a small constant the
+                // (hdr[slot] op imm) resolve cannot see. The exact candidates
+                // run FIRST (fast path, every previously-solved build hits
+                // there); the +-8/+-4 neighbours are appended after so a
+                // wrong-by-4 resolve still lands, at sweep cost only.
+                let exact = bases.clone();
+                let mut widened: Vec<usize> = Vec::with_capacity(exact.len() * 4);
+                for &b in &exact {
+                    for d in [-8i64, -4, 4, 8] {
+                        let v = (b as i64 + d).max(0) as usize;
+                        if body.len().saturating_sub(v) > 4096 {
+                            widened.push(v);
+                        }
+                    }
+                }
+                widened.sort_unstable();
+                widened.dedup();
+                for b in widened {
+                    if !exact.contains(&b) {
+                        bases.push(b);
+                    }
+                }
                 let mut solved_field = false;
                 'base: for field_base in bases {
                     let variants: Vec<crate::expr::Expr> = frec
@@ -538,15 +586,23 @@ pub fn splice_profile(
     }
 
     // ---- parameter slice: rows come from the method solve (sum of
-    // paramCount), the chain pool from the param transfer, the name column
-    // from the heap + cross-version stable corelib parameter names ----
-    if let (Some(heap), Some(rep), Some(st), Some(dv)) = (
+    // paramCount — the start column when solved, else the count_sum), the
+    // chain pool from the param transfer, the name column from the heap +
+    // cross-version stable corelib parameter names ----
+    let param_rows: Option<u64> = method.and_then(|r| {
+        r.starts
+            .first()
+            .map(|s| s.sum_counts)
+            .filter(|&s| s > 0)
+            .or(Some(r.count_sum).filter(|&s| s > 0))
+    });
+    if let (Some(heap), Some(rep), Some(rows_u), Some(dv)) = (
         heap,
         method,
-        method.and_then(|r| r.starts.first()),
+        param_rows,
         derived,
     ) {
-        if st.sum_counts > 0 {
+        if rows_u > 0 {
             if let Some(prec) = report.semantics.get("param_defs") {
                 // candidate bases: the transfer pick first, then in-function
                 // anchors, then every derive anchor (same sweep rationale as
@@ -577,11 +633,35 @@ pub fn splice_profile(
                 rest.sort_unstable();
                 rest.dedup();
                 bases.extend(rest);
+                // The anchor's resolved value may sit a few bytes off the
+                // true row-0 start: 6.2 field resolves to base+4 because the
+                // game's body pointer contributes a small constant the
+                // (hdr[slot] op imm) resolve cannot see. The exact candidates
+                // run FIRST (fast path, every previously-solved build hits
+                // there); the +-8/+-4 neighbours are appended after so a
+                // wrong-by-4 resolve still lands, at sweep cost only.
+                let exact = bases.clone();
+                let mut widened: Vec<usize> = Vec::with_capacity(exact.len() * 4);
+                for &b in &exact {
+                    for d in [-8i64, -4, 4, 8] {
+                        let v = (b as i64 + d).max(0) as usize;
+                        if body.len().saturating_sub(v) > 4096 {
+                            widened.push(v);
+                        }
+                    }
+                }
+                widened.sort_unstable();
+                widened.dedup();
+                for b in widened {
+                    if !exact.contains(&b) {
+                        bases.push(b);
+                    }
+                }
                 let prior: Vec<String> = serde_json::from_str(
                     include_str!("../assets/prior_param_names.json"),
                 )
                 .unwrap_or_default();
-                let sample = std::cmp::min(st.sum_counts as usize, 4000);
+                let sample = std::cmp::min(rows_u as usize, 4000);
                 let mut solved_param = false;
                 'pbase: for base in bases {
                     let variants: Vec<crate::expr::Expr> = prec
@@ -594,7 +674,7 @@ pub fn splice_profile(
                             continue;
                         };
                         if let Some(name) = crate::rowtable::solve_name_column(
-                            body, base, 8, st.sum_counts as usize, &mask, heap, &prior, sample,
+                            body, base, 8, rows_u as usize, &mask, heap, &prior, sample,
                         ) {
                             // short names (msg/fmt/args) have sparse heap-run
                             // coverage: exact-prior evidence replaces the
@@ -639,7 +719,7 @@ pub fn splice_profile(
                                 p.param_def_type_off = if name.off == 4 { 0 } else { 4 };
                                 m.solved.push(format!(
                                     "param_defs.slice (base {:#x}, name column +{:#x} {} c={:#X}, {} rows)",
-                                    base, name.off, format!("{:?}", name.family), name.c, st.sum_counts
+                                    base, name.off, format!("{:?}", name.family), name.c, rows_u
                                 ));
                                 solved_param = true;
                                 break 'pbase;
@@ -1018,6 +1098,7 @@ mod tests {
                 idrate: 0.99,
             }),
             counts: vec![CountCol { off: 24, op: "sub".into(), c: 88, mean: 0.4 }],
+            count_sum: 4096,
             starts: vec![StartCol {
                 off: 0,
                 family: crate::expr::Fam::XorCSubMask,

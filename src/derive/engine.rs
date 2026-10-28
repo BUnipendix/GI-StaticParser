@@ -387,6 +387,7 @@ impl<'a> Meta<'a> {
                 | ColKind::GenAddCXorMask
                 | ColKind::GenXorCSubMask
                 | ColKind::GenCountXor8
+                | ColKind::GenCountXorSub8
                 | ColKind::GenCountSub8
                 | ColKind::GenCountAdd8
         ) {

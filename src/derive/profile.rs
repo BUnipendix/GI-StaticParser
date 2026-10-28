@@ -125,6 +125,7 @@ pub fn col_value32(c: &Column, raw: u32) -> u32 {
         | ColKind::GenAddCXorMask
         | ColKind::GenXorCSubMask
         | ColKind::GenCountXor8
+        | ColKind::GenCountXorSub8
         | ColKind::GenCountSub8
         | ColKind::GenCountAdd8 => gen_col_value(c.kind, raw, 0, c.c),
         _ => raw ^ c.c,
@@ -137,7 +138,7 @@ pub fn col_value16(c: &Column, raw: u16) -> u32 {
     match c.kind {
         ColKind::XorC => (raw ^ c.c as u16) as u32,
         ColKind::AddC => raw.wrapping_add(c.c as u16) as u32,
-        ColKind::GenCountXor8 | ColKind::GenCountSub8 | ColKind::GenCountAdd8 => {
+        ColKind::GenCountXor8 | ColKind::GenCountXorSub8 | ColKind::GenCountSub8 | ColKind::GenCountAdd8 => {
             gen_col_value(c.kind, raw as u32, 0, c.c)
         }
         _ => (raw ^ c.c as u16) as u32,
@@ -256,6 +257,8 @@ pub enum ColKind {
     GenXorCSubMask,
     /// u8: plain = raw ^ C ^ mask8(i)
     GenCountXor8,
+    /// u8: plain = (raw ^ C) - mask8(i)  (6.2 paramCount family)
+    GenCountXorSub8,
     /// u8: plain = raw - mask8(i) - C
     GenCountSub8,
     /// u8: plain = raw + mask8(i) + C
@@ -281,6 +284,7 @@ impl ColKind {
     pub fn from_count_op(op: &str) -> Option<ColKind> {
         match op {
             "xor" => Some(ColKind::GenCountXor8),
+            "xorsub" => Some(ColKind::GenCountXorSub8),
             "sub" => Some(ColKind::GenCountSub8),
             "add" => Some(ColKind::GenCountAdd8),
             _ => None,
@@ -309,6 +313,8 @@ pub fn gen_col_value(kind: ColKind, raw: u32, mask: u32, c: u32) -> u32 {
             fam_value(fam, raw as u64, mask as u64, c as u64, u32::MAX as u64) as u32
         }
         ColKind::GenCountXor8 => (raw ^ mask ^ c) as u8 as u32,
+        ColKind::GenCountXorSub8 => ((raw as u8) ^ (c as u8))
+            .wrapping_sub(mask as u8) as u32,
         ColKind::GenCountSub8 => (raw as u8)
             .wrapping_sub(mask as u8)
             .wrapping_sub(c as u8) as u32,
