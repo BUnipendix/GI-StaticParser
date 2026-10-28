@@ -653,7 +653,12 @@ impl<'a> Meta<'a> {
             self.field_base + self.profile.field_stride as usize * i as usize
                 + self.profile.field_name_off as usize,
         );
-        raw ^ self.field_mask(i) ^ self.profile.field_name_xor
+        match self.profile.field_name_kind {
+            Some(kind) => {
+                super::profile::gen_col_value(kind, raw, self.field_mask(i), self.profile.field_name_xor)
+            }
+            None => raw ^ self.field_mask(i) ^ self.profile.field_name_xor,
+        }
     }
 
     /// Field name for row `i`.

@@ -459,28 +459,35 @@ pub fn splice_profile(
                             if !crate::rowtable::name_column_ok(&name, sample) {
                                 continue;
                             }
-                            if name.family == crate::expr::Fam::XorCXorMask {
-                                // the pool may carry the name constant BAKED into
-                                // the chain (`mask ^ nameC` — equivalent decode for
-                                // the name column, but it corrupts the TYPE column
-                                // which shares the raw mask). Split a trailing
-                                // Xor(inner, imm) back out: mask=inner, C^=imm.
-                                let mut mask_chain = chain.clone();
+                            {
+                                let mut kind = crate::derive::profile::ColKind::from_fam(name.family);
                                 let mut c = name.c as u32;
-                                // look through the Lo wrapper the walker adds
-                                let top = match chain.clone() {
-                                    crate::expr::Expr::Lo(_, inner) => *inner,
-                                    e => e,
-                                };
-                                if let crate::expr::Expr::Op2(op, inner, immexpr) = &top {
-                                    if *op == crate::expr::BinOp::Xor {
-                                        if let crate::expr::Expr::Imm(k) = **immexpr {
-                                            mask_chain = crate::expr::fold(inner);
-                                            c ^= k as u32;
+                                let mut mask_chain = chain.clone();
+                                // the pool may carry the name constant BAKED into
+                                // an XorCXorMask chain (`mask ^ nameC` — equivalent
+                                // decode for the name column, but it corrupts the
+                                // TYPE column which shares the raw mask). Split a
+                                // trailing Xor(inner, imm) back out.
+                                if name.family == crate::expr::Fam::XorCXorMask {
+                                    let top = match chain.clone() {
+                                        crate::expr::Expr::Lo(_, inner) => *inner,
+                                        e => e,
+                                    };
+                                    if let crate::expr::Expr::Op2(op, inner, immexpr) = &top {
+                                        if *op == crate::expr::BinOp::Xor {
+                                            if let crate::expr::Expr::Imm(k) = **immexpr {
+                                                mask_chain = crate::expr::fold(inner);
+                                                c ^= k as u32;
+                                            }
                                         }
                                     }
+                                } else {
+                                    // other families carry no baked constant on
+                                    // this path; keep the kind as solved
+                                    kind = crate::derive::profile::ColKind::from_fam(name.family);
                                 }
                                 p.field_mask_expr = Some(mask_chain);
+                                p.field_name_kind = Some(kind);
                                 p.field_name_xor = c;
                                 p.field_name_off = name.off as u32;
                                 p.field_type_off = if name.off == 0 { 4 } else { 0 };

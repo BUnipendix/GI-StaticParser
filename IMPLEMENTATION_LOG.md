@@ -5985,3 +5985,10 @@ CANDIDATE-NOT VALIDATED；下一步从 typeDef methodStart/paramCount 数据反�
 3. **链内烘焙列常数**：池里 `mask^nameC` 变体让 name 求解给出 c=0（解码等价）但类型列共用掩码被连坐（`MonoClass* value`→`object value`，3.31% 崩）。拼接处拆分：顶层（穿透 Lo 包裹）`Xor(inner,imm)` → mask=inner、C^=imm。修后 field_name_xor=0x48E6373=oracle 逐位同、7.1 dump 回 100%。
 - 附：expr::collapse_index_sum（base+counter 双符号求和节点坍缩为 Sym("i")，symwalk/emu 两处 record 门接入）+ 单测；本轮它未成为主修复路径（Lea+fold 已让链单符号化）但作为通用保险保留。
 - **6.6 字段**：联合基座+链求解（匹配函数窗口内 derive 锚 ×链池）已实现，但 6.6 链形态不同（movabs-imul 家族 `×0x4f0c708494a8>>0x12`，与其方法链同族），name 列族也非 XorCXorMask——需要 engine 字段列 Gen* 化（照 md 列模式）＝下轮。参数名 6.6 已全对（fmt/args/obj/parser 实证）。
+
+## R86（2026-10-28）：engine 字段列 Gen* 化——6.6 六切片全解（不是需求，方案记录）
+
+- Profile `field_name_kind: Option<ColKind>`（None=legacy 三重 xor 形式；Gen* 走 gen_col_value 单点求值）；engine field_name_idx 按类型分派。splice 字段切片放开族限制（任意 fam→from_fam 映射），XorCXorMask 保留烘焙常数拆分，其余族直取。
+- **6.6 实弹：field_names.slice（base 0x325aed0=Python 时代实证锚 0xDC+0x9623F4C7、name@+0 GenXorCSubMask c=0x3E3F44FB、404886 行）**——联合基座+链求解（R85 脚手架）在列族放开后直接命中。**6.6 共 6 个机器切片**：cipher/strsec/method/td/field/param，dump 字段名（value…）、参数名（fmt/args）、方法名全部正确。
+- 7.1 双路径回归：零接触 dump 2,417,104 行 100%；默认 dump 逐字节一致（cmp 实证）。from_fam→Gen* 映射核对无误（虚惊一场的 legacy 同名坑：from_fam 全部落 Gen 前缀变体）。
+- 全战役矩阵不变：6.2/6.5 field/param 卡各自世代的链池覆盖（提取层），6.0/6.1/6.3 卡转移——均为已记录缺口。

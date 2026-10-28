@@ -578,6 +578,12 @@ pub struct Profile {
     /// supersedes `field_mask` when set.
     #[serde(default)]
     pub field_mask_expr: Option<Expr>,
+    /// Zero-touch override: transform family of the field NAME column.
+    /// `None` = the legacy form `raw ^ mask ^ field_name_xor`; a `Gen*` kind
+    /// evaluates through `gen_col_value` (6.6's generation uses a different
+    /// family than 7.1's plain triple-xor).
+    #[serde(default)]
+    pub field_name_kind: Option<ColKind>,
     /// Field column offsets (7.1: name@0, type@4); data-driven so a build
     /// that swaps the slots needs no code change.
     #[serde(default)]
