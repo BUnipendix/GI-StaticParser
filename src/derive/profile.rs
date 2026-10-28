@@ -532,6 +532,19 @@ pub struct Profile {
     pub td_event_count: Option<Column>,
     #[serde(default)]
     pub event_mask: Option<EventMaskChain>,
+    /// Generic chain for the event mask (R89b: the fixed-form `EventMaskChain`
+    /// cannot express every generation's accessor — 6.2's is a movabs-imul
+    /// chain of the same family as `md_mask_expr`). Takes precedence over
+    /// `event_mask` when set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_mask_expr: Option<crate::expr::Expr>,
+    /// Name/type column offsets inside the row. 7.1 packs name@0/type@4;
+    /// 6.2's accessor swaps them (type@0 carries the 0xFFFFFFFF typearr
+    /// sentinel, name@4 feeds the string decoder). None = the 7.1 layout.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_name_off: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_type_off: Option<u32>,
     #[serde(default)]
     pub event_name_xor: u32,
     #[serde(default)]

@@ -6031,3 +6031,11 @@ param 差分零命中后对提取层做了系统排查，param 访问器仍未�
 - **decode_str 调用点普查**：全镜像 27 处（.text；il2cpp section 零调用）。已归因：field(0x4486AA)/method(0x44A67D,0x44A76B)/event(0x44AB86)/prop(0x44AFAD)/gp 邻域/0x452-0x453 运行时区/0x47B 区（0x47BD71 带 kind byte 表+stride8+链，疑似 defaults/attributes）。**param 名不经过独立 decode_str 调用点**——或为内联、或 param 表访问器结构不同（可能 GetParameterName 不走字符串缓存路径）。
 - 工具改进：symwalk.pe_map 加按路径缓存（chain_hunt 每 Walker 重读 450MB 的 5h43m 根因）；chain_hunt 62min 仍未完（逐簇 python Walker 仍慢）——Rust 化 chain_hunt 列入待办。diag62_param.py 支持 --chains 直读 chain_hunt 池。
 - 6.2 param 现状：链池缺真链（差分探针已实锤）+ 访问器未定位 = 提取层双缺口。param/paramStart 列保持种子数据（探针跳 sweep 已使其零开销）。
+
+## R89c（2026-10-29）：6.2 event 常数复核——两处符号扩展修正+结构预接线（不是需求，方案记录）
+
+- **64 位域复核（逐字节核对原始机器码）**：event 链两处 imm32 符号扩展此前遗漏——①`xor rcx, 0x3E56E4CD` 是 xor r64,imm32 → **符号扩展** 0xFFFFFFFF3E56E4CD；②`imul rbx, rcx, 0x500002EC` 是 imul r64,r64,imm32 → **符号扩展** 0xFFFFFFFF500002EC。另纠正列归属：decode_str 的输入是 **+4 列**（name，C=0x2C9FF31D），+0 是 type 列（typearr 索引、哨兵 0xFFFFFFFF，C=0x6DD83F38）——7.1 profile 的 name@0/type@4 在 6.2 **互换**（与 param 的 +0/+4 换位同款）。
+- **mask-free 行内信号（新工具）**：event 行 type/name 两列共用 mask → 行内 xor (u32@0 ^ u32@4) 消去 mask；其 byte1 恒 0x7D（16/16 行）证明**基座 0x3489918 行对齐、14 字节行结构、两列共享 mask**——不依赖任何链常数。此前我误读为 byte2 恒定（已纠正）。
+- **堆验证仍未通过**：修正符号扩展+列交换后 6 行可解（含真实事件名 `RemoveDynami…` 截断 12 字符）但仅 6/3000——行号语义仍缺一环。已排除：行号偏移 k∈[0,32000)（esi=td klass 结构 u16@0x34+0x5260 的绝对行号假设）、C 低 24 位暴力交集（1178 候选×len 聚类失败）、len 聚类。链公式与机器码语义逐位一致——剩余未知=esi→链输入的某一环（可能 u16@0x34 解读或 0x5260 组合方式）。
+- **event 结构预接线（常数还原后的接入点）**：Profile 加 `event_mask_expr`（Gen 链优先于固定形式 EventMaskChain）+ `event_name_off`/`event_type_off`（数据化 6.2 布局互换）；engine.event_row 按此分派，accessor 列（+8..14）不随 name/type 换位移动。7.1 BYTE-IDENTICAL 保持；39 测试全绿。
+- 教训：**imul/xor 的 r64,imm32 形式一律符号扩展**——抄常数时必须核对操作数位宽；行内 mask-free 信号（共 mask 列的 xor）是表结构验证的通用工具，值得在 prop/event 接线时复用。

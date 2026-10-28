@@ -881,19 +881,25 @@ impl<'a> Meta<'a> {
         &self,
         row: u32,
     ) -> Option<(u32, Option<u32>, Option<u16>, Option<u16>, Option<u16>)> {
-        let mask_chain = self.profile.event_mask.as_ref()?;
         let stride = self.profile.event_stride as usize;
         if stride < 14 {
             return None;
         }
+        // Generic chain (spliced) takes precedence over the fixed form; the
+        // name/type column offsets are data too (6.2 swaps 7.1's layout).
+        let mask = match &self.profile.event_mask_expr {
+            Some(e) => e.eval(row as u64, &self.header, &|_, _| 0).unwrap_or(0) as u32,
+            None => self.profile.event_mask.as_ref()?.eval(row),
+        };
+        let name_off = self.profile.event_name_off.unwrap_or(0) as usize;
+        let type_off = self.profile.event_type_off.unwrap_or(4) as usize;
         let at = self.event_base + stride * row as usize;
-        let b = self.body.read_slice(at, 14)?;
-        let raw_name = u32::from_le_bytes(b[0..4].try_into().ok()?);
-        let raw_type = u32::from_le_bytes(b[4..8].try_into().ok()?);
+        let b = self.body.read_slice(at, stride.max(14))?;
+        let raw_name = u32::from_le_bytes(b[name_off..name_off + 4].try_into().ok()?);
+        let raw_type = u32::from_le_bytes(b[type_off..type_off + 4].try_into().ok()?);
         let raw_remove = u16::from_le_bytes(b[8..10].try_into().ok()?);
         let raw_raise = u16::from_le_bytes(b[10..12].try_into().ok()?);
         let raw_add = u16::from_le_bytes(b[12..14].try_into().ok()?);
-        let mask = mask_chain.eval(row);
         let m16 = mask as u16;
         let name = (raw_name ^ mask) ^ self.profile.event_name_xor;
         let type_idx = raw_type.wrapping_add(self.profile.event_type_add) ^ mask;
