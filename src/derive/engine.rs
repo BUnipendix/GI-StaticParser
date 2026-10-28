@@ -710,7 +710,17 @@ impl<'a> Meta<'a> {
         let mask = self.param_def_mask(i)?;
         let row = self.param_def_base + stride * i as usize;
         let raw = self.body.read_u32(row + self.profile.param_def_name_off as usize);
-        let idx = (raw ^ self.profile.param_def_name_xor).wrapping_sub(mask);
+        // None = the legacy 7.1 form (raw ^ xor) - mask; kinds otherwise go
+        // through the shared generic evaluator. XorCSubMask2 is an md_col
+        // family (mask2-sourced) with NO gen_col_value branch — routing the
+        // legacy form through it silently emitted the raw column (7.1 param
+        // regression: every signature argument rendered as heap noise).
+        let idx = match self.profile.param_def_name_kind {
+            Some(kind) => {
+                super::profile::gen_col_value(kind, raw, mask, self.profile.param_def_name_xor)
+            }
+            None => (raw ^ self.profile.param_def_name_xor).wrapping_sub(mask),
+        };
         Some(self.decode_str(idx))
     }
 

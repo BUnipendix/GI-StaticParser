@@ -260,12 +260,15 @@ pub enum ColKind {
     GenCountSub8,
     /// u8: plain = raw + mask8(i) + C
     GenCountAdd8,
+    /// plain = raw + mask(i) + C (u32; 6.5 parameter-name family)
+    GenAddMaskAddC,
 }
 
 impl ColKind {
     /// Map a rowtable transform family to its generic column kind.
     pub fn from_fam(fam: Fam) -> ColKind {
         match fam {
+            Fam::AddMaskAddC => ColKind::GenAddMaskAddC,
             Fam::SubMaskAddC => ColKind::GenSubMaskAddC,
             Fam::AddCSubMask => ColKind::GenAddCSubMask,
             Fam::XorCXorMask => ColKind::GenXorCXorMask,
@@ -291,6 +294,9 @@ impl ColKind {
 #[inline]
 pub fn gen_col_value(kind: ColKind, raw: u32, mask: u32, c: u32) -> u32 {
     match kind {
+        ColKind::GenAddMaskAddC => {
+            fam_value(Fam::AddMaskAddC, raw as u64, mask as u64, c as u64, u32::MAX as u64) as u32
+        }
         ColKind::GenSubMaskAddC | ColKind::GenAddCSubMask | ColKind::GenXorCXorMask
         | ColKind::GenAddCXorMask | ColKind::GenXorCSubMask => {
             let fam = match kind {
@@ -677,6 +683,10 @@ pub struct Profile {
     pub param_def_name_off: u32,
     #[serde(default = "default_param_type_off")]
     pub param_def_type_off: u32,
+    /// Zero-touch override: transform family of the parameter NAME column.
+    /// `None` = the legacy 7.1 form `(raw ^ name_xor) - mask` (XorCSubMask2).
+    #[serde(default)]
+    pub param_def_name_kind: Option<ColKind>,
 }
 
 fn default_param_name_off() -> u32 {

@@ -147,10 +147,16 @@ pub enum Fam {
     AddCXorMask,
     #[serde(rename = "XorCSubMask")]
     XorCSubMask,
+    /// plain = raw + mask + C (the 6.5 parameter-name form: `lea ecx,[rax+r14];
+    /// add ecx,0x92a9143c`). Note `raw - mask + C` is NOT the same family with a
+    /// different C — the mask sign cannot fold into the constant.
+    #[serde(rename = "AddMaskAddC")]
+    AddMaskAddC,
 }
 
 pub fn fam_value(fam: Fam, raw: u64, mask: u64, c: u64, dom: u64) -> u64 {
     match fam {
+        Fam::AddMaskAddC => raw.wrapping_add(mask).wrapping_add(c) & dom,
         Fam::SubMaskAddC => raw.wrapping_sub(mask).wrapping_add(c) & dom,
         Fam::AddCSubMask => raw.wrapping_add(c).wrapping_sub(mask) & dom,
         Fam::XorCXorMask => ((raw ^ c) ^ mask) & dom,
@@ -165,6 +171,7 @@ pub fn fam_value(fam: Fam, raw: u64, mask: u64, c: u64, dom: u64) -> u64 {
 pub fn fam_invert(fam: Fam, raw: u64, mask: u64, idx: u64) -> u64 {
     let (raw, mask, idx) = (raw as u32, mask as u32, idx as u32);
     let c = match fam {
+        Fam::AddMaskAddC => idx.wrapping_sub(raw).wrapping_sub(mask),
         Fam::SubMaskAddC | Fam::AddCSubMask => idx.wrapping_sub(raw).wrapping_add(mask),
         Fam::XorCXorMask => raw ^ mask ^ idx,
         Fam::AddCXorMask => (idx ^ mask).wrapping_sub(raw),

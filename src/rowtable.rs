@@ -21,7 +21,7 @@
 //!
 //! Copyright (C) 2026. Licensed under the GNU General Public License v3.0.
 
-use crate::expr::{fam_invert, fam_value, Expr, Fam};
+use crate::expr::{fam_invert, fam_value, fold, BinOp, Expr, Fam};
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -183,6 +183,51 @@ pub fn name_column_ok(col: &NameCol, sample: usize) -> bool {
     col.ok_rows >= floor && col.idrate >= 0.95
 }
 
+/// Acceptance for SHORT-NAME tables (parameter definitions: `msg`, `fmt`,
+/// `args` — 3-6 byte names). Heap-run coverage of such names is sparse even at
+/// `--min-len 3` (6.5: 9 decodable rows of 4000 — the giant `ok_rows` floor
+/// from the 40万-row method table rejects the CORRECT constant), so the gate
+/// shifts to exact-prior evidence: every decoded row must be an identifier
+/// AND the solved constant must reproduce the prior names EXACTLY on
+/// non-pin rows. `exact` counts rows 1..prior.len() (row 0 is the pin).
+pub fn short_name_column_ok(col: &NameCol, prior: &[String], exact: usize) -> bool {
+    col.idrate >= 0.95
+        && col.ok_rows >= 8
+        && exact + 1 >= std::cmp::min(6, prior.len().saturating_sub(1))
+}
+
+/// Count exact prior matches for a solved (fam, C) over rows 1..prior.len().
+/// `decode` = the caller's name-index decoder (fam-specific).
+pub fn count_exact_prior(
+    body: &[u8],
+    base: usize,
+    stride: usize,
+    off: usize,
+    mask: &[u64],
+    fam: Fam,
+    c: u64,
+    prior: &[String],
+    heap: &HeapIndex,
+) -> usize {
+    let mut exact = 0usize;
+    for (r, name) in prior.iter().enumerate().take(64).skip(1) {
+        let Some(raw) = read_col_u32(body, base, stride, off, r as u64) else {
+            continue;
+        };
+        let m = mask.get(r).copied().unwrap_or(0);
+        let v = fam_value(fam, raw as u64, m, c, u32::MAX as u64);
+        let ln = ((v >> 24) & 0xFF) as usize;
+        let hit = heap
+            .text((v & 0xFFFFFF) as u32)
+            .map(|t| t.len() >= ln && &t[..ln] == name.as_str())
+            .unwrap_or(false);
+        if hit {
+            exact += 1;
+        }
+    }
+    exact
+}
+
 /// Pin (off, family, C) for the packed-string-index column.
 pub fn solve_name_column(
     body: &[u8],
@@ -202,6 +247,7 @@ pub fn solve_name_column(
         Fam::XorCXorMask,
         Fam::AddCXorMask,
         Fam::XorCSubMask,
+        Fam::AddMaskAddC,
     ];
     // pin rows: prior rows whose name has heap starts, LONGEST names first —
     // a long name pins the constant far more sharply (and short names are
@@ -422,6 +468,7 @@ pub fn solve_start_column(
         Fam::XorCXorMask,
         Fam::AddCXorMask,
         Fam::XorCSubMask,
+        Fam::AddMaskAddC,
     ];
     let mut out = Vec::new();
     for off in 0..stride.saturating_sub(3) {
@@ -584,6 +631,48 @@ pub fn load_chains(path: &str) -> Result<Vec<Expr>, String> {
         out.push(e);
     }
     Ok(out)
+}
+
+/// Algebraic variants of a solved chain: additive shifts E±k for a handful of
+/// constants observed as split addends in real accessors. When a game computes
+/// `(raw ^ X1) - mask(i) + X2`, the X2 can live on either side; generating
+/// E±k lets `solve_name_column`'s family inversion find the same column under
+/// the OTHER form without needing a wider family set.
+/// (Constants chosen from the 6.5 field accessor: its +0x847BFC89 sits outside
+/// the chain while the mask itself is `(A0 + i*K) ^ X`.)
+pub fn chain_variants(e: &Expr) -> Vec<Expr> {
+    const KS: [u64; 8] = [
+        0x847B_FC89,
+        0x6AD4_D25D,
+        0x81EC_E8F8,
+        0x20B9_E5BE,
+        0x2DD4_3D8D,
+        0x2DD4_3D8Du64.wrapping_neg(),
+        0x847B_FC89u64.wrapping_neg(),
+        0x6AD4_D25Du64.wrapping_neg(),
+    ];
+    let mut out = vec![e.clone()];
+    // negation: `raw + chain + C` is `raw - (-chain) + C` — the same
+    // SubMaskAddC family on the flipped chain, with inversion unchanged
+    // (6.5 param: `lea ecx,[rax+r14]; add ecx,0x92a9143c`)
+    out.push(fold(&Expr::Op2(
+        BinOp::Sub,
+        Box::new(Expr::Imm(0)),
+        Box::new(e.clone()),
+    )));
+    for k in KS {
+        out.push(fold(&Expr::Op2(
+            BinOp::Add,
+            Box::new(e.clone()),
+            Box::new(Expr::Imm(k)),
+        )));
+        out.push(fold(&Expr::Op2(
+            BinOp::Sub,
+            Box::new(e.clone()),
+            Box::new(Expr::Imm(k)),
+        )));
+    }
+    out
 }
 
 pub fn load_prior(path: Option<&str>) -> Result<Vec<String>, String> {

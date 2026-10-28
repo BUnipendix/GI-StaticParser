@@ -430,6 +430,10 @@ pub fn splice_profile(
                 if b0 > 0 {
                     bases.push(b0);
                 }
+                // in-function anchors first (the common case), then every
+                // derive anchor — a wrong transfer match (6.5 field scores
+                // 0.07) points at the wrong function, and the quick gate
+                // rejects a wrong base in ~10ms, so the full sweep is minutes
                 let mut anchored: Vec<usize> = dv
                     .anchors
                     .iter()
@@ -440,9 +444,23 @@ pub fn splice_profile(
                 anchored.sort_unstable();
                 anchored.dedup();
                 bases.extend(anchored);
+                let mut rest: Vec<usize> = dv
+                    .anchors
+                    .iter()
+                    .filter_map(|a| a.resolve(&dv.header).map(|r| r as usize))
+                    .filter(|&b| !bases.contains(&b) && body.len().saturating_sub(b) > 4096)
+                    .collect();
+                rest.sort_unstable();
+                rest.dedup();
+                bases.extend(rest);
                 let mut solved_field = false;
                 'base: for field_base in bases {
-                    for chain in &frec.chains {
+                    let variants: Vec<crate::expr::Expr> = frec
+                        .chains
+                        .iter()
+                        .flat_map(crate::rowtable::chain_variants)
+                        .collect();
+                    for chain in &variants {
                         let Ok(mask) = crate::rowtable::eval_rows(chain, sample) else {
                             continue;
                         };
@@ -522,52 +540,115 @@ pub fn splice_profile(
     // ---- parameter slice: rows come from the method solve (sum of
     // paramCount), the chain pool from the param transfer, the name column
     // from the heap + cross-version stable corelib parameter names ----
-    if let (Some(heap), Some(rep), Some(st)) = (
+    if let (Some(heap), Some(rep), Some(st), Some(dv)) = (
         heap,
         method,
         method.and_then(|r| r.starts.first()),
+        derived,
     ) {
         if st.sum_counts > 0 {
             if let Some(prec) = report.semantics.get("param_defs") {
-                if let Some(base) = prec.resolved.map(|r| (r & 0xFFFF_FFFF) as usize) {
-                    let prior: Vec<String> = serde_json::from_str(
-                        include_str!("../assets/prior_param_names.json"),
-                    )
-                    .unwrap_or_default();
-                    let sample = std::cmp::min(st.sum_counts as usize, 4000);
-                    let mut solved_param = false;
-                    for chain in &prec.chains {
+                // candidate bases: the transfer pick first, then in-function
+                // anchors, then every derive anchor (same sweep rationale as
+                // the field slice — a weak transfer match may pick a wrong
+                // function, the quick gate rejects wrong bases in ~10ms)
+                let mut bases: Vec<usize> = vec![];
+                if let Some(b) = prec.resolved.map(|r| (r & 0xFFFF_FFFF) as usize) {
+                    if body.len().saturating_sub(b) > 4096 {
+                        bases.push(b);
+                    }
+                }
+                let mut near: Vec<usize> = dv
+                    .anchors
+                    .iter()
+                    .filter(|a| a.site.abs_diff(prec.matched_fn) < 0x800)
+                    .filter_map(|a| a.resolve(&dv.header).map(|r| r as usize))
+                    .filter(|&b| !bases.contains(&b) && body.len().saturating_sub(b) > 4096)
+                    .collect();
+                near.sort_unstable();
+                near.dedup();
+                bases.extend(near);
+                let mut rest: Vec<usize> = dv
+                    .anchors
+                    .iter()
+                    .filter_map(|a| a.resolve(&dv.header).map(|r| r as usize))
+                    .filter(|&b| !bases.contains(&b) && body.len().saturating_sub(b) > 4096)
+                    .collect();
+                rest.sort_unstable();
+                rest.dedup();
+                bases.extend(rest);
+                let prior: Vec<String> = serde_json::from_str(
+                    include_str!("../assets/prior_param_names.json"),
+                )
+                .unwrap_or_default();
+                let sample = std::cmp::min(st.sum_counts as usize, 4000);
+                let mut solved_param = false;
+                'pbase: for base in bases {
+                    let variants: Vec<crate::expr::Expr> = prec
+                        .chains
+                        .iter()
+                        .flat_map(crate::rowtable::chain_variants)
+                        .collect();
+                    for chain in &variants {
                         let Ok(mask) = crate::rowtable::eval_rows(chain, sample) else {
                             continue;
                         };
                         if let Some(name) = crate::rowtable::solve_name_column(
                             body, base, 8, st.sum_counts as usize, &mask, heap, &prior, sample,
                         ) {
-                            if !crate::rowtable::name_column_ok(&name, sample) {
+                            // short names (msg/fmt/args) have sparse heap-run
+                            // coverage: exact-prior evidence replaces the
+                            // giant ok_rows floor
+                            let exact = crate::rowtable::count_exact_prior(
+                                body, base, 8, name.off, &mask, name.family, name.c, &prior, heap,
+                            );
+                            let accepted = crate::rowtable::name_column_ok(&name, sample)
+                                || crate::rowtable::short_name_column_ok(&name, &prior, exact);
+                            if !accepted {
                                 continue;
                             }
-                            // engine param_name form is exactly XorCSubMask:
-                            // idx = (raw ^ name_xor) - mask
-                            if name.family == crate::expr::Fam::XorCSubMask {
-                                p.param_defs = Some(table_base(prec));
+                            // engine param_name form is `idx = gen(kind, raw,
+                            // mask, name_xor)`; the 7.1 generation is
+                            // XorCSubMask, the 6.5 one AddMaskAddC (`raw +
+                            // mask + C`), both covered by the Gen* kinds
+                            if matches!(
+                                name.family,
+                                crate::expr::Fam::XorCSubMask
+                                    | crate::expr::Fam::SubMaskAddC
+                                    | crate::expr::Fam::AddMaskAddC
+                            ) {
+                                if let Some(a) = dv
+                                    .anchors
+                                    .iter()
+                                    .find(|a| a.resolve(&dv.header) == Some(base as u32))
+                                {
+                                    p.param_defs = Some(anchor_table_base(a));
+                                } else {
+                                    p.param_defs = Some(table_base(prec));
+                                }
                                 p.param_def_stride = 8;
                                 p.param_def_mask_expr = Some(chain.clone());
                                 p.param_def_name_xor = name.c as u32;
                                 p.param_def_name_off = name.off as u32;
+                                // carry the solved family: the legacy None
+                                // path is hardcoded XorCSubMask and would
+                                // render AddMaskAddC columns as heap noise
+                                p.param_def_name_kind =
+                                    Some(crate::derive::profile::ColKind::from_fam(name.family));
                                 // type column sits at the other u32 slot
                                 p.param_def_type_off = if name.off == 4 { 0 } else { 4 };
                                 m.solved.push(format!(
-                                    "param_defs.slice (name column +{:#x} c={:#X}, {} rows)",
-                                    name.off, name.c, st.sum_counts
+                                    "param_defs.slice (base {:#x}, name column +{:#x} {} c={:#X}, {} rows)",
+                                    base, name.off, format!("{:?}", name.family), name.c, st.sum_counts
                                 ));
                                 solved_param = true;
-                                break;
+                                break 'pbase;
                             }
                         }
                     }
-                    if !solved_param {
-                        m.notes.push("param table name column unsolved; params stay seed data".into());
-                    }
+                }
+                if !solved_param {
+                    m.notes.push("param table name column unsolved; params stay seed data".into());
                 }
             }
         }
