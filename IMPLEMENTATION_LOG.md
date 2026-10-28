@@ -6039,3 +6039,5 @@ param 差分零命中后对提取层做了系统排查，param 访问器仍未�
 - **堆验证仍未通过**：修正符号扩展+列交换后 6 行可解（含真实事件名 `RemoveDynami…` 截断 12 字符）但仅 6/3000——行号语义仍缺一环。已排除：行号偏移 k∈[0,32000)（esi=td klass 结构 u16@0x34+0x5260 的绝对行号假设）、C 低 24 位暴力交集（1178 候选×len 聚类失败）、len 聚类。链公式与机器码语义逐位一致——剩余未知=esi→链输入的某一环（可能 u16@0x34 解读或 0x5260 组合方式）。
 - **event 结构预接线（常数还原后的接入点）**：Profile 加 `event_mask_expr`（Gen 链优先于固定形式 EventMaskChain）+ `event_name_off`/`event_type_off`（数据化 6.2 布局互换）；engine.event_row 按此分派，accessor 列（+8..14）不随 name/type 换位移动。7.1 BYTE-IDENTICAL 保持；39 测试全绿。
 - 教训：**imul/xor 的 r64,imm32 形式一律符号扩展**——抄常数时必须核对操作数位宽；行内 mask-free 信号（共 mask 列的 xor）是表结构验证的通用工具，值得在 prop/event 接线时复用。
+
+- **dummy 路径回归补充**：event 结构改动后 7.1 dummy 导出（dummy_export.rs 是 event_row 的唯一消费者）与内置 oracle **224MB 逐字节一致**——event_mask_expr/offsets 数据化双路径验证完成（dump.cs BYTE-IDENTICAL + dummy.jsonl IDENTICAL）。
