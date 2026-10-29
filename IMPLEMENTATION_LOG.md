@@ -6049,3 +6049,5 @@ param 差分零命中后对提取层做了系统排查，param 访问器仍未�
 - **池内容（6.2）**：7240 链，field K1（2026086125534）×12、method count K ×4、**param 0xD45D ×3**（R89b 手工反汇编常数）都在；event K1/gp K1 不在（0x449f1b/0x44dc30 簇 walk 未出链，待查）。
 - **6.2 param/event 差分终局否定**：7180 链×6 族×全 body——param name（prior 名锚定）与 paramStart（count 桥接 prefix 和，纯数据驱动零 oracle）都零命中；行内 byte3 信号判别力不足（随机基线 4.3%）。**结论：6.2 的 param/event mask 不在任何可符号执行提取的产物中**——剩余路径=手工 RE param/event 访问器（0x452-0x453 区 7 个未细查的 decode_str 调用点）或 emu 定点（待 emu_chain 支持该函数形态）。
 - 回归：7.1 BYTE-IDENTICAL、39 测试全绿。
+
+- **decode_str 调用点普查终局（R90 补）**：0x452-0x453 区 7 个未细查点全部归因为 td/namespace 运行时消费（0x140453090 区实证：0x1F1AE728=td name 哨兵、0xAD869451=td_name C、0x7B7C9EC4^td@0x24=ns 列）。**27/27 调用点归因完毕，param/event 名不经过任何独立 decode_str 调用**——其访问器为内联或运行时组装形态。6.2 param/event 的 mask 语义到达本轮静态框架的推进边界；剩余路径=emu_chain 定点（需先定位访问器）或运行时调试。
