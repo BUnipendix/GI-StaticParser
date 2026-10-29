@@ -6051,3 +6051,19 @@ param 差分零命中后对提取层做了系统排查，param 访问器仍未�
 - 回归：7.1 BYTE-IDENTICAL、39 测试全绿。
 
 - **decode_str 调用点普查终局（R90 补）**：0x452-0x453 区 7 个未细查点全部归因为 td/namespace 运行时消费（0x140453090 区实证：0x1F1AE728=td name 哨兵、0xAD869451=td_name C、0x7B7C9EC4^td@0x24=ns 列）。**27/27 调用点归因完毕，param/event 名不经过任何独立 decode_str 调用**——其访问器为内联或运行时组装形态。6.2 param/event 的 mask 语义到达本轮静态框架的推进边界；剩余路径=emu_chain 定点（需先定位访问器）或运行时调试。
+
+## R91（2026-10-30）：6.2 event 行号语义破解——+8 平移/tag 列/tag-id 字符串路径三层真相（不是需求，方案记录）
+
+**突破链（全部逐位验证）**：
+
+1. **R89c 的「符号扩展修正」是错的**：0x3E56E4CD、0x500002EC 两常数的 bit31=0（0x3、0x5 < 0x8）→ 符号扩展=零扩展，原始 R89b 常数本就正确。unicorn 逐指令模拟实证（emu 与零扩展公式逐位同、与 R89c 符号扩展公式不同）。教训：**抄常数先看 bit31**；符号扩展只发生在 imm32≥0x80000000 时。
+2. **运行时 [klass+0x90] 结构 = 静态 td 行 + 8 字节平移**：field 访问器（0x140452459）读 `u32@0x14 ^ 0x48482004`，与已解静态列 `td_field_start = XorC 0x48482004 @12` 常数完全一致——0x14 = 0xC + 8。这是 runtime↔static 偏移映射的第一个实锚。
+3. **6.2 td 事件列 = start: movsx16(u16@0x2C + 0x5260)、count: (u8@0x3B + 0xa9)**（event 访问器自身代码 0x14044AABC/AAC5/A9E5；+8 平移后 0x34→0x2C、0x43→0x3B）。**完美铺瓦：195 类型、事件表 [0,565)、零缝隙零重叠**——event 访问器 0x14044A7A0 的两条分支：[klass+0x58]≠NULL 时递归取 owner 事件（复制数组），NULL 时读 metadata 行。
+4. **链 mask 正确**：去 mask 后 type 列 byte1 恒 0xB3、tag 列恒 0xCE7A——逐行变化的 mask 下出现常数只可能来自真实结构；哨兵差分扫描（raise=-1 行 u16@C 差=mask 差）全 body 唯一 64/64 命中 0x3489910（=访问器基座 0x3489918 − 8，即 u16@row+4 的 tag 列）。
+5. **行布局（14B）= type u32@0 + tag u16@4（全表常数 0xCE7A）+ name-id u16@6 + add@8/remove@A/raise@C**：name 字段只有高 16 位变化（564/565 不同 id）——**不是 packed 堆索引**（packed 格式要求低 24 位变化，任何 C 都无法使常数 lo16 变化）。
+6. **decode_str（0x140444D10）= 缓存+描述符解码器**：EnterCriticalSection → splitmix64(idx) 哈希 → 位图 cache 探测；miss 路径 `len = idx>>24`（packed 语义确认）；hit 路径 `char* = [全局] + cached32`。r9/r10/r8 三个表全局的文件态=混淆字节（0xB4E3D4E760B24 等），由 C# 静态构造器（0x1404874A0 区）写入静态 .data 地址（0x144C7BAE0/BB08 区）——**表内容仍需运行时材料化**。
+7. **事件名 idx = (id16<<16) | tag16**：tag 选择字符串子空间（startup-metadata.dat 3.4MB 存在、自有头 0x77、无明文事件名），id16 = 子空间内索引。这是 **6.4 第二解密器同族机制**（「密钥表加载期构建」）。
+
+**否定记录（防重查）**：0x140449F1B 簇=普通 thunk；patcher 引用搜索=0（访问器常数区无直接引用）；六族 C 交集在 type 列（rows[0,200)）全空→当时用的 mask 错（后证实是符号扩展）；先验名全 body 扫描（chain mask + 12 先验名）零命中→当时 mask 错；hdr+0x204 读取点全镜像仅访问器一处。
+
+**剩余墙（下一轮入口）**：startup-metadata.dat 头格式（magic 0x77 结构）与加载器对 0x144C7BAE0 区描述符表的构建代码——事件名=tag 选区→startup 区密钥/基座→id16 索引。引擎需新增：movsx16 eventStart 解码语义 + tag/name-id 行格式 + startup 字符串区分发。td/event 结构常数已全部就位（第 3 条），只差最后一段字符串映射。
