@@ -227,6 +227,16 @@ impl<'a> Walker<'a> {
     }
 
     fn set(&mut self, canon: &str, val: Val) {
+        // Runaway guard: symbolic propagation through long register lifetimes
+        // grows expression trees without bound (a chain-hunt walk allocated
+        // gigabytes before this cap). Past the cap the value becomes an
+        // opaque symbol — the register is untrackable, which is fine for the
+        // hunt (real mask chains never grow that large).
+        let val = if expr_size(&val.e) > 4096 {
+            Val { e: Expr::Sym(format!("RUNAWAY_{canon}")), row: val.row }
+        } else {
+            val
+        };
         let e = val.e.clone();
         let mut syms = BTreeSet::new();
         crate::expr::expr_syms(&e, &mut syms);
@@ -1288,4 +1298,175 @@ mod tests {
         }
         false
     }
+}
+
+// ---------------------------------------------------------------- chain hunt
+
+/// One chain found by the whole-image shape hunt.
+#[derive(Serialize, Debug, Clone)]
+pub struct HuntChain {
+    /// VA of the chain-defining instruction (provenance).
+    pub addr: u64,
+    /// VA of the cluster window the walk started at.
+    pub site: u64,
+    /// The anchor immediate that seeded the cluster.
+    pub imm: u64,
+    pub expr: Expr,
+}
+
+/// Random-looking immediate filter (the obfuscator's chain constants are
+/// never small, never powers of two, never the SWAR/divisor idioms).
+fn hunt_imm32_ok(imm: u32) -> bool {
+    imm > 0xFFFF && imm < 0xFE00_0000 && (imm & (imm - 1)) != 0
+}
+
+fn hunt_imm64_ok(imm: u64) -> bool {
+    let lo = (imm & 0xFFFF_FFFF) as u32;
+    imm > 0xFFFF_FFFF && lo != 0 && (imm & (imm - 1)) != 0
+}
+
+/// Whole-image shape-driven chain hunt (Rust port of
+/// tools/version-triage/chain_hunt.py, R89d) with one fix the python
+/// scanner lacked: the movabs-imul reg,reg form is scanned TOO — the
+/// 6.6/6.2 method chains compile to `movabs r,imm64; imul r,r` which the
+/// python `0x69` byte scan cannot see, which is why it never finished
+/// productively. Every executable section is scanned for cluster anchors
+/// (both forms), clusters are walked with a shared-image Walker, and every
+/// single-symbol chain carrying a big multiplier is emitted. Which chain
+/// belongs to which table is decided downstream by data validators (the
+/// differential locator + heap gates), never here.
+pub fn chain_hunt(
+    img: &Image,
+    d: &[u8],
+    blob_va: u64,
+    hdr_global: Option<u64>,
+    win: usize,
+    max_clusters: usize,
+) -> Vec<HuntChain> {
+    let ib = img.image_base();
+    // ---- 1. anchor scan over every executable section
+    let mut anchors: Vec<(usize, u64)> = Vec::new(); // (file off, imm)
+    for s in img.sections() {
+        if !s.is_executable() {
+            continue;
+        }
+        let start = s.raw_pointer as usize;
+        // The metadata accessors live in the first megabytes of .text (the
+        // whole-image scan the python tool attempted OOMed on the 250MB
+        // il2cpp section, whose movabs density is data-driven, not code
+        // structure). 32MB per exec section is a hard cap that covers every
+        // accessor found so far with a wide margin.
+        let end = (start + s.raw_size as usize).min(d.len()).min(start + 0x200_0000);
+        let base_va = ib + s.virtual_address as u64 - s.raw_pointer as u64;
+        let mut i = start;
+        while i + 12 <= end {
+            // direct form: [48] 69 /r with mod=11 and random imm32. The
+            // anchor ONLY counts when the 69 opcode is actually present —
+            // a stray-else variant of this block once treated every byte
+            // with mod=11 as an anchor (7.9M anchors vs the true ~12k).
+            let j69 = if d[i] == 0x48 && d.get(i + 1) == Some(&0x69) {
+                Some(i + 2)
+            } else if d[i] == 0x69 {
+                Some(i + 1)
+            } else {
+                None
+            };
+            if let Some(j) = j69 {
+                if j + 5 <= end && d[j] >> 6 == 3 {
+                    let imm = u32::from_le_bytes(d[j + 1..j + 5].try_into().unwrap());
+                    if hunt_imm32_ok(imm) {
+                        anchors.push((i, imm as u64));
+                        i = j + 5;
+                        continue;
+                    }
+                }
+            }
+            // movabs form: 48 B8+r imm64 (rarely with REX extensions — the
+            // B8 opcode byte's low 3 bits select the register, REX.B can't
+            // appear for B8-BF without a second REX, which the compiler
+            // never emits for movabs)
+            if d[i] == 0x48 && (0xB8..=0xBF).contains(&d[i + 1]) && i + 10 <= end {
+                let imm = u64::from_le_bytes(d[i + 2..i + 10].try_into().unwrap());
+                if hunt_imm64_ok(imm) {
+                    anchors.push((i, imm));
+                    i += 10;
+                    continue;
+                }
+            }
+            i += 1;
+        }
+    }
+    // ---- 2. cluster (96-byte gap, >= 2 anchors), file offsets are
+    // monotonically increasing across sections already
+    let mut clusters: Vec<(usize, usize, u64)> = Vec::new(); // (first, last, imm)
+    let mut cur: Vec<usize> = Vec::new();
+    for &(off, imm) in &anchors {
+        if let Some(&last) = cur.last() {
+            if off - last > 96 {
+                if cur.len() >= 2 {
+                    clusters.push((cur[0], *cur.last().unwrap(), imm));
+                }
+                cur.clear();
+            }
+        }
+        cur.push(off);
+    }
+    if cur.len() >= 2 {
+        clusters.push((cur[0], *cur.last().unwrap(), 0));
+    }
+    clusters.truncate(max_clusters);
+
+    // ---- 3. walk each cluster from its ANCHOR points — a movabs/imul
+    // anchor is an instruction boundary by construction, so the walk starts
+    // aligned (fixed back-offsets land mid-instruction and the decoder
+    // derails at the next int3, which is why the first cut collected only
+    // division-magic chains from unrelated code).
+    let mut pool: std::collections::HashMap<String, HuntChain> = Default::default();
+    for (first, last, _imm) in &clusters {
+        for anchor in [*first, *last] {
+            let start = base_va_of(img, anchor);
+            if start == 0 {
+                continue;
+            }
+            let mut w = Walker::new(img, d, blob_va, hdr_global);
+            let n = walk_window(&mut w, start, win, 20_000);
+            if n < 12 {
+                continue;
+            }
+            for rec in w.chains.values() {
+                let mut syms = std::collections::BTreeSet::new();
+                crate::expr::expr_syms(&rec.expr, &mut syms);
+                if syms.len() != 1 || crate::expr::expr_has(&rec.expr, false) {
+                    continue;
+                }
+                if syms.iter().any(|s| bad_sym(s)) {
+                    continue;
+                }
+                if !has_bigmul(&rec.expr) {
+                    continue;
+                }
+                let key = format!("{}", rec.expr);
+                pool.entry(key).or_insert_with(|| HuntChain {
+                    addr: rec.addr,
+                    site: start,
+                    imm: 0,
+                    expr: rec.expr.clone(),
+                });
+            }
+        }
+    }
+    let mut out: Vec<HuntChain> = pool.into_values().collect();
+    out.sort_by_key(|c| c.addr);
+    out
+}
+
+fn base_va_of(img: &Image, file_off: usize) -> u64 {
+    for s in img.sections() {
+        let start = s.raw_pointer as usize;
+        let end = start + s.raw_size as usize;
+        if file_off >= start && file_off < end {
+            return img.image_base() + s.virtual_address as u64 + (file_off - start) as u64;
+        }
+    }
+    0
 }

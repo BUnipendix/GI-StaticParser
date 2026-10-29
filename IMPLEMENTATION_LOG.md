@@ -6041,3 +6041,11 @@ param 差分零命中后对提取层做了系统排查，param 访问器仍未�
 - 教训：**imul/xor 的 r64,imm32 形式一律符号扩展**——抄常数时必须核对操作数位宽；行内 mask-free 信号（共 mask 列的 xor）是表结构验证的通用工具，值得在 prop/event 接线时复用。
 
 - **dummy 路径回归补充**：event 结构改动后 7.1 dummy 导出（dummy_export.rs 是 event_row 的唯一消费者）与内置 oracle **224MB 逐字节一致**——event_mask_expr/offsets 数据化双路径验证完成（dump.cs BYTE-IDENTICAL + dummy.jsonl IDENTICAL）。
+
+## R90（2026-10-29）：Rust 化 chain-hunt 落地——62 分钟超时→3 秒；6.2 param/event 差分终局否定（不是需求，方案记录）
+
+- **chain-hunt 子命令**（symwalk::chain_hunt）：全镜像形状驱动链提取。双通道锚（0x69 imm32 直接形式+movabs imm64 间接形式——python 版只扫 0x69，**漏掉 movabs-imul reg,reg 家族=6.6/6.2 method 链形态**）；从簇锚点起步 walk（锚=movabs/0x69 指令边界，固定 back 偏移会撞指令错位）；共享 Image。**性能：6.2 全镜像 3-6 秒**（python 62 分钟未完）。
+- **三个新 bug 的教训**：①base_va_of 公式错减 raw_pointer（差 0x400→全部访问器区 walk 打偏）；②锚扫描 else 分支把 d[i] 当 modrm 误判——**790 万假锚**（真 3 万）→ 簇结构全坏；③**符号表达式无界膨胀**是 chain_hunt python 版 62 分钟+8GB 的真根因——record_chain 加 512 节点上限、寄存器传播加 4096 上限（超限折为 RUNAWAY_sym 占位）。**json.dumps 里查十六进制 imm 串是无效的**（serde 输出十进制）——假阴性差点误判链池为空。
+- **池内容（6.2）**：7240 链，field K1（2026086125534）×12、method count K ×4、**param 0xD45D ×3**（R89b 手工反汇编常数）都在；event K1/gp K1 不在（0x449f1b/0x44dc30 簇 walk 未出链，待查）。
+- **6.2 param/event 差分终局否定**：7180 链×6 族×全 body——param name（prior 名锚定）与 paramStart（count 桥接 prefix 和，纯数据驱动零 oracle）都零命中；行内 byte3 信号判别力不足（随机基线 4.3%）。**结论：6.2 的 param/event mask 不在任何可符号执行提取的产物中**——剩余路径=手工 RE param/event 访问器（0x452-0x453 区 7 个未细查的 decode_str 调用点）或 emu 定点（待 emu_chain 支持该函数形态）。
+- 回归：7.1 BYTE-IDENTICAL、39 测试全绿。

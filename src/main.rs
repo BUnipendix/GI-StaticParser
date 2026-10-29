@@ -155,6 +155,29 @@ enum Cmd {
         #[arg(long)]
         out: Option<String>,
     },
+    /// Whole-image shape-driven chain hunt (Rust port of
+    /// tools/version-triage/chain_hunt.py, R89d): scans every executable
+    /// section for imul clusters — BOTH the direct `imul r,r,imm32` form and
+    /// the `movabs r,imm64` anchors the python scanner misses (6.6/6.2's
+    /// method chains are movabs-imul reg,reg) — and symwalks each cluster
+    /// window with a shared image, emitting every single-symbol chain with a
+    /// big multiplier. Downstream data validators (differential locator /
+    /// heap gates) decide which chain belongs to which table.
+    ChainHunt {
+        #[arg(short, long)]
+        exe: String,
+        #[arg(long, value_parser = parse_u64_hex)]
+        blob_va: u64,
+        #[arg(long, value_parser = parse_u64_hex)]
+        hdr_global: Option<u64>,
+        /// Window walked around each cluster center (bytes).
+        #[arg(long, value_parser = parse_u64_hex, default_value = "0x400")]
+        win: u64,
+        #[arg(long, default_value_t = 20_000)]
+        max_clusters: usize,
+        #[arg(long)]
+        out: Option<String>,
+    },
     /// Full zero-touch pipeline for one target version (Rust port of
     /// auto_tables.py, R39 final piece): shape-transfer semantic seeds from a
     /// solved version, then symwalk + emu-chain the matched functions, then
@@ -383,6 +406,28 @@ fn main() -> Result<()> {
                         println!("  chain {}", c.expr);
                     }
                 }
+            }
+            Ok(())
+        }
+        Cmd::ChainHunt { exe, blob_va, hdr_global, win, max_clusters, out } => {
+            let d = std::fs::read(&exe).unwrap_or_else(|e| {
+                eprintln!("read {exe}: {e}");
+                std::process::exit(1);
+            });
+            let img = static_mhy_dumper::pe::Image::parse(&d).expect("pe parse");
+            let pool = static_mhy_dumper::symwalk::chain_hunt(
+                &img,
+                &d,
+                blob_va,
+                hdr_global,
+                win as usize,
+                max_clusters,
+            );
+            println!("chain-hunt: {} distinct chains", pool.len());
+            if let Some(o) = out.as_deref() {
+                std::fs::write(o, serde_json::to_string_pretty(&pool).unwrap())
+                    .unwrap_or_else(|e| eprintln!("write {o}: {e}"));
+                println!("wrote chain pool");
             }
             Ok(())
         }
