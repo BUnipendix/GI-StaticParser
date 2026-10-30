@@ -826,7 +826,6 @@ impl<'a> Meta<'a> {
     /// method index)`. The accessor options are None for the 0xFFFF sentinel (no such accessor).
     /// Row format (10 bytes): `{u32 name, u16 getter, u16 attrs, u16 setter}`.
     pub fn property_row(&self, row: u32) -> Option<(u32, Option<u16>, Option<u16>)> {
-        let mask_chain = self.profile.property_mask.as_ref()?;
         let stride = self.profile.property_stride as usize;
         if stride < 10 {
             return None;
@@ -836,14 +835,24 @@ impl<'a> Meta<'a> {
         let raw_name = u32::from_le_bytes(b[0..4].try_into().ok()?);
         let raw_get = u16::from_le_bytes(b[4..6].try_into().ok()?);
         let raw_set = u16::from_le_bytes(b[8..10].try_into().ok()?);
-        let mask = mask_chain.eval(row);
-        let name = raw_name.wrapping_add(self.profile.property_name_add) ^ mask;
-        let get = (raw_get as u32)
-            .wrapping_sub(self.profile.property_get_sub as u32)
-            ^ mask;
-        let get = (get & 0xFFFF) as u16;
-        let set = ((raw_set ^ (mask as u16)) as u32) ^ self.profile.property_set_xor as u32;
-        let set = (set & 0xFFFF) as u16;
+        let mask = match &self.profile.property_mask_expr {
+            Some(e) => e.eval(row as u64, &self.header, &|_, _| 0).unwrap_or(0) as u32,
+            None => self.profile.property_mask.as_ref()?.eval(row),
+        };
+        let name = match self.profile.property_name_xor {
+            Some(x) => ((raw_name ^ x).wrapping_sub(mask)) & 0xFFFF_FFFF,
+            None => raw_name.wrapping_add(self.profile.property_name_add) ^ mask,
+        };
+        let get = match self.profile.property_get_xor {
+            Some(x) => ((raw_get as u32 ^ x as u32).wrapping_sub(mask)) & 0xFFFF,
+            None => (raw_get as u32)
+                .wrapping_sub(self.profile.property_get_sub as u32)
+                ^ mask,
+        } as u16;
+        let set = (match self.profile.property_set_xorsub {
+            Some(x) => ((raw_set as u32 ^ x as u32).wrapping_sub(mask)) & 0xFFFF,
+            None => ((raw_set ^ (mask as u16)) as u32) ^ self.profile.property_set_xor as u32,
+        } & 0xFFFF) as u16;
         Some((
             name,
             if get == 0xFFFF { None } else { Some(get) },

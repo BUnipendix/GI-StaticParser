@@ -502,12 +502,24 @@ pub struct Profile {
     pub td_property_count: Option<Column>,
     #[serde(default)]
     pub property_mask: Option<MaskChain>,
+    /// Generic chain for the property mask (6.2's is mul+add+xor+add — the
+    /// fixed `MaskChain` shape cannot express it). Takes precedence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub property_mask_expr: Option<crate::expr::Expr>,
     #[serde(default)]
     pub property_name_add: u32,
     #[serde(default)]
     pub property_get_sub: u16,
     #[serde(default)]
     pub property_set_xor: u16,
+    /// 6.2 accessor family (all XorCSubMask): name = (raw ^ C) − mask,
+    /// get/set = ((raw ^ C16) − mask) & 0xFFFF. None = the 7.1 forms.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub property_name_xor: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub property_get_xor: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub property_set_xorsub: Option<u16>,
 
     /// EVENT-definition table (7.1.0: body + (hdr[0x64] + 0xE6130C67), 14-byte rows).
     /// Located 2026-10-18 from the runtime EventInfo cache builder at 0x140515AE0 (the .text

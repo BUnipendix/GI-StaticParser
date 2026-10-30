@@ -6133,3 +6133,12 @@ param 差分零命中后对提取层做了系统排查，param 访问器仍未�
   - 待验假设：①matched_fn 窗口虽含真访问器代码，但 emu 链可能没走到 0x1404AD0C1 的 mask 路径（链里可能没有 0x3CD1 族）——下轮先查 78 条链是否含 0x3CD1/0x79AA5BF6；②decode_str 调用点普查（e8 callers of 6.6 decode_str 0x1404A6EC0）可机械化定位真访问器函数，替代形状迁移的 matched_fn（函数定位不可靠的已知硬缺口）。
 - **6.5 未细查**（matched_fn=0x140498902 同为运行时构造器；链 81 条含 0xA8/64 位链族）。
 - 教训：**判板唯一性要逐版本复核**（6.2 上唯一的板在 6.6 未必唯一）；反汇编读运行时结构体偏移前先确认该版本副本布局模型。
+
+## R95c（2026-10-31 深夜）：prop 求解器落地 + 6.2 全自动事件/属性（不是需求，方案记录）
+
+- **6.2 property 访问器全解**（0x14044AF56 反汇编）：基座=body+(hdr[0x34]+0xF15B2525)−8、行 10B={name u32@0:(raw^0x1844A562)−mask→decode_str、get u16@4:(raw^0xDA0F)−mask16、type u16@6（引擎不消费）、set u16@8:(raw^0x9367)−mask16}、mask=(((i×0x2FDCA522C0A8+0x10936C24EB60B5FC)^0x23EF0F24)+0x7B07C853)（mul+add+xor+add，MaskChain 表达不了→新 property_mask_expr）、td prop start=u32@0x10+0xF4E66590、count=u8@58+16（93543 行/24958 类型）。
+- **求解器**（solve_props，events 镜像）：同一 td 铺瓦函数（参数化 max_total/max_count：事件 8192/128、属性 250000/512——**93K 的属性表曾被事件调优的界拒杀**）；name 板 XorCSubMask 形态；get/set 板=imm16×相邻性（**阈值关键坑：setter 85% 是哨兵，双非哨兵对子只有 ~15%——diffs 门槛从 n/2 降到 n/8 且 ≥12**）；type 列用排除法（引擎不消费）。
+- **性能两坑（修复）**：①松界铺瓦搜索爆炸（10K 候选×每 soff 数百 sc×7 万行=挂死）——**填充众数→c 唯一化**（每 (off,form) 只 1-2 个 c）+ **start 列单调性预滤**（解码值随行号递增至多一次回绕；sc 由最小 raw 唯一确定）→ 587ms 出全部候选；②**采样偏置**（前 240 行属性名解码率 73% vs 全表 100%）——样本改全表均匀分布（events/props 同修）。
+- **引擎/管线**：property_mask_expr + property_name_xor/get_xor/set_xorsub（XorCSubMask 家族）；splice_props；auto_tables_cmd 接线。
+- **端到端**：6.2 全自动 profile→dumpgen：93543 属性解出（rate 1.00，名字全真 .NET 属性名，oracle get_/set_ 抽查 19% 命中=混淆名+oracle 渲染限制）。44 测试全绿。
+- **重要修正（诚实记账）**：此前「E 记录 add/remove 零失配」实为 **-1 对 -1**——6.2 的 md_decl 列仍是种子数据（未解）→ per_type（方法→声明类型映射）全坏 → 事件 add/remove 与属性 get/set 的**访问器→方法索引映射全部失效**（dump 里全 -1，P 记录被 get<0&&set<0 过滤到 1 条）。事件/属性表的**名字与行区间**已全自动；**md_decl 求解 = 下一轮最高优先级**（它是事件访问器映射+属性访问器映射+方法归属的共同前置）。

@@ -119,7 +119,9 @@ fn scan_immediates(img: &Image, exe: &[u8], va: u64, len: u64) -> (Vec<u32>, Vec
 /// (u16/u32 × add/xor — 6.2 packs a u16 add, 6.6 a u32 add); count is u8
 /// add/xor.
 type Tiling = (Column, Column, u32, Vec<(usize, u32, u32)>);
-fn solve_td_tiling(body: &[u8], td: &TdSolve) -> Vec<Tiling> {
+/// `max_total`/`max_count` bound the tiling search: events are hundreds of
+/// rows (6.2: 565), property tables tens of thousands (6.2: 93,543).
+fn solve_td_tiling(body: &[u8], td: &TdSolve, max_total: u32, max_count: u32) -> Vec<Tiling> {
     let mut tilings: Vec<Tiling> = Vec::new();
     let stride = td.stride as usize;
     let rows = td.rows;
@@ -140,8 +142,20 @@ fn solve_td_tiling(body: &[u8], td: &TdSolve) -> Vec<Tiling> {
             hist[v as usize] += 1;
             raws.push(v);
         }
+        // The padding rows dominate every td column (types without events/
+        // properties have count 0), so the constant must map the histogram
+        // MODE to 0 — one or two candidates per (offset, form) instead of 256.
+        let (mode, _mode_n) = (0..256u32)
+            .max_by_key(|&v| hist[v as usize])
+            .map(|v| (v, hist[v as usize]))
+            .unwrap_or((0, 0));
         for &xor in &[false, true] {
-            for c in 0..=255u32 {
+            let cs: Vec<u32> = if xor {
+                vec![mode]
+            } else {
+                vec![mode.wrapping_neg() & 0xFF, (mode.wrapping_neg() & 0xFF).wrapping_add(0x100 & 0xFF)]
+            };
+            for c in cs {
                 let (mut total, mut max) = (0u32, 0u32);
                 for v in 0..256u32 {
                     let n = hist[v as usize];
@@ -152,7 +166,7 @@ fn solve_td_tiling(body: &[u8], td: &TdSolve) -> Vec<Tiling> {
                     total = total.wrapping_add(n.wrapping_mul(cnt));
                     max = max.max(cnt);
                 }
-                if total == 0 || total > 8192 || max > 128 {
+                if total == 0 || total > max_total || max > max_count {
                     continue;
                 }
                 let counts: Vec<u32> = raws
@@ -174,25 +188,88 @@ fn solve_td_tiling(body: &[u8], td: &TdSolve) -> Vec<Tiling> {
         start_reads.push((off, 4, false));
         start_reads.push((off, 4, true));
     }
+    // start-column raw values, hoisted: each (offset, width) is read once for
+    // all rows instead of once per count candidate
+    let mut start_raws: Vec<Vec<u32>> = Vec::with_capacity(start_reads.len());
+    for &(soff, swidth, _) in &start_reads {
+        let mut v = Vec::with_capacity(rows);
+        for r in 0..rows {
+            v.push(if swidth == 2 {
+                rd16(td.base + r * stride + soff)
+            } else {
+                match body.get(td.base + r * stride + soff..td.base + r * stride + soff + 4) {
+                    Some(b) => u32::from_le_bytes(b.try_into().unwrap()),
+                    None => 0,
+                }
+            });
+        }
+        start_raws.push(v);
+    }
     for (coff, cxor, cc, total, counts) in &count_cands {
-        for &(soff, swidth, sxor) in &start_reads {
-            // start-column candidates: force the first event to 0 (the constant
-            // depends on the raw column being forced)
-            let mut cs: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
-            for r in 0..rows {
-                if counts[r] == 0 {
+        // first 8 count>0 rows for the cheap prefilter
+        let mut first8: Vec<usize> = Vec::with_capacity(8);
+        for r in 0..rows {
+            if counts[r] > 0 {
+                first8.push(r);
+                if first8.len() == 8 {
+                    break;
+                }
+            }
+        }
+        if first8.len() < 2 {
+            continue;
+        }
+        for (sidx, &(soff, swidth, sxor)) in start_reads.iter().enumerate() {
+            let sraw = &start_raws[sidx];
+            // Monotonicity prefilter: the decoded starts of count>0 rows are
+            // row-ordered (the table is written in index order), so the RAW
+            // column is non-decreasing over count>0 rows with at most one
+            // 2^w wrap. Sample 24 rows; >1 descent kills the column.
+            {
+                let mut sampled = 0usize;
+                let mut descents = 0usize;
+                let mut prev: u32 = 0;
+                for r in (0..rows).step_by(7) {
+                    if counts[r] == 0 {
+                        continue;
+                    }
+                    let raw = sraw[r];
+                    if sampled > 0 && raw < prev {
+                        descents += 1;
+                        if descents > 1 {
+                            break;
+                        }
+                    }
+                    prev = raw;
+                    sampled += 1;
+                    if sampled >= 24 {
+                        break;
+                    }
+                }
+                if sampled < 8 || descents > 1 {
                     continue;
                 }
-                let raw = if swidth == 2 {
-                    rd16(td.base + r * stride + soff)
-                } else {
-                    match body.get(td.base + r * stride + soff..td.base + r * stride + soff + 4) {
-                        Some(b) => u32::from_le_bytes(b.try_into().unwrap()),
-                        None => 0,
-                    }
-                };
-                cs.insert(if sxor { raw } else { raw.wrapping_neg() });
             }
+            // the zero-start row is the one with the MINIMUM raw (add form);
+            // for xor form try the mode raw too — at most 2 candidates
+            let nz_min = (0..rows)
+                .filter(|&r| counts[r] > 0)
+                .map(|r| sraw[r])
+                .min()
+                .unwrap_or(0);
+            let cs: Vec<u32> = if sxor {
+                // min start = 0 → sc = the raw AT that row; find it
+                let mut sc0 = 0u32;
+                for r in 0..rows {
+                    if counts[r] > 0 && sraw[r] == nz_min {
+                        sc0 = sraw[r];
+                        break;
+                    }
+                }
+                vec![sc0]
+            } else {
+                vec![nz_min.wrapping_neg()]
+            };
             for sc in &cs {
                 let mut spans: Vec<(u32, u32)> = Vec::new();
                 let mut ok = true;
@@ -200,14 +277,7 @@ fn solve_td_tiling(body: &[u8], td: &TdSolve) -> Vec<Tiling> {
                     if counts[r] == 0 {
                         continue;
                     }
-                    let raw = if swidth == 2 {
-                        rd16(td.base + r * stride + soff)
-                    } else {
-                        match body.get(td.base + r * stride + soff..td.base + r * stride + soff + 4) {
-                            Some(b) => u32::from_le_bytes(b.try_into().unwrap()),
-                            None => 0,
-                        }
-                    };
+                    let raw = sraw[r];
                     let st = if sxor { raw ^ sc } else { raw.wrapping_add(*sc) };
                     // u16 starts wrap at 16 bits (no negative starts measured
                     // on any build — movsx semantics coincide with u16 there)
@@ -234,14 +304,7 @@ fn solve_td_tiling(body: &[u8], td: &TdSolve) -> Vec<Tiling> {
                     let groups: Vec<(usize, u32, u32)> = (0..rows)
                         .filter(|&r| counts[r] > 0)
                         .map(|r| {
-                            let raw = if swidth == 2 {
-                                rd16(td.base + r * stride + soff)
-                            } else {
-                                match body.get(td.base + r * stride + soff..td.base + r * stride + soff + 4) {
-                                    Some(b) => u32::from_le_bytes(b.try_into().unwrap()),
-                                    None => 0,
-                                }
-                            };
+                            let raw = sraw[r];
                             let st = if sxor { raw ^ sc } else { raw.wrapping_add(*sc) };
                             let st = if swidth == 2 { st & 0xFFFF } else { st };
                             (r, st, counts[r])
@@ -261,7 +324,7 @@ fn solve_td_tiling(body: &[u8], td: &TdSolve) -> Vec<Tiling> {
                         *total,
                         groups,
                     ));
-                    if tilings.len() >= 8 {
+                    if tilings.len() >= 16 {
                         return tilings;
                     }
                 }
@@ -308,14 +371,18 @@ pub fn solve_events(
         Some(t) => t,
         None => return Ok(None),
     };
-    let tilings = solve_td_tiling(body, td);
+    let tilings = solve_td_tiling(body, td, 8192, 128);
     if tilings.is_empty() {
         #[cfg(feature = "ev_debug")]
         eprintln!("[ev] td tiling failed");
         return Ok(None);
     }
-    // sample every 3rd event, capped — enough for the boards, cheap to score
-    let sample_of = |total: u32| -> Vec<u32> { (0..total).step_by(3).take(240).collect() };
+    // sample EVENLY across the table — the first rows decode systematically
+    // worse on some builds (6.2 props: 73% head vs 100% spread)
+    let sample_of = |total: u32| -> Vec<u32> {
+        let st = (total / 240).max(1) as usize;
+        (0..total as usize).step_by(st).take(240).map(|i| i as u32).collect()
+    };
 
     // base candidates: confirmed anchors inside the accessor, ± the runtime-copy shift
     let mut base_cands: Vec<usize> = Vec::new();
@@ -655,8 +722,8 @@ mod tests {
         // td solve first
         let td = crate::profile_splice::solve_typedef(&exe, &gm, dv).expect("td solve").expect("td");
         let body = &gm[0x210..];
-        let r = solve_td_tiling(body, &td);
-        let tl = solve_td_tiling(body, &td);
+        let r = solve_td_tiling(body, &td, 250_000, 512);
+        let tl = solve_td_tiling(body, &td, 8192, 128);
         let Some((s, c, total, groups)) = tl.iter().find(|(_, _, t, g)| *t == 565 && g.len() == 195) else {
             panic!("td tiling failed: td base {:#x} stride {} rows {} candidates {}", td.base, td.stride, td.rows, tl.len());
         };
@@ -716,8 +783,8 @@ mod tests3 {
         let dv = derived.as_ref().expect("dv");
         let td = crate::profile_splice::solve_typedef(&exe, &gm, dv).expect("td").expect("td");
         let body = &gm[0x210..];
-        let tl = solve_td_tiling(body, &td);
-        println!("td tilings: {}", tl.len());
+        let tl = solve_td_tiling(body, &td, 8192, 128);
+println!("td tilings: {}", tl.len());
         for (s_, c_, t_, g_) in tl.iter().take(4) {
             println!("  start@{} count@{} total {} types {}", s_.offset, c_.offset, t_, g_.len());
         }
@@ -731,5 +798,327 @@ mod tests3 {
         let (i32s, i16s) = scan_immediates(&img, &exe, 0x1404ACC4F, 0x600);
         println!("imm32 has 0xae502577: {}  imm16 has 0xc5ab/0x32dd/0x71: {}/{}/{}",
             i32s.contains(&0xae502577), i16s.contains(&0xc5ab), i16s.contains(&0x32dd), i16s.contains(&0x71));
+    }
+}
+
+/// One solved property section (mirror of [`EventSolve`]; see the module docs
+/// for the boards — props use the same five, with get/set adjacency replacing
+/// the raise sentinel and the typearr column excluded by the adjacency pick).
+pub struct PropSolve {
+    pub defs: crate::derive::profile::TableBase,
+    pub stride: u32,
+    pub td_start: Column,
+    pub td_count: Column,
+    pub mask_expr: Expr,
+    pub name_xor: u32,
+    pub get_xor: u16,
+    pub set_xorsub: u16,
+    pub total_props: u32,
+    pub name_rate: f64,
+    pub base_shift: i64,
+}
+
+/// Solve the property-definition table (6.2 family: rows of
+/// {name u32 -> (raw ^ C) − mask -> decode_str, get u16, type u16, set u16},
+/// all XorCSubMask). `prop_fn` is the matched accessor VA; `chains` its
+/// symwalk+emu chains.
+pub fn solve_props(
+    img: &Image,
+    exe: &[u8],
+    dat: &[u8],
+    derived: &BuildDerivation,
+    prop_fn: u64,
+    chains: &[Expr],
+    td: Option<&TdSolve>,
+) -> Result<Option<PropSolve>, String> {
+    let body = match dat.get(0x210..) {
+        Some(b) if !b.is_empty() => b,
+        _ => return Err("metadata body missing".into()),
+    };
+    let cipher = match &derived.cipher {
+        Some(c) => c,
+        None => return Err("no derived string cipher; prop solve impossible".into()),
+    };
+    let hdr = &derived.header;
+    let strsec = cipher.strsec as usize;
+    let sched = &cipher.schedule;
+    let td = match td {
+        Some(t) => t,
+        None => return Ok(None),
+    };
+    let t0 = std::time::Instant::now();
+    let tilings = solve_td_tiling(body, td, 250_000, 512);
+    #[cfg(feature = "ev_debug")]
+    for (i, t) in tilings.iter().enumerate() {
+        eprintln!(
+            "[prop] tiling {i}: start@{} {:?} {:#x} count@{} {:?} {:#x} total {} types {}",
+            t.0.offset, t.0.kind, t.0.c, t.1.offset, t.1.kind, t.1.c, t.2, t.3.len()
+        );
+    }
+    #[cfg(feature = "ev_debug")]
+    eprintln!("[prop] tilings {} in {:?}", tilings.len(), t0.elapsed());
+    if tilings.is_empty() {
+        return Ok(None);
+    }
+    // base candidates: confirmed anchors inside the accessor window, ±8
+    let mut base_cands: Vec<usize> = Vec::new();
+    for a in &derived.anchors {
+        if a.confirmed && a.site >= prop_fn && a.site < prop_fn + 0x700 {
+            if let Some(v) = a.resolve(hdr) {
+                for sh in [0i64, -8] {
+                    let b = (v as i64 + sh) as usize;
+                    if !base_cands.contains(&b) {
+                        base_cands.push(b);
+                    }
+                }
+            }
+        }
+    }
+    if base_cands.is_empty() {
+        return Ok(None);
+    }
+    let (imm32s, imm16s) = scan_immediates(img, exe, prop_fn, 0x700);
+    if imm32s.is_empty() || imm16s.is_empty() {
+        return Ok(None);
+    }
+    let rd32 = |off: usize| -> Option<u32> {
+        let b = body.get(off..off + 4)?;
+        Some(u32::from_le_bytes(b.try_into().ok()?))
+    };
+    let rd16 = |off: usize| -> Option<u32> {
+        let b = body.get(off..off + 2)?;
+        Some(u16::from_le_bytes(b.try_into().ok()?) as u32)
+    };
+    let mut dedupe: Vec<&Expr> = Vec::new();
+    for ch in chains {
+        if !dedupe.iter().any(|e| format!("{e:?}") == format!("{ch:?}")) {
+            dedupe.push(ch);
+        }
+    }
+    let mut best: Option<(f64, usize, PropSolve)> = None;
+    for (til_i, til) in tilings.iter().enumerate() {
+        let (td_start, td_count, total, groups) = (&til.0, &til.1, til.2, &til.3);
+        let mut owner = vec![0usize; total as usize];
+        for (r, st, cnt) in groups {
+            for j in 0..*cnt {
+                let i = st + j;
+                if (i as usize) < owner.len() {
+                    owner[i as usize] = *r;
+                }
+            }
+        }
+        // even spread — the head rows decode systematically worse (6.2 props)
+        let stp = (total / 240).max(1) as usize;
+        let sample: Vec<u32> = (0..total as usize).step_by(stp).take(240).map(|i| i as u32).collect();
+        for &base in &base_cands {
+            for (ch_i, chain) in dedupe.iter().enumerate() {
+                let t1 = std::time::Instant::now();
+                let mask = |i: u32| -> u32 { chain.eval(i as u64, hdr, &|_, _| 0).unwrap_or(0) as u32 };
+                // name board: (raw ^ C) − mask decodes (the 6.2 shape; the
+                // xor/add mask shapes are kept for other generations)
+                let mut name: Option<(u32, f64)> = None;
+                for &c in &imm32s {
+                    let tested = sample.len();
+                    let mut good = 0usize;
+                    for &i in &sample {
+                        let Some(raw) = rd32(base + i as usize * 10) else { continue };
+                        let idx = ((raw ^ c).wrapping_sub(mask(i))) & 0xFFFF_FFFF;
+                        if dec_ident(body, strsec, sched, idx) {
+                            good += 1;
+                        }
+                    }
+                    let rate = good as f64 / tested.max(1) as f64;
+                    if rate >= 0.9 && name.map(|(_, r)| rate > r).unwrap_or(true) {
+                        name = Some((c, rate));
+                    }
+                }
+                let Some((nxor, nrate)) = name else {
+                    #[cfg(feature = "ev_debug")]
+                    eprintln!("[prop] t{} base {base:#x} chain#{}: no name col", til_i, ch_i);
+                    continue;
+                };
+                // get/set board: the two u16 columns whose XorCSubMask decodes
+                // are adjacency-adjacent accessor indices; the third is the
+                // typearr column.
+                let mut ar: Option<(usize, u16, usize, u16, u32)> = None;
+                for &acol in &[4usize, 6, 8] {
+                    for &ca in &imm16s {
+                        let mut av = Vec::with_capacity(sample.len());
+                        let mut a_ok = true;
+                        for &i in &sample {
+                            let Some(raw) = rd16(base + i as usize * 10 + acol) else { continue };
+                            let v = ((raw ^ ca as u32).wrapping_sub(mask(i))) & 0xFFFF;
+                            if v != 0xFFFF && v >= 16384 {
+                                a_ok = false;
+                            }
+                            av.push(v);
+                        }
+                        if !a_ok {
+                            continue;
+                        }
+                        for &bcol in &[4usize, 6, 8] {
+                            if bcol == acol {
+                                continue;
+                            }
+                            for &cb in &imm16s {
+                                let mut bv = Vec::with_capacity(sample.len());
+                                let mut b_ok = true;
+                                for &i in &sample {
+                                    let Some(raw) = rd16(base + i as usize * 10 + bcol) else { continue };
+                                    let v = ((raw ^ cb as u32).wrapping_sub(mask(i))) & 0xFFFF;
+                                    if v != 0xFFFF && v >= 16384 {
+                                        b_ok = false;
+                                    }
+                                    bv.push(v);
+                                }
+                                if !b_ok {
+                                    continue;
+                                }
+                                let mut diffs: Vec<u32> = av
+                                    .iter()
+                                    .zip(&bv)
+                                    .filter(|(a, b)| **a != 0xFFFF && **b != 0xFFFF)
+                                    .map(|(a, b)| a.abs_diff(*b))
+                                    .collect();
+                                // setters are often absent (6.2: ~85%
+                                // sentinel) — the pair only needs a handful
+                                // of co-non-sentinel rows
+                                if diffs.len() < sample.len() / 8 || diffs.len() < 12 {
+                                    continue;
+                                }
+                                diffs.sort_unstable();
+                                let med = diffs[diffs.len() / 2];
+                                if ar.map(|(_, _, _, _, m)| med < m).unwrap_or(true) {
+                                    ar = Some((acol, ca, bcol, cb, med));
+                                }
+                            }
+                        }
+                    }
+                }
+                let Some((acol, ca, bcol, cb, med)) = ar else {
+                    #[cfg(feature = "ev_debug")]
+                    eprintln!("[prop] t{} base {base:#x} chain#{}: name ok rate {:.2} but no accessor pair ({:?})", til_i, ch_i, nrate, t1.elapsed());
+                    continue;
+                };
+                if med > 32 {
+                    #[cfg(feature = "ev_debug")]
+                    eprintln!("[prop] t{} base {base:#x} chain#{}: pair med {} too big", til_i, ch_i, med);
+                    continue;
+                }
+                let sol = PropSolve {
+                    defs: crate::derive::profile::TableBase { hdr_off: 0, sub: None, xor: None, add: None, direct: None },
+                    stride: 10,
+                    td_start: td_start.clone(),
+                    td_count: td_count.clone(),
+                    mask_expr: (*chain).clone(),
+                    name_xor: nxor,
+                    get_xor: ca,
+                    set_xorsub: cb,
+                    total_props: total,
+                    name_rate: nrate,
+                    base_shift: 0,
+                };
+                let _ = owner.len();
+                if best.as_ref().map(|(r, _, _)| nrate > *r).unwrap_or(true) {
+                    best = Some((nrate, base, sol));
+                }
+            }
+        }
+    }
+    let Some((_, win_base, mut sol)) = best else { return Ok(None) };
+    let mut anchor = None;
+    for a in &derived.anchors {
+        if a.confirmed && a.site >= prop_fn && a.site < prop_fn + 0x700 {
+            if let Some(v) = a.resolve(hdr) {
+                let shift = win_base as i64 - v as i64;
+                if shift.abs() <= 8 {
+                    anchor = Some((a, shift, v as usize));
+                    break;
+                }
+            }
+        }
+    }
+    if let Some((a, shift, v)) = anchor {
+        sol.base_shift = shift;
+        sol.defs = match a.op {
+            crate::derive::anchor::AnchorOp::Add => crate::derive::profile::TableBase {
+                hdr_off: a.hdr_off,
+                sub: None,
+                xor: None,
+                add: Some(a.imm.wrapping_add(shift as u32)),
+                direct: None,
+            },
+            _ => crate::derive::profile::TableBase {
+                hdr_off: a.hdr_off,
+                sub: None,
+                xor: None,
+                add: None,
+                direct: Some((v as i64 + shift) as u32),
+            },
+        };
+    } else {
+        return Ok(None);
+    }
+    Ok(Some(sol))
+}
+
+#[cfg(test)]
+mod tests4 {
+    use super::*;
+    #[test]
+    fn diagnoses_62_props() {
+        let Ok(gm) = std::fs::read("/home/yangsanyi/gire/sample/gi/6.2.0/YuanShen_Data/Managed/Metadata/global-metadata.dat") else { eprintln!("[skip] dat"); return; };
+        let Ok(exe) = std::fs::read("/home/yangsanyi/gire/sample/gi/6.2.0/YuanShen.exe") else { eprintln!("[skip] exe"); return; };
+        let derived = crate::derive::cipher::derive_build(&exe, &gm).expect("derive");
+        let dv = derived.as_ref().expect("dv");
+        let td = crate::profile_splice::solve_typedef(&exe, &gm, dv).expect("td").expect("td");
+        let img = crate::pe::Image::parse(&exe).expect("pe");
+        let chains: Vec<crate::expr::Expr> = serde_json::from_str(&std::fs::read_to_string("/tmp/62.auto3.json").expect("auto")) // dummy to fail gracefully
+            .unwrap_or_else(|_| {
+                let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string("/tmp/62.auto3.json").unwrap()).unwrap();
+                v["semantics"]["prop"]["chains"].as_array().map(|a| a.iter().filter_map(|c| serde_json::from_value(c.clone()).ok()).collect()).unwrap_or_default()
+            });
+        println!("prop chains: {}", chains.len());
+        let r = std::panic::catch_unwind(|| solve_props(&img, &exe, &gm, dv, 0x14044AF56, &chains, Some(&td)));
+        match r {
+            Ok(Ok(Some(s))) => println!("PROPS: name ^{:#x} rate {:.2} get@{} ^{:#x} set@{} ^{:#x} total {} shift {:+} defs hdr_off {} add {:?}",
+                s.name_xor, s.name_rate, 4, s.get_xor, 8, s.set_xorsub, s.total_props, s.base_shift, s.defs.hdr_off, s.defs.add),
+            Ok(Ok(None)) => println!("PROPS: none"),
+            Ok(Err(e)) => println!("PROPS: err {e}"),
+            Err(_) => println!("PROPS: PANICKED"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests5 {
+    use super::*;
+    #[test]
+    fn probes_62_prop_chains() {
+        let Ok(gm) = std::fs::read("/home/yangsanyi/gire/sample/gi/6.2.0/YuanShen_Data/Managed/Metadata/global-metadata.dat") else { eprintln!("[skip] dat"); return; };
+        let Ok(exe) = std::fs::read("/home/yangsanyi/gire/sample/gi/6.2.0/YuanShen.exe") else { eprintln!("[skip] exe"); return; };
+        let derived = crate::derive::cipher::derive_build(&exe, &gm).expect("derive");
+        let dv = derived.as_ref().expect("dv");
+        let img = crate::pe::Image::parse(&exe).expect("pe");
+        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string("/tmp/62.auto3.json").unwrap()).unwrap();
+        let chains: Vec<crate::expr::Expr> = v["semantics"]["prop"]["chains"].as_array().map(|a| a.iter().filter_map(|c| serde_json::from_value(c.clone()).ok()).collect()).unwrap_or_default();
+        let cipher = dv.cipher.as_ref().unwrap();
+        let body = &gm[0x210..];
+        let strsec = cipher.strsec as usize;
+        let base = 0x18012E4usize;
+        let rd32 = |off: usize| u32::from_le_bytes(body[off..off+4].try_into().unwrap());
+        for (ci, chain) in chains.iter().enumerate() {
+            let mask = |i: u32| -> u32 { chain.eval(i as u64, &dv.header, &|_, _| 0).unwrap_or(0) as u32 };
+            let mut good = 0usize; let n = 61usize;
+            for i in (0..60000u32).step_by(997) {
+                let raw = rd32(base + i as usize * 10);
+                let idx = ((raw ^ 0x1844A562).wrapping_sub(mask(i))) & 0xFFFF_FFFF;
+                if dec_ident(body, strsec, &cipher.schedule, idx) { good += 1; }
+            }
+            if good > n / 4 {
+                println!("chain {ci}: name rate {good}/{n}");
+            }
+        }
+        println!("probe done");
     }
 }

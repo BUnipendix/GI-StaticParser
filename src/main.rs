@@ -1477,12 +1477,51 @@ fn auto_tables_cmd(
                 None
             }
         };
+        // structural property solve (R95c)
+        let pr = match (
+            report.semantics.get("prop"),
+            derived.as_ref(),
+            td.as_ref(),
+        ) {
+            (Some(prec), Some(dv), tds) if prec.matched_fn != 0 => {
+                match static_mhy_dumper::events_solve::solve_props(
+                    &img,
+                    &d,
+                    &md,
+                    dv,
+                    prec.matched_fn,
+                    &prec.chains,
+                    tds,
+                ) {
+                    Ok(Some(s)) => {
+                        println!(
+                            "prop solve: {} rows, name rate {:.2}, base shift {:+}",
+                            s.total_props, s.name_rate, s.base_shift
+                        );
+                        Some(s)
+                    }
+                    Ok(None) => {
+                        println!("prop solve: no candidate survived the boards");
+                        None
+                    }
+                    Err(e) => {
+                        println!("prop solve failed: {e}");
+                        None
+                    }
+                }
+            }
+            _ => {
+                println!("prop solve skipped");
+                None
+            }
+        };
         let (spliced, manifest) = static_mhy_dumper::profile_splice::splice_profile(
             seedp,
             &report,
             solved_rep.as_ref(),
             td.as_ref(),
             ev.as_ref(),
+            pr.as_ref(),
             derived.as_ref(),
             body,
             heap_holder.as_ref(),
