@@ -1437,11 +1437,52 @@ fn auto_tables_cmd(
         } else {
             None
         };
+        // structural event solve (R95): tiling + accessor anchors + boards
+        let ev = match (
+            report.semantics.get("event"),
+            derived.as_ref(),
+            td.as_ref(),
+            heap_holder.as_ref(),
+        ) {
+            (Some(erec), Some(dv), tds, Some(_heap)) if erec.matched_fn != 0 => {
+                match static_mhy_dumper::events_solve::solve_events(
+                    &img,
+                    &d,
+                    &md,
+                    dv,
+                    erec.matched_fn,
+                    &erec.chains,
+                    tds,
+                ) {
+                    Ok(Some(s)) => {
+                        println!(
+                            "event solve: {} rows, name rate {:.2}, name_off {} type_off {} add@{} rem@{} raise@{}, base shift {:+}",
+                            s.total_events, s.name_rate, s.name_off, s.type_off,
+                            s.add_off, s.remove_off, s.raise_off, s.base_shift
+                        );
+                        Some(s)
+                    }
+                    Ok(None) => {
+                        println!("event solve: no candidate survived the boards");
+                        None
+                    }
+                    Err(e) => {
+                        println!("event solve failed: {e}");
+                        None
+                    }
+                }
+            }
+            _ => {
+                println!("event solve skipped (no event semantic / no heap / no td)");
+                None
+            }
+        };
         let (spliced, manifest) = static_mhy_dumper::profile_splice::splice_profile(
             seedp,
             &report,
             solved_rep.as_ref(),
             td.as_ref(),
+            ev.as_ref(),
             derived.as_ref(),
             body,
             heap_holder.as_ref(),

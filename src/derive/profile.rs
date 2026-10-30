@@ -218,7 +218,7 @@ impl Profile {
 }
 
 /// A column transform inside a table. `c` is the per-column constant.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Column {
     pub offset: u32,
     pub kind: ColKind,

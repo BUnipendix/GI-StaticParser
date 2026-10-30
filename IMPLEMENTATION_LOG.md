@@ -6111,3 +6111,15 @@ param 差分零命中后对提取层做了系统排查，param 访问器仍未�
 - **引擎落地**：profile 增 `event_add_off/event_remove_off/event_raise_off`（None=7.1 的 12/8/10）+ `event_type_xor/event_raise_xor`（None=7.1 加法形态）；engine.event_row 数据化分派。7.1 零改动，39 测试全绿。
 - **端到端验证**：6.2 profile 打事件节（常数=本轮 RE，状态同 param 种子数据）→ dumpgen --dummy-out：**565 条 k=E，名字与 python 逐条零失配**；oracle 6.2Dump.cs 308 个 add_* 精确命中（其余为混淆名，oracle 事件渲染不全）；td74/77=RSAManaged/DSAManaged 与 oracle `Mono.Security.Cryptography.RSAManaged.KeyGeneratedEventHandler` 一致；406/565 名字与 7.1 交叉命中。
 - **下轮入口（R95）**：auto-tables 事件求解器机械化——td_event_start/count 用铺瓦不变量暴力（offset×c 搜索）；基座取 derive 锚（已 confirmed：hdr516+0x9B8EE445@0x14044AB4F）±8 由解码率判板；列 C 从访问器函数 imm32 扫描+哨兵众数/堆解码率判板；mask 链已在 6.2.auto.json（emu_chain 111 条链含 0x5260/0x1594F54A3868）。6.2 无负 start（u16 语义与 movsx 等价）；movsx 差异留待出现反例再加。
+
+## R95（2026-10-31 夜）：事件节求解器机械化落地——6.2 事件全自动零接触（不是需求，方案记录）
+
+- **events_solve.rs（新模块）五判板全机械化**，6.2 端到端自动求解与手工 RE 逐位一致（name@4^0x2C9FF31D rate 1.00、type@0^0x6DD83F38、add@8^0xB3C2、remove@10+0x37AF、raise@12^0x3185、基座 hdr516+0x9B8EE43D=shift−8、铺瓦 565/195）：
+  1. **td 铺瓦板**：count 列直方图（70 offset×2 kind×256 c，total≤8192/max≤128）→ start 列候选 c=强制首事件为 0（per-soff）→ spans 恰好覆盖 [0,total)。**踩坑：start 候选必须在 soff 循环内构造**（首版从 count 偏移读，候选全错）。
+  2. **基座板**：访问器窗口内 confirmed 锚 resolve，±8 双候选；**shift 由判板赢家决定，锚回填不得重新猜**（首版 find() 重选 ±8 内另一基座导致 defs 偏 8——判板/回填脱钩 bug，测试抓出）。派生锚里有假 confirmed（0x14044a8b8 hdr44 resolve 远离一切基座，被 ±8 守卫天然过滤）。
+  3. **name 板**：u32 列 × imm32 候选（iced 扫访问器函数 0x600 字节）× 堆解码率 ≥0.9，6.2 唯一 100%。
+  4. **type 板**：另一 u32 列，imm32 候选 × 组内一致性（同类型行同值）。
+  5. **add/remove/raise 板**：raise=0xFFFF 哨兵多数列；add(xor 形)/remove(add 形) 由 imm16 × |add−remove| 中位相邻性（真值 median=1 vs 亚军 352.5）。**教训：纯 bound 板（值<8192）不唯一**（大量 C 让分布变小），必须相邻性/哨兵/解码率这类强不变量。
+- **接线**：profile 增 event_*_off/event_type_xor/event_raise_xor（R92 已落数据化）；splice_profile 签名加 ev 参数 + splice_events（全 solved 级）；auto_tables_cmd 在 td solve 后调 solve_events。mask 用 emu 链原样进 event_mask_expr（Gen 链优先）。
+- **端到端**：auto-tables→profile→dumpgen 565 条 k=E，name/add/remove/raise 与手打 profile **零失配零缺失**。41 测试全绿（+2 事件测试：铺瓦隔离测试用绝对路径、缺文件跳过）。
+- **遗留**：prop 链已在（95 条）但无 splice 映射（`prop: no splice mapping`）——prop 求解器是 events_solve 的镜像改造（name/get/set 三列 + property 表），下一轮入口。6.5/6.6 的泛化验证待跑（battle 全版本）。

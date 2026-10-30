@@ -98,6 +98,7 @@ pub fn splice_profile(
     report: &TransferReport,
     method: Option<&TableReport>,
     td: Option<&TdSolve>,
+    ev: Option<&crate::events_solve::EventSolve>,
     derived: Option<&BuildDerivation>,
     body: &[u8],
     heap: Option<&crate::rowtable::HeapIndex>,
@@ -431,6 +432,11 @@ pub fn splice_profile(
     // ---- typeDef slice (structural solve; no seed semantics needed) ----
     if let Some(td) = td {
         splice_td(&mut p, td, &mut m);
+    }
+
+    // ---- event section (R95 structural solve) ----
+    if let Some(ev) = ev {
+        splice_events(&mut p, ev, &mut m);
     }
 
     // ---- field slice: rows = total typeDef fieldCount, chains from the
@@ -1348,6 +1354,38 @@ pub fn splice_td(p: &mut Profile, td: &TdSolve, m: &mut SpliceManifest) {
     m.inherited.push("td_ns / td_parent / td_flags / td_bitfield columns (seed data)".into());
 }
 
+/// Splice a solved event section into the profile (all event fields are
+/// solved-grade: every one of them came out of the boards in
+/// [`crate::events_solve`]).
+pub fn splice_events(p: &mut Profile, ev: &crate::events_solve::EventSolve, m: &mut SpliceManifest) {
+    if ev.defs.hdr_off == 0 && ev.defs.direct.is_none() {
+        m.notes.push("event solve dropped: base has no header anchor".into());
+        return;
+    }
+    p.event_defs = Some(ev.defs.clone());
+    p.event_stride = ev.stride;
+    p.td_event_start = Some(ev.td_start.clone());
+    p.td_event_count = Some(ev.td_count.clone());
+    p.event_mask = None;
+    p.event_mask_expr = Some(ev.mask_expr.clone());
+    p.event_name_off = Some(ev.name_off);
+    p.event_type_off = Some(ev.type_off);
+    p.event_name_xor = ev.name_xor;
+    p.event_type_add = 0;
+    p.event_type_xor = Some(ev.type_xor);
+    p.event_add_off = Some(ev.add_off);
+    p.event_remove_off = Some(ev.remove_off);
+    p.event_raise_off = Some(ev.raise_off);
+    p.event_add_xor = ev.add_xor;
+    p.event_remove_add = ev.remove_add;
+    p.event_raise_xor = Some(u32::from(ev.raise_xor));
+    p.event_raise_add = 0;
+    m.solved.push(format!(
+        "event section (tiling + {} rows, name rate {:.2}, base shift {:+})",
+        ev.total_events, ev.name_rate, ev.base_shift
+    ));
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -1387,7 +1425,7 @@ mod tests {
             "str".into(),
             rec(0x150, "add", 0xC854_2DD2, 0xDEAD_BEEF, 1.0),
         );
-        let (p, m) = splice_profile(seed_profile(), &report, None, None, None, &[], None);
+        let (p, m) = splice_profile(seed_profile(), &report, None, None, None, None, &[], None);
         assert_eq!(p.str_hdr_off, 0x150);
         assert_eq!(p.str_sub, 0x37AB_D22E);
         assert!(m.solved.iter().any(|s| s.contains("str_hdr_off")));
@@ -1443,7 +1481,7 @@ mod tests {
         report
             .semantics
             .insert("method_defs".into(), rec(0x1E0, "xor", 0x2EEC_3A0B, 0x1000, 1.0));
-        let (p, m) = splice_profile(seed_profile(), &report, Some(&rep), None, None, &[], None);
+        let (p, m) = splice_profile(seed_profile(), &report, Some(&rep), None, None, None, &[], None);
 
         assert_eq!(p.md_stride, 26);
         assert!(p.md_mask_expr.is_some());
@@ -1509,7 +1547,7 @@ mod tests {
         report
             .semantics
             .insert("params".into(), rec(0x1D0, "+", 0x08F4_E5DB, 0x5000, 0.9));
-        let (p, m) = splice_profile(seed_profile(), &report, None, None, None, &[], None);
+        let (p, m) = splice_profile(seed_profile(), &report, None, None, None, None, &[], None);
         // L6 gate: with no decodable body the transfer pick cannot be
         // validated, so the SEED base stays and the failure is noted.
         assert_eq!(p.field_names.hdr_off, seed_profile().field_names.hdr_off);
