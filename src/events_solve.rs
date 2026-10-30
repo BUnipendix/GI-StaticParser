@@ -315,11 +315,13 @@ fn solve_td_tiling(body: &[u8], td: &TdSolve, max_total: u32, max_count: u32) ->
                             offset: soff as u32,
                             kind: if sxor { ColKind::XorC } else { ColKind::AddC },
                             c: *sc,
+                            row_shift: 0,
                         },
                         Column {
                             offset: *coff as u32,
                             kind: if *cxor { ColKind::XorC } else { ColKind::AddC },
                             c: *cc,
+                            row_shift: 0,
                         },
                         *total,
                         groups,
@@ -1120,5 +1122,22 @@ mod tests5 {
             }
         }
         println!("probe done");
+    }
+}
+
+#[cfg(test)]
+mod tests6 {
+    use super::*;
+    #[test]
+    fn probes_62_method_frame() {
+        let Ok(gm) = std::fs::read("/home/yangsanyi/gire/sample/gi/6.2.0/YuanShen_Data/Managed/Metadata/global-metadata.dat") else { eprintln!("[skip] dat"); return; };
+        let Ok(exe) = std::fs::read("/home/yangsanyi/gire/sample/gi/6.2.0/YuanShen.exe") else { eprintln!("[skip] exe"); return; };
+        let Ok(pj) = std::fs::read_to_string("/tmp/62.profile.sol8.json") else { eprintln!("[skip] profile"); return; };
+        let profile: crate::derive::profile::Profile = serde_json::from_str(&pj).expect("profile parse");
+        let m = crate::derive::engine::Meta::load_with_startup(&exe, &gm, None, profile);
+        let m = match m { Ok(m) => m, Err(e) => { println!("load err {e}"); return; } };
+        println!("td74: start={} count={:?}", m.td_method_start(74), m.td_method_count(74));
+        println!("td75: start={} count={:?}", m.td_method_start(75), m.td_method_count(75));
+        println!("td0: start={} count={:?}", m.td_method_start(0), m.td_method_count(0));
     }
 }

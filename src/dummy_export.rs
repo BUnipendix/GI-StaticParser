@@ -138,10 +138,30 @@ pub fn export_dummy(m: &Meta, path: &str) -> anyhow::Result<(usize, usize, usize
     let (tds, mds) = collect(m);
     let inst_offsets = super::dump_gen::instance_offsets(m, &tds);
     let mut per_type: Vec<Vec<usize>> = vec![Vec::new(); tds.len()];
-    for (gmi, md) in mds.iter().enumerate() {
-        let decl = md.decl as usize;
-        if decl < per_type.len() {
-            per_type[decl].push(gmi);
+    if m.profile.td_method_count.is_some() {
+        // td-range path: the methodStart/methodCount pair IS the per-type
+        // grouping — independent of `md_decl` (seed data on 6.x, which would
+        // misfile every method). gmi == the raw method row index because
+        // `collect` walks the method table in row order.
+        for i in 0..tds.len() {
+            let st = m.td_method_start(i);
+            if st == 0xFFFF_FFFF {
+                continue;
+            }
+            if let Some(cn) = m.td_method_count(i) {
+                for g in st..st.saturating_add(cn) {
+                    if (g as usize) < mds.len() {
+                        per_type[i].push(g as usize);
+                    }
+                }
+            }
+        }
+    } else {
+        for (gmi, md) in mds.iter().enumerate() {
+            let decl = md.decl as usize;
+            if decl < per_type.len() {
+                per_type[decl].push(gmi);
+            }
         }
     }
     let mut parents: Vec<Option<u32>> = vec![None; tds.len()];

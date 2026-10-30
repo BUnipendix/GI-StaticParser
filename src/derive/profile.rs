@@ -218,12 +218,17 @@ impl Profile {
 }
 
 /// A column transform inside a table. `c` is the per-column constant.
+/// `row_shift` moves the read a whole number of rows (the table-scan grids
+/// can be off by one when the count column physically lives in the following
+/// row — 6.2's method pair, cnt_off 122 ≥ stride 70).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Column {
     pub offset: u32,
     pub kind: ColKind,
     #[serde(default)]
     pub c: u32,
+    #[serde(default)]
+    pub row_shift: i8,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -455,6 +460,10 @@ pub struct Profile {
     pub td_name_sentinel: u32,
     pub td_ns: Column,
     pub td_method_start: Column,
+    /// typeDef methodCount (u16 column) — carries the per-type method grouping
+    /// without `md_decl` (which is seed data on 6.x builds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub td_method_count: Option<Column>,
     /// typeDef fieldStart column: `idx = raw ^ c`, `td_fs_sentinel_raw` = stored value
     /// meaning "no fields" (decodes to 0xFFFFFFFF).
     pub td_field_start: Column,

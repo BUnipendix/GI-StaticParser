@@ -465,9 +465,13 @@ impl<'a> Meta<'a> {
     /// typeDef methodStart (u32, 0xFFFFFFFF = no methods), kind-aware.
     #[inline]
     pub fn td_method_start(&self, i: usize) -> u32 {
-        let rec = self.td_base + self.profile.td_stride as usize * i;
-        let raw = self.body.read_u32(rec + self.profile.td_method_start.offset as usize);
-        super::profile::col_value32(&self.profile.td_method_start, raw)
+        let col = &self.profile.td_method_start;
+        let rec = self.td_base as i64 + self.profile.td_stride as i64 * (i as i64 + col.row_shift as i64);
+        if rec < 0 {
+            return 0xFFFF_FFFF;
+        }
+        let raw = self.body.read_u32(rec as usize + col.offset as usize);
+        super::profile::col_value32(col, raw)
     }
 
     /// Decoded (fieldStart, fieldCount) for typeDef slot `i` (no chain validation).
@@ -858,6 +862,18 @@ impl<'a> Meta<'a> {
             if get == 0xFFFF { None } else { Some(get) },
             if set == 0xFFFF { None } else { Some(set) },
         ))
+    }
+
+    /// typeDef methodCount (u16 column; None when the profile lacks it).
+    /// Honors `row_shift` (the 6.2 method frame lives one td row early).
+    pub fn td_method_count(&self, i: usize) -> Option<u32> {
+        let col = self.profile.td_method_count.as_ref()?;
+        let rec = self.td_base as i64 + self.profile.td_stride as i64 * (i as i64 + col.row_shift as i64);
+        if rec < 0 {
+            return None;
+        }
+        let raw = self.body.read_u16(rec as usize + col.offset as usize);
+        Some(super::profile::col_value16(col, raw) as u32)
     }
 
     /// typeDef eventStart (u16 column, `raw + c`; 0xFFFF = none). None without the event table.

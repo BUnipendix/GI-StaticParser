@@ -6142,3 +6142,11 @@ param 差分零命中后对提取层做了系统排查，param 访问器仍未�
 - **引擎/管线**：property_mask_expr + property_name_xor/get_xor/set_xorsub（XorCSubMask 家族）；splice_props；auto_tables_cmd 接线。
 - **端到端**：6.2 全自动 profile→dumpgen：93543 属性解出（rate 1.00，名字全真 .NET 属性名，oracle get_/set_ 抽查 19% 命中=混淆名+oracle 渲染限制）。44 测试全绿。
 - **重要修正（诚实记账）**：此前「E 记录 add/remove 零失配」实为 **-1 对 -1**——6.2 的 md_decl 列仍是种子数据（未解）→ per_type（方法→声明类型映射）全坏 → 事件 add/remove 与属性 get/set 的**访问器→方法索引映射全部失效**（dump 里全 -1，P 记录被 get<0&&set<0 过滤到 1 条）。事件/属性表的**名字与行区间**已全自动；**md_decl 求解 = 下一轮最高优先级**（它是事件访问器映射+属性访问器映射+方法归属的共同前置）。
+
+## R95e（2026-10-31 夜末）：方法帧 off-by-one 破解——访问器映射 100% 复活（不是需求，方案记录）
+
+- **发现**：td 求解的 method (start,count) 对内部 100% 邻接一致，但**整体相对 td 行偏移一行**：td74(RSAManaged) 真帧=frame[73]=(464,16)（GenerateKeyPair 族 16 法），frame[74]=(480,4) 是个委托类。裁决证据链：add_KeyGenerated=全局 475（names.tsv）∈[464,480)，475−464=**11=事件访问器的 add 索引**；oracle 侧 RSAManaged 方法名族吻合。
+- **根因**：method 对的 count 列物理上住在**下一网格行**（cnt_off=122 ≥ stride=70）——tables::find 的扫描网格此时比 td 行早一行，pair_column 原样发射导致帧错位。此前的连锁后果：per_type 全坏 → 事件 add/remove 与属性 get/set 映射全 -1（曾被误判为 md_decl 缺口——**md_decl 不是必要条件**，td 区间即可）。
+- **修复**：Column 增 `row_shift: i8`（serde default 0）；solve_typedef 对 `cnt_off ≥ stride` 的 method 对发 row_shift=−1；engine td_method_start/td_method_count 按 row_shift 读；dummy_export per_type 走 **td 区间路径**（methodStart+methodCount 直接分组，gmi=方法行号，md_decl 仅作 7.1 回退）。
+- **验证（6.2 全自动 profile）**：E=565 全部 add≥0；oracle 可验子集（372 条，名字在 oracle add_* 集）**add/remove 映射 100% 精确命中 add_<name>/remove_<name>**；P=93543 全量发射、get≥0 96.5%。45 测试全绿（7.1 不受影响：gen71 无 td_method_count 走 md_decl 回退）。
+- 教训：**批量多文件补丁脚本中途 assert 死亡时，前半改动静默丢失而编译可能仍通过**（本次 engine row_shift 补丁丢了两次才落上）——多文件联动改动要么原子提交要么逐个验证。判板一致的帧仍可能整体错位——「内部自洽」≠「行对齐」，需要跨表锚（访问器索引↔方法名）仲裁。

@@ -341,16 +341,19 @@ pub fn splice_profile(
                 offset: name.off as u32,
                 kind: ColKind::from_fam(name.family),
                 c: name.c as u32,
+                row_shift: 0,
             };
             p.md_param_start = Column {
                 offset: st.off as u32,
                 kind: ColKind::from_fam(st.family),
                 c: st.c as u32,
+                row_shift: 0,
             };
             p.md_param_count = Column {
                 offset: cnt.off as u32,
                 kind: count_kind,
                 c: cnt.c as u32,
+                row_shift: 0,
             };
             m.solved.push(
                 "method_defs.slice (stride + mask chain + name/param_start/param_count)".into(),
@@ -394,6 +397,7 @@ pub fn splice_profile(
                 offset: name.off as u32,
                 kind: ColKind::from_fam(name.family),
                 c: name.c as u32,
+                row_shift: 0,
             };
             // count column without a start column (6.2: the u8 count solves
             // via the xorsub family while paramStart uses an unsolved
@@ -408,6 +412,7 @@ pub fn splice_profile(
                             offset: cnt.off as u32,
                             kind,
                             c: cnt.c as u32,
+                row_shift: 0,
                         };
                         m.solved.push(format!(
                             "method_defs.slice (PARTIAL: stride + mask chain + name + param_count, sum={})",
@@ -1106,6 +1111,9 @@ pub struct TdSolve {
     /// count of the global field table.
     pub field_rows_total: u64,
     pub method_start: Column,
+    /// The u16 per-typeDef methodCount column of the same pair (needed to
+    /// build the per-type method lists without `md_decl`).
+    pub method_count: Column,
     pub field_start: Column,
     pub field_count: Column,
     /// Raw fieldStart value that decodes to "no fields" (None = none seen).
@@ -1149,11 +1157,12 @@ fn pair_column(t: &crate::derive::tables::IndexTable, idx: bool) -> Column {
     };
     let off = if idx { t.idx_off } else { t.cnt_off };
     match tr {
-        IndexTransform::Xor => Column { offset: off, kind: ColKind::XorC, c },
+        IndexTransform::Xor => Column { offset: off, kind: ColKind::XorC, c, row_shift: 0 },
         IndexTransform::Add => Column {
             offset: off,
             kind: ColKind::AddC,
             c: c.wrapping_neg(),
+                row_shift: 0,
         },
     }
 }
@@ -1257,6 +1266,7 @@ pub fn solve_typedef(
             StringTransform::Xor => ColKind::XorC,
         },
         c: c.c,
+        row_shift: 0,
     };
     let name = mk_col(&name_col);
     let ns = ns_col.as_ref().map(&mk_col);
@@ -1298,7 +1308,24 @@ pub fn solve_typedef(
         name,
         ns,
         field_rows_total,
-        method_start: pair_column(method_pair, true),
+        method_start: {
+            let mut c = pair_column(method_pair, true);
+            // 6.2 lesson: when the pair's count column physically lives in the
+            // FOLLOWING grid row (cnt_off >= stride), the whole frame is one td
+            // row early — add_KeyGenerated (global 475) sits in frame[73] for
+            // td 74, not frame[74]. Arbitrated by the event accessor index.
+            if method_pair.cnt_off >= method_pair.stride {
+                c.row_shift = -1;
+            }
+            c
+        },
+        method_count: {
+            let mut c = pair_column(method_pair, false);
+            if method_pair.cnt_off >= method_pair.stride {
+                c.row_shift = -1;
+            }
+            c
+        },
         field_start: pair_column(field_pair, true),
         field_count: pair_column(field_pair, false),
         fs_sentinel_raw: field_pair.sentinel_raw,
@@ -1336,6 +1363,7 @@ pub fn splice_td(p: &mut Profile, td: &TdSolve, m: &mut SpliceManifest) {
         m.solved.push("td_ns (second string column)".into());
     }
     p.td_method_start = td.method_start.clone();
+    p.td_method_count = Some(td.method_count.clone());
     p.td_field_start = td.field_start.clone();
     if let Some(s) = td.fs_sentinel_raw {
         p.td_fs_sentinel_raw = s;
