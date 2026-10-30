@@ -6123,3 +6123,13 @@ param 差分零命中后对提取层做了系统排查，param 访问器仍未�
 - **接线**：profile 增 event_*_off/event_type_xor/event_raise_xor（R92 已落数据化）；splice_profile 签名加 ev 参数 + splice_events（全 solved 级）；auto_tables_cmd 在 td solve 后调 solve_events。mask 用 emu 链原样进 event_mask_expr（Gen 链优先）。
 - **端到端**：auto-tables→profile→dumpgen 565 条 k=E，name/add/remove/raise 与手打 profile **零失配零缺失**。41 测试全绿（+2 事件测试：铺瓦隔离测试用绝对路径、缺文件跳过）。
 - **遗留**：prop 链已在（95 条）但无 splice 映射（`prop: no splice mapping`）——prop 求解器是 events_solve 的镜像改造（name/get/set 三列 + property 表），下一轮入口。6.5/6.6 的泛化验证待跑（battle 全版本）。
+
+## R95b（2026-10-31 深夜）：泛化推进 + 6.5/6.6 诊断（不是需求，方案记录）
+
+- **已落地（提交 R95b）**：solve_td_tiling 升级为返回**全部铺瓦候选**（≤8 个，铺瓦不唯一——6.6 有一组假解恰能铺瓦）；start 列四形态（u16/u32 × add/xor）；判板 stride 候选 {14,10}（6.6 行族 = {name u32, add u16, remove u16} 10B，无 type/raise 列）；name/type 列 add 形态 ((raw+C)^mask，6.6 name=此形)；引擎 absent 标志（event_type_absent/event_raise_absent/event_name_add）+ stride≥8 + 按列偏移算读取边界。42 测试全绿，6.2 解逐位不变。
+- **6.6 诊断（未破，下轮入口）**：
+  - td 铺瓦全形态扫描**唯一解** = (start u16@56 ^0x95D0, count u8@65 +0x0A, 613 事件/216 类型)——但该解下游 name 板全灭（基座 0x68E394/−8 × 双形态 × imm32 候选 × 78 链全组合）。运行时反汇编推断列（count=u8@copy+0x43^0x71、start=u32@copy+0x18+0xB38B07C7）在数据上不成立（全部行 nonzero/总数千万）——**6.6 的 klass 运行时 td 副本不是静态行的连续平移**（6.2 的 +8 平移模型不能跨版本迁移），反汇编推断与数据冲突时以数据为准。
+  - mask-free 相邻性扫基座（±8K）：0.409 平台无尖峰（噪声）；哨兵方程（remove 哨兵行 m16=raw6^0xC5AB^0xFFFF）全零——mask 公式或事件集有错，交叉未定。
+  - 待验假设：①matched_fn 窗口虽含真访问器代码，但 emu 链可能没走到 0x1404AD0C1 的 mask 路径（链里可能没有 0x3CD1 族）——下轮先查 78 条链是否含 0x3CD1/0x79AA5BF6；②decode_str 调用点普查（e8 callers of 6.6 decode_str 0x1404A6EC0）可机械化定位真访问器函数，替代形状迁移的 matched_fn（函数定位不可靠的已知硬缺口）。
+- **6.5 未细查**（matched_fn=0x140498902 同为运行时构造器；链 81 条含 0xA8/64 位链族）。
+- 教训：**判板唯一性要逐版本复核**（6.2 上唯一的板在 6.6 未必唯一）；反汇编读运行时结构体偏移前先确认该版本副本布局模型。
