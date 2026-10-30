@@ -875,8 +875,10 @@ impl<'a> Meta<'a> {
 
     /// One event-definition row: (name packed index, event type typearr index, add, remove,
     /// raise). Accessor fields are per-type method indexes (None for the 0xFFFF sentinel); the
-    /// type is None for 0xFFFFFFFF. Row format (14 bytes):
-    /// {u32 name, u32 type, u16 remove, u16 raise, u16 add}.
+    /// type is None for 0xFFFFFFFF. Row format (14 bytes) is data: 7.1 packs
+    /// {u32 name, u32 type, u16 remove, u16 raise, u16 add}, 6.2
+    /// {u32 type, u32 name, u16 add, u16 remove, u16 raise} — see the
+    /// `event_*_off` / `event_type_xor` / `event_raise_xor` profile fields.
     pub fn event_row(
         &self,
         row: u32,
@@ -893,18 +895,27 @@ impl<'a> Meta<'a> {
         };
         let name_off = self.profile.event_name_off.unwrap_or(0) as usize;
         let type_off = self.profile.event_type_off.unwrap_or(4) as usize;
+        let add_off = self.profile.event_add_off.unwrap_or(12) as usize;
+        let remove_off = self.profile.event_remove_off.unwrap_or(8) as usize;
+        let raise_off = self.profile.event_raise_off.unwrap_or(10) as usize;
         let at = self.event_base + stride * row as usize;
         let b = self.body.read_slice(at, stride.max(14))?;
         let raw_name = u32::from_le_bytes(b[name_off..name_off + 4].try_into().ok()?);
         let raw_type = u32::from_le_bytes(b[type_off..type_off + 4].try_into().ok()?);
-        let raw_remove = u16::from_le_bytes(b[8..10].try_into().ok()?);
-        let raw_raise = u16::from_le_bytes(b[10..12].try_into().ok()?);
-        let raw_add = u16::from_le_bytes(b[12..14].try_into().ok()?);
+        let raw_remove = u16::from_le_bytes(b[remove_off..remove_off + 2].try_into().ok()?);
+        let raw_raise = u16::from_le_bytes(b[raise_off..raise_off + 2].try_into().ok()?);
+        let raw_add = u16::from_le_bytes(b[add_off..add_off + 2].try_into().ok()?);
         let m16 = mask as u16;
         let name = (raw_name ^ mask) ^ self.profile.event_name_xor;
-        let type_idx = raw_type.wrapping_add(self.profile.event_type_add) ^ mask;
+        let type_idx = match self.profile.event_type_xor {
+            Some(x) => (raw_type ^ mask) ^ x,
+            None => raw_type.wrapping_add(self.profile.event_type_add) ^ mask,
+        };
         let remove = ((raw_remove as u32).wrapping_add(self.profile.event_remove_add as u32) ^ mask) & 0xFFFF;
-        let raise = ((raw_raise as u32).wrapping_add(self.profile.event_raise_add as u32) ^ mask) & 0xFFFF;
+        let raise = match self.profile.event_raise_xor {
+            Some(x) => (((raw_raise ^ m16) as u32) ^ x) & 0xFFFF,
+            None => ((raw_raise as u32).wrapping_add(self.profile.event_raise_add as u32) ^ mask) & 0xFFFF,
+        };
         let add = (((raw_add ^ m16) as u32) ^ self.profile.event_add_xor as u32) & 0xFFFF;
         Some((
             name,

@@ -555,6 +555,24 @@ pub struct Profile {
     pub event_raise_add: u16,
     #[serde(default)]
     pub event_add_xor: u16,
+    /// Accessor-method column offsets. 7.1 packs remove@8/raise@A/add@C; 6.2's builder
+    /// (0x14044ABA1/ABD9/AC0E, static base −8) reads add@8/remove@A/raise@C — the
+    /// Il2CppEvent slots are the same, the row bytes just sit in a different order.
+    /// None = the 7.1 offsets.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_add_off: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_remove_off: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_raise_off: Option<u32>,
+    /// 6.2 encodes two columns with an xor the add-forms cannot express:
+    /// type = (raw ^ mask) ^ event_type_xor (accessor 0x14044AB4F, sentinel
+    /// 0xFFFFFFFF) and raise = ((raw ^ mask16) ^ event_raise_xor) & 0xFFFF
+    /// (accessor 0x14044AC0E). None = the 7.1 add-forms.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_type_xor: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_raise_xor: Option<u32>,
 
     /// Generic-class row table: 8-byte rows `{defTypeDefIndex u32, genericInstIndex i32}`.
     /// The table lives in the sibling **`startup-metadata.dat`** (loaded at the same time as

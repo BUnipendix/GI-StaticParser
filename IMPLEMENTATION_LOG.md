@@ -6093,8 +6093,21 @@ param 差分零命中后对提取层做了系统排查，param 访问器仍未�
 - **事件名 key 静态假设穷尽**（全部实测否定）：packed 解释×2 基座×2 源=乱码；tag 块偏移（0x3D67|block<<16）原始字节=非字符串区；0x3D67 立即数全 .text 零出现；(td,id16)/(id16,td) 对与 startup 头部对表不匹配（0/565）；id16∈b 值集 80/565 低于随机。**结论保持：key=(id16<<16)|tag 为缓存键，预填循环未定位**——剩余入口：0x140458990 的注册侧（map 建立处）、decode_str 调用点 0x14040EC44/0x140443CDE/0x1404471B9/0x140452xxx/0x14047Bxxx 簇的逐个追踪、kind 分发展开器的其它表实例。
 - 本轮可复用资产：startup 文件逐表公式族（loop A/B 已验证）、通用展开器模式清单（含 64 位 hi32/lo32 + kind 分发）、swiss-table 缓存结构图。
 
-## R91d（2026-10-30）：tag 块窗口假设否定 + 0x144C7B1B0 真身（不是需求，方案记录）
+## R91d（2026-10-30）：
 
 - **0x144C7B1B0 = 元数据基指针**（td/ns getter 0x1404471AA 用 [klass+0xa8] + [0x144C7B1B0] 构造 td 行指针；decode_str hit 路径 char* = [同全局] + cached32 ⇒ 缓存值=体内偏移、命中返回体内明文 ⇒ **运行时堆已原位解密**，静态文件仍密文=引擎按需解密模型不变）。
 - **tag 块窗口假设否定**：256 个 (block<<16|0x3D67) 偏移解密扫描仅 ~6 个可打印前缀（堆字符串巧合；row560 'OOEDHNKBAHL' 匹配=假阳性）；四种 len/block 映射（C 异或/直接 ×2）mass 测试 3/565、2/565、1/565、3/565=全随机水平。**事件名静态解释空间正式清零**。
 - 最终状态：事件名 = 加载期预填的缓存键 (id16<<16)|tag，预填循环需运行时追踪（unicorn 断点 [rcx+rsi*8] 键数组写入或 IDA/x64dbg 跟 type-init）。本轮停止原因=静态框架对该环穷尽，非改进路径穷尽（运行时路线明确）。
+
+
+## R92（2026-10-31 夜）：6.2 事件名端到端破解落地——R91d「运行时预填」定性被否定，事件表六列全解（不是需求，方案记录）
+
+**结论：6.2 事件名不是缓存键，就是普通 decode_str packed idx；全表 565/565 解出真实事件名，dumpgen 端到端零失配。**
+
+- **R91d 两处定性纠正（均有实证）**：①全 .text SKIPDATA 线扫（RVA 基址修正后）缓存簇全局（桶 0x144C7B488/位图 0x144C7B4A8/容量 0x144C7B4B0/计数 0x144C7B4B8/init 标志 0x144C7BB22/临界区 0x144C7BC48）的引用=1745 条，**唯一插入者是 decode_str 自身**（`inc [0x144C7B4B8]` 仅 [DS] 内）；外部写只有构造器 0x140487xxx 与析构 0x14045876C——**预填循环不存在**。②R91b「key 低 16 恒定⇒非 packed」前提为假：mask 逐行变化，raw^mask^C 低 16 位必然变化。
+- **decode_str miss 路径完整算法（0x140444D10 反汇编全提取，与引擎 decode_str_sched 常数逐位一致，mscorlib@0 实证）**：off=key&0xFFFFFF、len=key>>24（1 字节）；keystream = 64 位计数器 `seed + k×0x35ADCAE53E189E2B`（SSE 常量表 [0,Δ]/[2Δ,2Δ]/[4Δ,4Δ] 实证），seed = (((off×0x79DFBE452D3AB0AD) ^ 0x1182BD2830337353) × 0x6697113103627390 ^ 0x3817CD142A5CCA3F) × 0x6A21A4F92A1F2BCD ^ 0x182244C0678DA397（mod 2^64）。哈希=XXH64 变体（prime5 尾字节 C5→C9 被改）。
+- **事件表静态布局定案（基座 −8 后，访问器 0x14044A7A0 全函数反汇编）**：`base = body + ((hdr[0x204]+0x9B8EE445) & −1) − 8 = 0x3489910`；行 14B：type u32@0 ^ mask ^ 0x6DD83F38（哨兵 −1）｜name u32@4 ^ mask ^ 0x2C9FF31D → decode_str｜add u16@8 ^ mask16 ^ 0xB3C2｜remove (u16@A + 0x37AF) ^ mask16｜raise u16@C ^ mask16 ^ 0x3185。mask = lo32((((i×0x1594F54A3868+0x18A1ED1E5C6D3B09)^0x3E56E4CD)×0x500002EC)>>0x16)。**R91 的「tag u16@4 恒 0xCE7A」实为 raise 哨兵列**（raise=−1 时 raw@C^m16=0xCE7A）；Il2CppEvent 槽位（name/type/add/remove/raise @0/8/10/18/20）由构造器 store 目标实证，6.2 行内顺序 {type,name,add,remove,raise} vs 7.1 {name,type,remove,raise,add}。
+- **−8 的来源（R91「+8 平移」第二实例）**：td 锚（0x140416E60）与 event 锚（0x14044AAF6）用同一 body 全局 [0x144C7B5E0]，但 td 的访问器读的是运行时 td 副本（+8 平移、列偏移同步 +8），event 的访问器直读文件表——profile 按绝对地址编码：td=(hdr460+0x99E75364)、event=(hdr516+0x9B8EE43D)。
+- **引擎落地**：profile 增 `event_add_off/event_remove_off/event_raise_off`（None=7.1 的 12/8/10）+ `event_type_xor/event_raise_xor`（None=7.1 加法形态）；engine.event_row 数据化分派。7.1 零改动，39 测试全绿。
+- **端到端验证**：6.2 profile 打事件节（常数=本轮 RE，状态同 param 种子数据）→ dumpgen --dummy-out：**565 条 k=E，名字与 python 逐条零失配**；oracle 6.2Dump.cs 308 个 add_* 精确命中（其余为混淆名，oracle 事件渲染不全）；td74/77=RSAManaged/DSAManaged 与 oracle `Mono.Security.Cryptography.RSAManaged.KeyGeneratedEventHandler` 一致；406/565 名字与 7.1 交叉命中。
+- **下轮入口（R95）**：auto-tables 事件求解器机械化——td_event_start/count 用铺瓦不变量暴力（offset×c 搜索）；基座取 derive 锚（已 confirmed：hdr516+0x9B8EE445@0x14044AB4F）±8 由解码率判板；列 C 从访问器函数 imm32 扫描+哨兵众数/堆解码率判板；mask 链已在 6.2.auto.json（emu_chain 111 条链含 0x5260/0x1594F54A3868）。6.2 无负 start（u16 语义与 movsx 等价）；movsx 差异留待出现反例再加。
