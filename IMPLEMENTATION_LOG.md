@@ -6084,3 +6084,11 @@ param 差分零命中后对提取层做了系统排查，param 访问器仍未�
 - **0x14047Bxxx（kind 分发通用展开器）**：表 8 字节行，64 位值 = (raw64 ^ 0x45FC3FA258DC71F8) + chain(i) − 0x77C127A9，chain = (((i×0xC6DE + 0x5D73D0D3) ^ 0x2ADF41D7) × 0x37D064A2) ^ 0xFFFFFFFFBC3AA1B5（此符号扩展合法，bit31=1）；lo32 按 kind byte（0=无/2=decode_str/3=typearr）分发，**hi32 直接 decode_str（shr rcx,0x20）**——64 位行拆双字段是通行形态。
 
 **事件名 key 机制定性（未钉死的最后一环）**：事件行 u32@4 = (id16<<16)|tag16（tag=0xCE7A 全表常数）；accessor 传 decode_str 的 key 低 16 位恒定 → **不可能是 packed idx**（off 低 16 恒定 ⇒ 256 个 off 上限 < 564 个不同名）；且 (off,len) 对全局堆与 startup 文件双源解码全乱码。⇒ **key = 缓存键，预填在加载期完成**（直写缓存或经未定位的循环）；startup 头部 (a,b) 对表（a≈td 数、b 3.4 万值）已排除 (td,id16) 与 id16∈b 两种假设（80/565 低于随机）。下轮入口：①0x140458990 的 handle 语义（map 查找→注册侧）钉死 body 基座；②找写缓存键数组的预填循环（键 (id16<<16)|tag 的插入点）；③kind 分发展开器集群（0x14047Bxxx）的其它表实例。
+
+## R91c（2026-10-30）：hdr= blob 实证 + 基座抵消定案 + 事件名静态假设穷尽记录（不是需求，方案记录）
+
+- **runtime hdr = blob 原文（lea 直接存储）**：hdr 全局唯一写入点 0x140260B2F = `lea rax,[rip+0x1FF07F9]` → 0x142251328 = blob_va。无头部解码/变换。锚点机制的 blob 读法完全正确。
+- **两处 +8 相互抵消（定案）**：游戏 body 全局 = handle+0x208、decode_str strsec = hdr[0x50]+0x84DD7CBE = 0x201CAD0；引擎 body = dat[0x210:]、strsec = 0x201CAC8。0x208+0x201CAD0 = 0x210+0x201CAC8 = 同一绝对地址——引擎的 body/strsec 与游戏逐位一致。
+- **cipher 常数全镜像唯一**（7 个 schedule 常数只在 decode_str 内出现；step 在 C# 区有一次数据巧合）⇒ **无编码器**，「加载器加密写回堆」理论否定。
+- **事件名 key 静态假设穷尽**（全部实测否定）：packed 解释×2 基座×2 源=乱码；tag 块偏移（0x3D67|block<<16）原始字节=非字符串区；0x3D67 立即数全 .text 零出现；(td,id16)/(id16,td) 对与 startup 头部对表不匹配（0/565）；id16∈b 值集 80/565 低于随机。**结论保持：key=(id16<<16)|tag 为缓存键，预填循环未定位**——剩余入口：0x140458990 的注册侧（map 建立处）、decode_str 调用点 0x14040EC44/0x140443CDE/0x1404471B9/0x140452xxx/0x14047Bxxx 簇的逐个追踪、kind 分发展开器的其它表实例。
+- 本轮可复用资产：startup 文件逐表公式族（loop A/B 已验证）、通用展开器模式清单（含 64 位 hi32/lo32 + kind 分发）、swiss-table 缓存结构图。
