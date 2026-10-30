@@ -1370,15 +1370,18 @@ pub fn splice_events(p: &mut Profile, ev: &crate::events_solve::EventSolve, m: &
     p.event_mask_expr = Some(ev.mask_expr.clone());
     p.event_name_off = Some(ev.name_off);
     p.event_type_off = Some(ev.type_off);
+    p.event_name_add = ev.name_add;
     p.event_name_xor = ev.name_xor;
-    p.event_type_add = 0;
-    p.event_type_xor = Some(ev.type_xor);
+    p.event_type_add = ev.type_add;
+    p.event_type_xor = ev.type_xor;
+    p.event_type_absent = ev.type_absent;
     p.event_add_off = Some(ev.add_off);
     p.event_remove_off = Some(ev.remove_off);
     p.event_raise_off = Some(ev.raise_off);
     p.event_add_xor = ev.add_xor;
     p.event_remove_add = ev.remove_add;
     p.event_raise_xor = Some(u32::from(ev.raise_xor));
+    p.event_raise_absent = ev.raise_absent;
     p.event_raise_add = 0;
     m.solved.push(format!(
         "event section (tiling + {} rows, name rate {:.2}, base shift {:+})",

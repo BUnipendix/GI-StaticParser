@@ -573,6 +573,17 @@ pub struct Profile {
     pub event_type_xor: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub event_raise_xor: Option<u32>,
+    /// false: name = (raw ^ mask) ^ event_name_xor; true: name = (raw +
+    /// event_name_xor) ^ mask (6.6's accessor).
+    #[serde(default)]
+    pub event_name_add: bool,
+    /// True when the row has no typearr column at all (6.6 packs
+    /// {name u32, add u16, remove u16} in 10 bytes).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub event_type_absent: bool,
+    /// True when the row has no raise column (6.6).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub event_raise_absent: bool,
 
     /// Generic-class row table: 8-byte rows `{defTypeDefIndex u32, genericInstIndex i32}`.
     /// The table lives in the sibling **`startup-metadata.dat`** (loaded at the same time as

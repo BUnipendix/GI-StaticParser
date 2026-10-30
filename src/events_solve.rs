@@ -42,15 +42,25 @@ pub struct EventSolve {
     /// The mask chain, as data (engine evaluates it per row).
     pub mask_expr: Expr,
     pub name_off: u32,
+    /// false: (raw ^ mask) ^ name_xor (6.2/7.1); true: (raw + name_xor) ^ mask (6.6).
+    pub name_add: bool,
     pub name_xor: u32,
     pub type_off: u32,
-    pub type_xor: u32,
+    /// XorC form (raw ^ mask) ^ type_xor; None when the add-form is used or
+    /// the column is absent.
+    pub type_xor: Option<u32>,
+    /// AddC form (raw + type_add) ^ mask (the 7.1 shape).
+    pub type_add: u32,
+    /// True when the row has no typearr column (6.6 packs name+add+remove only).
+    pub type_absent: bool,
     pub add_off: u32,
     pub add_xor: u16,
     pub remove_off: u32,
     pub remove_add: u16,
     pub raise_off: u32,
     pub raise_xor: u16,
+    /// True when the row has no raise column (6.6: name+add+remove only).
+    pub raise_absent: bool,
     /// Rows in the event table (== Σ eventCount).
     pub total_events: u32,
     /// Diagnostics for the splice manifest.
@@ -101,12 +111,16 @@ fn scan_immediates(img: &Image, exe: &[u8], va: u64, len: u64) -> (Vec<u32>, Vec
     (i32s.into_iter().collect(), i16s.into_iter().collect())
 }
 
-/// td eventStart/eventCount solve by exact tiling. Returns the two columns,
-/// the event total, and per-typeDef (row, start, count) for rows with events.
-fn solve_td_tiling(
-    body: &[u8],
-    td: &TdSolve,
-) -> Option<(Column, Column, u32, Vec<(usize, u32, u32)>)> {
+/// td eventStart/eventCount solve by exact tiling. Returns EVERY (start,
+/// count, total, per-typeDef spans) candidate whose spans tile [0, total)
+/// exactly — tiling alone is not unique (6.6 has a coincidental 613-event
+/// tiling on the wrong columns), so the name board downstream picks the true
+/// one. The start column is searched in all four forms the accessors use
+/// (u16/u32 × add/xor — 6.2 packs a u16 add, 6.6 a u32 add); count is u8
+/// add/xor.
+type Tiling = (Column, Column, u32, Vec<(usize, u32, u32)>);
+fn solve_td_tiling(body: &[u8], td: &TdSolve) -> Vec<Tiling> {
+    let mut tilings: Vec<Tiling> = Vec::new();
     let stride = td.stride as usize;
     let rows = td.rows;
     let rd8 = |off: usize| -> u32 { body.get(off).copied().unwrap_or(0) as u32 };
@@ -149,16 +163,35 @@ fn solve_td_tiling(
             }
         }
     }
+    // start-column reads: (offset, width 2|4, xor) — the accessors use u16 add
+    // (6.2) and u32 add (6.6); xor forms cost little to cover too.
+    let mut start_reads: Vec<(usize, u32, bool)> = Vec::new();
+    for off in 0..stride.saturating_sub(1) {
+        start_reads.push((off, 2, false));
+        start_reads.push((off, 2, true));
+    }
+    for off in 0..stride.saturating_sub(3) {
+        start_reads.push((off, 4, false));
+        start_reads.push((off, 4, true));
+    }
     for (coff, cxor, cc, total, counts) in &count_cands {
-        for soff in (0..stride).step_by(2) {
-            // start-column candidates: force the first event to 0 (per soff —
-            // the constant depends on the raw column being forced)
-            let mut cs = std::collections::BTreeSet::new();
+        for &(soff, swidth, sxor) in &start_reads {
+            // start-column candidates: force the first event to 0 (the constant
+            // depends on the raw column being forced)
+            let mut cs: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
             for r in 0..rows {
                 if counts[r] == 0 {
                     continue;
                 }
-                cs.insert(65536u32.wrapping_sub(rd16(td.base + r * stride + soff)) & 0xFFFF);
+                let raw = if swidth == 2 {
+                    rd16(td.base + r * stride + soff)
+                } else {
+                    match body.get(td.base + r * stride + soff..td.base + r * stride + soff + 4) {
+                        Some(b) => u32::from_le_bytes(b.try_into().unwrap()),
+                        None => 0,
+                    }
+                };
+                cs.insert(if sxor { raw } else { raw.wrapping_neg() });
             }
             for sc in &cs {
                 let mut spans: Vec<(u32, u32)> = Vec::new();
@@ -167,7 +200,18 @@ fn solve_td_tiling(
                     if counts[r] == 0 {
                         continue;
                     }
-                    let st = (rd16(td.base + r * stride + soff) + sc) & 0xFFFF;
+                    let raw = if swidth == 2 {
+                        rd16(td.base + r * stride + soff)
+                    } else {
+                        match body.get(td.base + r * stride + soff..td.base + r * stride + soff + 4) {
+                            Some(b) => u32::from_le_bytes(b.try_into().unwrap()),
+                            None => 0,
+                        }
+                    };
+                    let st = if sxor { raw ^ sc } else { raw.wrapping_add(*sc) };
+                    // u16 starts wrap at 16 bits (no negative starts measured
+                    // on any build — movsx semantics coincide with u16 there)
+                    let st = if swidth == 2 { st & 0xFFFF } else { st };
                     if st as u64 + counts[r] as u64 > *total as u64 {
                         ok = false;
                         break;
@@ -190,13 +234,25 @@ fn solve_td_tiling(
                     let groups: Vec<(usize, u32, u32)> = (0..rows)
                         .filter(|&r| counts[r] > 0)
                         .map(|r| {
-                            let st =
-                                (rd16(td.base + r * stride + soff) + sc) & 0xFFFF;
-                            (r, st as u32, counts[r])
+                            let raw = if swidth == 2 {
+                                rd16(td.base + r * stride + soff)
+                            } else {
+                                match body.get(td.base + r * stride + soff..td.base + r * stride + soff + 4) {
+                                    Some(b) => u32::from_le_bytes(b.try_into().unwrap()),
+                                    None => 0,
+                                }
+                            };
+                            let st = if sxor { raw ^ sc } else { raw.wrapping_add(*sc) };
+                            let st = if swidth == 2 { st & 0xFFFF } else { st };
+                            (r, st, counts[r])
                         })
                         .collect();
-                    return Some((
-                        Column { offset: soff as u32, kind: ColKind::AddC, c: *sc as u32 },
+                    tilings.push((
+                        Column {
+                            offset: soff as u32,
+                            kind: if sxor { ColKind::XorC } else { ColKind::AddC },
+                            c: *sc,
+                        },
                         Column {
                             offset: *coff as u32,
                             kind: if *cxor { ColKind::XorC } else { ColKind::AddC },
@@ -205,11 +261,14 @@ fn solve_td_tiling(
                         *total,
                         groups,
                     ));
+                    if tilings.len() >= 8 {
+                        return tilings;
+                    }
                 }
             }
         }
     }
-    None
+    tilings
 }
 
 /// Score helper: decode packed index `idx` through the build's own schedule and
@@ -249,23 +308,14 @@ pub fn solve_events(
         Some(t) => t,
         None => return Ok(None),
     };
-    let Some((td_start, td_count, total, groups)) = solve_td_tiling(body, td) else {
+    let tilings = solve_td_tiling(body, td);
+    if tilings.is_empty() {
         #[cfg(feature = "ev_debug")]
         eprintln!("[ev] td tiling failed");
         return Ok(None);
-    };
-    // Flatten: per event index -> (owner row, sample flag)
-    let mut owner = vec![0usize; total as usize];
-    for (r, st, cnt) in &groups {
-        for j in 0..*cnt {
-            let i = st + j;
-            if (i as usize) < owner.len() {
-                owner[i as usize] = *r;
-            }
-        }
     }
     // sample every 3rd event, capped — enough for the boards, cheap to score
-    let sample: Vec<u32> = (0..total).step_by(3).take(240).collect();
+    let sample_of = |total: u32| -> Vec<u32> { (0..total).step_by(3).take(240).collect() };
 
     // base candidates: confirmed anchors inside the accessor, ± the runtime-copy shift
     let mut base_cands: Vec<usize> = Vec::new();
@@ -290,7 +340,6 @@ pub fn solve_events(
     }
     let stride = td.stride as usize; // event rows use their own stride (14); read via b14
     let _ = stride;
-    let ev_stride = 14usize;
 
     let rd32 = |off: usize| -> Option<u32> {
         let b = body.get(off..off + 4)?;
@@ -308,71 +357,113 @@ pub fn solve_events(
             dedupe_chains.push(ch);
         }
     }
+    for til in &tilings {
+    let (td_start, td_count, total, groups) = (&til.0, &til.1, til.2, &til.3);
+    // Flatten: per event index -> owner row
+    let mut owner = vec![0usize; total as usize];
+    for (r, st, cnt) in groups {
+        for j in 0..*cnt {
+            let i = st + j;
+            if (i as usize) < owner.len() {
+                owner[i as usize] = *r;
+            }
+        }
+    }
+    let sample = sample_of(total);
+    for &ev_stride in &[14usize, 10] {
     for &base in &base_cands {
         for chain in &dedupe_chains {
             let mask = |i: u32| -> u32 { chain.eval(i as u64, hdr, &|_, _| 0).unwrap_or(0) as u32 };
-            // --- name column: (col, C) with the best decode rate ---
-            let mut name: Option<(usize, u32, f64)> = None;
+            // --- name column: (col, shape, C) with the best decode rate.
+            // Both accessor shapes occur: (raw ^ mask) ^ C (6.2) and
+            // (raw + C) ^ mask (6.6). ---
+            let mut name: Option<(usize, bool, u32, f64)> = None;
             for col in [0usize, 4] {
-                for &c in &imm32s {
-                    let (ok, tested) = (0usize, sample.len());
-                    let mut good = ok;
-                    for &i in &sample {
-                        let Some(raw) = rd32(base + i as usize * ev_stride + col) else { continue };
-                        let idx = (raw ^ mask(i) ^ c) & 0xFFFF_FFFF;
-                        if dec_ident(body, strsec, sched, idx) {
-                            good += 1;
+                if col + 4 > ev_stride {
+                    continue;
+                }
+                for add_form in [false, true] {
+                    for &c in &imm32s {
+                        let tested = sample.len();
+                        let mut good = 0usize;
+                        for &i in &sample {
+                            let Some(raw) = rd32(base + i as usize * ev_stride + col) else { continue };
+                            let idx = if add_form {
+                                (raw.wrapping_add(c) ^ mask(i)) & 0xFFFF_FFFF
+                            } else {
+                                (raw ^ mask(i) ^ c) & 0xFFFF_FFFF
+                            };
+                            if dec_ident(body, strsec, sched, idx) {
+                                good += 1;
+                            }
                         }
-                    }
-                    let rate = good as f64 / tested.max(1) as f64;
-                    if rate >= 0.9 && name.map(|(_, _, r)| rate > r).unwrap_or(true) {
-                        name = Some((col, c, rate));
+                        let rate = good as f64 / tested.max(1) as f64;
+                        if rate >= 0.9 && name.map(|(_, _, _, r)| rate > r).unwrap_or(true) {
+                            name = Some((col, add_form, c, rate));
+                        }
                     }
                 }
             }
-            let Some((ncol, nxor, nrate)) = name else {
+            let Some((ncol, n_add, nxor, nrate)) = name else {
                 #[cfg(feature = "ev_debug")]
                 eprintln!("[ev] base {base:#x} chain: no name col");
                 continue;
             };
             let tcol = if ncol == 0 { 4 } else { 0 };
-            // --- type column: C by group consistency ---
-            let mut type_xor = None;
+            // --- type column: C by group consistency (same typearr index for
+            // every row of a typeDef). Absent on narrow strides. ---
+            let mut type_hit: Option<(bool, u32)> = None;
             let mut type_best = 0.0;
-            for &c in &imm32s {
-                use std::collections::HashMap;
-                let mut per_group: HashMap<usize, HashMap<u32, u32>> = HashMap::new();
-                for &i in &sample {
-                    if let Some(raw) = rd32(base + i as usize * ev_stride + tcol) {
-                        let v = (raw ^ mask(i) ^ c) & 0xFFFF_FFFF;
-                        *per_group.entry(owner[i as usize]).or_default().entry(v).or_insert(0) += 1;
-                    }
-                }
-                let mut agree = 0usize;
-                let mut seen = 0usize;
-                for (_r, hist) in &per_group {
-                    if let Some((_v, n)) = hist.iter().max_by_key(|(_, n)| **n) {
-                        agree += *n as usize;
-                        seen += hist.len();
-                    }
-                }
-                // require few distinct values per group AND plausible magnitude
-                let cons = agree as f64 / sample.len().max(1) as f64;
-                if cons > type_best && seen <= per_group.len() * 2 {
-                    // plausibility: type indices are small
-                    let v0 = rd32(base + sample[0] as usize * ev_stride + tcol)
-                        .map(|raw| (raw ^ mask(sample[0]) ^ c) & 0xFFFF_FFFF)
-                        .unwrap_or(u32::MAX);
-                    if v0 < 4_000_000 {
-                        type_best = cons;
-                        type_xor = Some(c);
+            if tcol + 4 <= ev_stride {
+                for t_add in [false, true] {
+                    for &c in &imm32s {
+                        use std::collections::HashMap;
+                        let mut per_group: HashMap<usize, HashMap<u32, u32>> = HashMap::new();
+                        for &i in &sample {
+                            if let Some(raw) = rd32(base + i as usize * ev_stride + tcol) {
+                                let v = if t_add {
+                                    (raw.wrapping_add(c) ^ mask(i)) & 0xFFFF_FFFF
+                                } else {
+                                    (raw ^ mask(i) ^ c) & 0xFFFF_FFFF
+                                };
+                                *per_group.entry(owner[i as usize]).or_default().entry(v).or_insert(0) += 1;
+                            }
+                        }
+                        let mut agree = 0usize;
+                        let mut seen = 0usize;
+                        for (_r, hist) in &per_group {
+                            if let Some((_v, n)) = hist.iter().max_by_key(|(_, n)| **n) {
+                                agree += *n as usize;
+                                seen += hist.len();
+                            }
+                        }
+                        // few distinct values per group AND plausible magnitude
+                        let cons = agree as f64 / sample.len().max(1) as f64;
+                        if cons > type_best && seen <= per_group.len() * 2 {
+                            let v0 = rd32(base + sample[0] as usize * ev_stride + tcol)
+                                .map(|raw| {
+                                    if t_add {
+                                        (raw.wrapping_add(c) ^ mask(sample[0])) & 0xFFFF_FFFF
+                                    } else {
+                                        (raw ^ mask(sample[0]) ^ c) & 0xFFFF_FFFF
+                                    }
+                                })
+                                .unwrap_or(u32::MAX);
+                            if v0 < 4_000_000 {
+                                type_best = cons;
+                                type_hit = Some((t_add, c));
+                            }
+                        }
                     }
                 }
             }
-            let Some(txor) = type_xor else { continue };
-            // --- raise: u16 col with the strongest 0xFFFF sentinel majority ---
+            let Some((t_add, tconst)) = type_hit else { continue };
+            // --- raise: u16 col with the strongest 0xFFFF sentinel majority.
+            // Optional: 6.6's 10-byte rows carry no raise column. ---
+            let u16cols: Vec<usize> = if ev_stride >= 14 { vec![8, 10, 12] } else { vec![4, 6] };
             let mut raise: Option<(usize, u16, f64)> = None;
-            for ucol in [8usize, 10, 12] {
+            for ucol in &u16cols {
+                let ucol = *ucol;
                 for shape in 0..2 {
                     for &c in &imm16s {
                         let (mut sent, mut n) = (0usize, 0usize);
@@ -396,9 +487,17 @@ pub fn solve_events(
                     }
                 }
             }
-            let Some((rcol, rconst, _rrate)) = raise else { continue };
-            // --- add (xor-shape) / remove (add-shape) on the two remaining cols ---
-            let rest: Vec<usize> = [8usize, 10, 12].into_iter().filter(|c| *c != rcol).collect();
+            let (rcol, rconst, _rrate, raise_absent) = match raise {
+                Some((rcol, rconst, rrate)) => (rcol, rconst, rrate, false),
+                None if ev_stride < 14 => (0, 0, 0.0, true),
+                None => continue,
+            };
+            // --- add (xor-shape) / remove (add-shape) on the remaining cols ---
+            let rest: Vec<usize> = if raise_absent {
+                u16cols.clone()
+            } else {
+                u16cols.iter().copied().filter(|c| *c != rcol).collect()
+            };
             let mut ar: Option<(usize, u16, usize, u16, u32)> = None;
             for &acol in &rest {
                 for &ca in &imm16s {
@@ -471,15 +570,19 @@ pub fn solve_events(
                 td_count: td_count.clone(),
                 mask_expr: (*chain).clone(),
                 name_off: ncol as u32,
+                name_add: n_add,
                 name_xor: nxor,
                 type_off: tcol as u32,
-                type_xor: txor,
+                type_xor: if t_add { None } else { Some(tconst) },
+                type_add: if t_add { tconst } else { 0 },
+                type_absent: false,
                 add_off: acol as u32,
                 add_xor: ca,
                 remove_off: bcol as u32,
                 remove_add: cb,
                 raise_off: rcol as u32,
                 raise_xor: rconst,
+                raise_absent,
                 total_events: total,
                 name_rate: nrate,
                 base_shift: 0,
@@ -488,6 +591,8 @@ pub fn solve_events(
                 best = Some((nrate, base, sol));
             }
         }
+        }
+    }
     }
     let Some((_, win_base, mut sol)) = best else { return Ok(None) };
     // Anchor the base back to its header slot: the shift is decided by the
@@ -551,15 +656,11 @@ mod tests {
         let td = crate::profile_splice::solve_typedef(&exe, &gm, dv).expect("td solve").expect("td");
         let body = &gm[0x210..];
         let r = solve_td_tiling(body, &td);
-        let (s, c, total, groups) = match r {
-            Some(x) => x,
-            None => {
-                panic!("td tiling failed: td base {:#x} stride {} rows {}", td.base, td.stride, td.rows);
-            }
+        let tl = solve_td_tiling(body, &td);
+        let Some((s, c, total, groups)) = tl.iter().find(|(_, _, t, g)| *t == 565 && g.len() == 195) else {
+            panic!("td tiling failed: td base {:#x} stride {} rows {} candidates {}", td.base, td.stride, td.rows, tl.len());
         };
         println!("start col {s:?} count col {c:?} total {total} types {}", groups.len());
-        assert_eq!(total, 565);
-        assert_eq!(groups.len(), 195);
         assert_eq!(s.offset, 44);
         assert_eq!(c.offset, 59);
     }
@@ -596,10 +697,39 @@ mod tests2 {
         println!("alt start 0x14044A7A0 imm32 contains 0x2c9ff31d: {}", i32s2.contains(&0x2c9ff31d));
         let r = solve_events(&img, &exe, &gm, dv, 0x14044A7AF, &chains, Some(&td));
         match r {
-            Ok(Some(s)) => println!("SOLVED: name@{} ^{:#x} rate {:.2} type@{} ^{:#x} add@{} ^{:#x} rem@{} +{:#x} raise@{} ^{:#x} base shift {:+} defs hdr_off {} add {:?} direct {:?}",
-                s.name_off, s.name_xor, s.name_rate, s.type_off, s.type_xor, s.add_off, s.add_xor, s.remove_off, s.remove_add, s.raise_off, s.raise_xor, s.base_shift, s.defs.hdr_off, s.defs.add, s.defs.direct),
+            Ok(Some(s)) => println!("SOLVED: name@{} add={} ^{:#x} rate {:.2} type@{} xor {:?} addc {} absent={} add@{} ^{:#x} rem@{} +{:#x} raise@{} ^{:#x} absent={} shift {:+} defs hdr_off {} add {:?} direct {:?}",
+                s.name_off, s.name_add, s.name_xor, s.name_rate, s.type_off, s.type_xor, s.type_add, s.type_absent, s.add_off, s.add_xor, s.remove_off, s.remove_add, s.raise_off, s.raise_xor, s.raise_absent, s.base_shift, s.defs.hdr_off, s.defs.add, s.defs.direct),
             Ok(None) => println!("SOLVED: none"),
             Err(e) => println!("SOLVED: err {e}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests3 {
+    use super::*;
+    #[test]
+    fn diagnoses_66_events() {
+        let Ok(gm) = std::fs::read("/home/yangsanyi/gire/sample/gi/6.6.0/YuanShen_Data/Managed/Metadata/global-metadata.dat") else { eprintln!("[skip] dat"); return; };
+        let Ok(exe) = std::fs::read("/home/yangsanyi/gire/sample/gi/6.6.0/YuanShen.exe") else { eprintln!("[skip] exe"); return; };
+        let derived = crate::derive::cipher::derive_build(&exe, &gm).expect("derive");
+        let dv = derived.as_ref().expect("dv");
+        let td = crate::profile_splice::solve_typedef(&exe, &gm, dv).expect("td").expect("td");
+        let body = &gm[0x210..];
+        let tl = solve_td_tiling(body, &td);
+        println!("td tilings: {}", tl.len());
+        for (s_, c_, t_, g_) in tl.iter().take(4) {
+            println!("  start@{} count@{} total {} types {}", s_.offset, c_.offset, t_, g_.len());
+        }
+        // anchors near the accessor region (true accessor code ~0x1404AD0A1)
+        for a in &dv.anchors {
+            if a.site >= 0x1404ACC00 && a.site < 0x1404AD300 {
+                println!("anchor site={:#x} hdr_off={} imm={:#x} confirmed={} resolve={:?}", a.site, a.hdr_off, a.imm, a.confirmed, a.resolve(&dv.header));
+            }
+        }
+        let img = crate::pe::Image::parse(&exe).expect("pe");
+        let (i32s, i16s) = scan_immediates(&img, &exe, 0x1404ACC4F, 0x600);
+        println!("imm32 has 0xae502577: {}  imm16 has 0xc5ab/0x32dd/0x71: {}/{}/{}",
+            i32s.contains(&0xae502577), i16s.contains(&0xc5ab), i16s.contains(&0x32dd), i16s.contains(&0x71));
     }
 }
