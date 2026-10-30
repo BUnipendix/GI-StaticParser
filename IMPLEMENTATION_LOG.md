@@ -6067,3 +6067,20 @@ param 差分零命中后对提取层做了系统排查，param 访问器仍未�
 **否定记录（防重查）**：0x140449F1B 簇=普通 thunk；patcher 引用搜索=0（访问器常数区无直接引用）；六族 C 交集在 type 列（rows[0,200)）全空→当时用的 mask 错（后证实是符号扩展）；先验名全 body 扫描（chain mask + 12 先验名）零命中→当时 mask 错；hdr+0x204 读取点全镜像仅访问器一处。
 
 **剩余墙（下一轮入口）**：startup-metadata.dat 头格式（magic 0x77 结构）与加载器对 0x144C7BAE0 区描述符表的构建代码——事件名=tag 选区→startup 区密钥/基座→id16 索引。引擎需新增：movsx16 eventStart 解码语义 + tag/name-id 行格式 + startup 字符串区分发。td/event 结构常数已全部就位（第 3 条），只差最后一段字符串映射。
+
+## R91b（2026-10-30）：startup-metadata 破解——映像表公式全对、通用展开器清单、事件名 key 机制定性（不是需求，方案记录）
+
+**startup-metadata.dat（3.4MB）= 原始字节可读**（无需整体解密，逐表常数即可）。两个预填循环公式全部验证（26/26 真程序集名）：
+
+- **loop A**（0x14046B124，映像 .dll 名）：表 = startup + (hdr[0x1F8] ^ 0x60EBA0B5)，stride 40，值 = (u32@+0x1C ^ 0x4B258FED) − ((chainA(i) ^ 0x52F40C2A) + 0x7416A20D)，chainA(i) = (i×0x4DED9913A900 + 0x2B8871EB1FE60) >> 0x13。解出 mscorlib.dll/Mono.Security.dll/... 14/14。
+- **loop B**（0x14046B57D，映像名+程序集名）：表 = startup + (hdr[0x7C] + 0x8ADC223F)，stride 44；+0x14 = (raw − esi(i)) + 0xB9B677CD（SubMaskAddC，映像名 12/12）；+0x1C = (raw ^ 0x7CF8E88C) − esi(i)（XorCSubMask，全空=可选列）。esi(i) = ((((i×0x730A) ^ 0x6432543B) × 0x797716F3) >> 0xA ^ 0x7B2EB5AA) × 0x115BCE95 ^ 0x3F27C886。表行数=映像数（行 100+ 失效）。
+
+**decode_str（0x140444D10）架构定案**：EnterCriticalSection → splitmix64(idx) 哈希 → swiss-table 缓存探测（r9/r10/r8 = 桶数组/位图/容量，decode_str 内部懒初始化+扩容）→ miss：len = idx>>24、off = idx & 0xFFFFFF、key = cipher(off)、src = body + strsec + off（**唯一源路径，无 tag 分发**）→ 解码进 arena 并缓存。hit：char* = arena全局 + cached32。
+
+**strsec/body 基座 +8 细节**：decode_str 计算 strsec = hdr[0x50] + 0x84DD7CBE = 0x201CAD0（blob 字节），而引擎验证可用的 strsec = 0x201CAC8——差 8。初始化器 `add rsi, 0x208`（body = handle+0x208）vs 引擎 body = dat[0x210:]——两处 +8 相互抵消（同一绝对地址），机制待钉（运行时 hdr[0x50] 可能 ≠ blob[0x50]，0x7D244E0A 不在 blob 中）。**教训：基座差 8 可能源基 vs 数据基约定不同，两处偏移要联动核对。**
+
+**通用展开器模式清单（全 .text 普查）**：全局表 expander = base = body + (hdr[slot] op imm)，stride N，名字列 = (raw op C) op chain(i) → decode_str(packed)。已归档：
+- 0x14045DBxx：body + (hdr[0xC0] ^ 0x6EE9F20B)，stride 24，name = (u32@+4 + 0xB974F311) ^ chain(i)，chain = (((i×0x3FAE) ^ 0x6692E143) × 0x57D2FDBE ^ 0x1DF3DBC1) + 0x162E4581。
+- **0x14047Bxxx（kind 分发通用展开器）**：表 8 字节行，64 位值 = (raw64 ^ 0x45FC3FA258DC71F8) + chain(i) − 0x77C127A9，chain = (((i×0xC6DE + 0x5D73D0D3) ^ 0x2ADF41D7) × 0x37D064A2) ^ 0xFFFFFFFFBC3AA1B5（此符号扩展合法，bit31=1）；lo32 按 kind byte（0=无/2=decode_str/3=typearr）分发，**hi32 直接 decode_str（shr rcx,0x20）**——64 位行拆双字段是通行形态。
+
+**事件名 key 机制定性（未钉死的最后一环）**：事件行 u32@4 = (id16<<16)|tag16（tag=0xCE7A 全表常数）；accessor 传 decode_str 的 key 低 16 位恒定 → **不可能是 packed idx**（off 低 16 恒定 ⇒ 256 个 off 上限 < 564 个不同名）；且 (off,len) 对全局堆与 startup 文件双源解码全乱码。⇒ **key = 缓存键，预填在加载期完成**（直写缓存或经未定位的循环）；startup 头部 (a,b) 对表（a≈td 数、b 3.4 万值）已排除 (td,id16) 与 id16∈b 两种假设（80/565 低于随机）。下轮入口：①0x140458990 的 handle 语义（map 查找→注册侧）钉死 body 基座；②找写缓存键数组的预填循环（键 (id16<<16)|tag 的插入点）；③kind 分发展开器集群（0x14047Bxxx）的其它表实例。
