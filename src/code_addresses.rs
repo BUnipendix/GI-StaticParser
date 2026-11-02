@@ -173,7 +173,7 @@ mod tests {
     #[ignore = "needs MHY_SAMPLE_EXE / MHY_SAMPLE_DAT"]
     fn counts_match_reference_arrays() {
         let Some((exe, dat)) = sample_meta() else { return };
-        let m = Meta::load(&exe, &dat, crate::derive::layout71::gen71()).expect("load");
+        let m = Meta::load(&exe, &dat, crate::derive::seed_profile::seed_profile()).expect("load");
         let (addrs, st) = collect(&m);
         eprintln!("addresses: {st:?} (merged {})", addrs.len());
         assert_eq!(st.generic_ptrs, 12_827);

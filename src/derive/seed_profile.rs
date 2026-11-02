@@ -1,5 +1,5 @@
-//! The 7.1-generation profile, now shipped as DATA (R82): every constant
-//! lives in `assets/profile-7.1.0.json`, loaded here once. The historical
+//! The built-in seed profile (a full worked example, shipped as data): every constant
+//! lives in `assets/seed-profile.json`, loaded here once. The historical
 //! in-code constant table was retired because a data-driven dumper should not
 //! embed per-build constants in code — a profile file is the only carrier.
 //!
@@ -10,13 +10,13 @@
 use super::profile::Profile;
 
 /// The JSON export of the retired in-code table (generated 2026-10-27 from the
-/// last gen71() build; the two are checked byte-for-byte by
-/// `profile_matches_retired_gen71` in the derive tests).
-pub const PROFILE_71_JSON: &str = include_str!("../../assets/profile-7.1.0.json");
+/// last seed_profile() build; the two are checked byte-for-byte by
+/// `profile_matches_retired_seed_profile` in the derive tests).
+pub const SEED_PROFILE_JSON: &str = include_str!("../../assets/seed-profile.json");
 
 /// The 7.1 profile from the data file. Panics only on a corrupted asset.
-pub fn gen71() -> Profile {
-    serde_json::from_str(PROFILE_71_JSON).expect("assets/profile-7.1.0.json is valid JSON")
+pub fn seed_profile() -> Profile {
+    serde_json::from_str(SEED_PROFILE_JSON).expect("assets/seed-profile.json is valid JSON")
 }
 
 #[cfg(test)]
@@ -27,7 +27,7 @@ mod tests {
     /// optional field intact (anchor regression for the retirement).
     #[test]
     fn profile_json_loads_fully() {
-        let p = gen71();
+        let p = seed_profile();
         assert_eq!(p.td_stride, 70);
         assert_eq!(p.td_name.offset, 0x14);
         assert_eq!(p.td_name.c, 0xE811_F779);

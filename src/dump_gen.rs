@@ -44,8 +44,9 @@ pub struct Md {
 /// parameter table is seed data on builds whose constants rotated, and those
 /// decode to byte garbage (7.2).
 fn is_param_like(n: &str) -> bool {
-    !n.is_empty()
-        && n.len() <= 96
+    // the empty string is a legitimate decode (anonymous parameter) and must
+    // pass through unchanged to stay byte-identical with the oracle
+    n.len() <= 96
         && n.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '<' || ch == '>')
 }
 
@@ -1197,7 +1198,7 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
         }
         // Il2CppDumper section structure: Fields / Properties / Constructors / Methods.
         // 7.1: the REAL property-definition table is decoded from the metadata body
-        // (profile.property_defs, see src/derive/layout71.rs for the disassembly evidence):
+        // (profile.property_defs, see src/derive/seed_profile.rs for the disassembly evidence):
         // the typeDef row gives propertyStart/propertyCount and each 10-byte property row
         // carries the packed name plus per-type getter/setter method indexes. Rows are emitted
         // in metadata (declaration) order. Generations without the table fall back to the old

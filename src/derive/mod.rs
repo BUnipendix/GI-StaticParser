@@ -6,7 +6,7 @@ pub mod anchor;
 pub mod cipher;
 pub mod constpool;
 pub mod engine;
-pub mod layout71;
+pub mod seed_profile;
 pub mod profile;
 pub mod shapes;
 pub mod tables;

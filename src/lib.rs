@@ -29,7 +29,6 @@ pub mod il2cpp_api;
 pub mod mem;
 pub mod metadata;
 pub mod method_meta;
-pub mod methods_71;
 pub mod pe;
 pub mod script_json;
 pub mod td_dump;

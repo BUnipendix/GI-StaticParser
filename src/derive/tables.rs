@@ -28,7 +28,7 @@
 //! ## Measured on 7.1.0 (base 0x48F3FD8)
 //!
 //! The scan over stride 4..0x200 x every column offset leaves **2** survivors; the
-//! winner reproduces `layout71::gen71()` exactly:
+//! winner reproduces `seed_profile::seed_profile()` exactly:
 //!
 //! | recovered | profile constant |
 //! |---|---|
@@ -1268,7 +1268,7 @@ fn recovers_640_typedef_table_and_names() {
 mod tests {
     use super::*;
 
-    /// 7.1.0 ground truth: the recovery must reproduce `layout71::gen71()` exactly.
+    /// 7.1.0 ground truth: the recovery must reproduce `seed_profile::seed_profile()` exactly.
     #[test]
     #[ignore = "needs MHY_SAMPLE_DAT (7.1.0)"]
     fn recovers_71_typedef_table() {

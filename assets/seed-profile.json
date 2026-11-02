@@ -376,5 +376,26 @@
   "xor2": 271116917,
   "add": 1756591857,
   "xor3": 1334224675
+ },
+ "generic_tables": {
+  "gp_slot_hdr_off": 372,
+  "gp_slot_add": 3469864369,
+  "gp_stride": 14,
+  "gp_value_off": 12,
+  "gp_row_add": 43234,
+  "gp_mask_mul1": 8006277775009346581,
+  "gp_mask_add1": 3532542027828170121,
+  "gp_mask_shift": 22,
+  "gc_slot_hdr_off": 200,
+  "gc_slot_xor": 148308387,
+  "gc_stride": 16,
+  "gc_data_add": 2396956393,
+  "gc_owner_xor": 1549153547,
+  "mask2_mul1": 33159,
+  "mask2_xor1": 1121296784,
+  "mask2_mul2": 2066550296,
+  "mask2_add1": 3069185032,
+  "mask2_xor2": 2050893133,
+  "mask2_add2": 1901418054
  }
 }

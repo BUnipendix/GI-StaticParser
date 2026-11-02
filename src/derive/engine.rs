@@ -128,58 +128,95 @@ impl<'a> Meta<'a> {
 
         let (typearr, typearr_len) =
             locate_typearr(exe, &rdata).ok_or_else(|| anyhow!("typearr not located"))?;
-        // Generic-parameter table (docs/re/71-generic-params.md):
-        //   base  = body + (hdr[0x174] + 0xCED1EDB1)   (14-byte rows, 7.1: 0xDF8708)
-        //   row i is XOR-masked with  ((i*0x6F1C0337A0897415 + 0x31061C4212D60D89) >> 22)
-        // Count is not stored in the header; the highest VAR/MVAR index referenced by typearr is
-        // 5,795, so the table holds 5,796 entries (the contiguous run ends exactly there).
-        let gp_base = {
-            let h = i32::from_le_bytes(header_bytes[0x174..0x178].try_into().unwrap());
-            h.wrapping_add(0xCED1_EDB1u32 as i32) as u32 as usize
-        };
-        let mut gp_count = 0usize;
-        for i in 0..typearr_len {
-            let Some(b) = exe.get(typearr + 16 * i..typearr + 16 * i + 16) else { break };
-            let kind = b[0xA];
-            if kind == 0x13 || kind == 0x1E {
-                let data = u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize;
-                gp_count = gp_count.max(data + 1);
-            }
-        }
-        // Encrypted 16-byte generic-container table (7.1: slot 0xC8 = body+0x3C479D8).
-        // container(V).data + 0x8EDEA6E9 == mask2(V) marks a *type* owner; then
-        // ownerTdi = container(V).attrs ^ (data+0x8EDEA6E9) ^ 0x5C56350B.
-        let gc_base = {
-            let h = i32::from_le_bytes(header_bytes[0xC8..0xCC].try_into().unwrap());
-            (h ^ 0x8D70_1A3) as u32 as usize
-        };
-        let gp_mask = |gpi: u32| -> u32 {
-            ((gpi as u64)
-                .wrapping_mul(0x6F1C_0337_A089_7415)
-                .wrapping_add(0x3106_1C42_12D6_0D89)
-                >> 22) as u32
-        };
-        let container_mask2 = |v: u32| -> u32 {
-            let mut r = (v.wrapping_mul(0x8187) ^ 0x42D5_A190).wrapping_mul(0x7B2D_0E18);
-            r = r.wrapping_add(0xB6F0_0C08);
-            r ^= 0x7A3E_254D;
-            r.wrapping_add(0x7155_5646)
-        };
+        // Generic-parameter / generic-container tables: ALL constants come from
+        // the profile (`generic_tables`). Builds without them render no generic
+        // parameters (the tables stay unrecovered; nothing is faked).
+        let (gp_base, gp_count, gc_base, gp_mask, container_mask2, gp_row_add, gp_value_off, gp_stride, gc_stride, gc_data_add, gc_owner_xor) =
+            match &profile.generic_tables {
+                Some(g) => {
+                    let gp_base = {
+                        let h = i32::from_le_bytes(
+                            header_bytes[g.gp_slot_hdr_off as usize..g.gp_slot_hdr_off as usize + 4]
+                                .try_into()
+                                .unwrap(),
+                        );
+                        h.wrapping_add(g.gp_slot_add as i32) as u32 as usize
+                    };
+                    let mut gp_count = 0usize;
+                    for i in 0..typearr_len {
+                        let Some(b) = exe.get(typearr + 16 * i..typearr + 16 * i + 16) else { break };
+                        let kind = b[0xA];
+                        if kind == 0x13 || kind == 0x1E {
+                            let data = u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize;
+                            gp_count = gp_count.max(data + 1);
+                        }
+                    }
+                    let gc_base = {
+                        let h = i32::from_le_bytes(
+                            header_bytes[g.gc_slot_hdr_off as usize..g.gc_slot_hdr_off as usize + 4]
+                                .try_into()
+                                .unwrap(),
+                        );
+                        ((h as u32) ^ g.gc_slot_xor) as usize
+                    };
+                    let mul1 = g.gp_mask_mul1;
+                    let add1 = g.gp_mask_add1;
+                    let shift = g.gp_mask_shift;
+                    (
+                        gp_base,
+                        gp_count,
+                        gc_base,
+                        Box::new(move |gpi: u32| -> u32 {
+                            ((gpi as u64).wrapping_mul(mul1).wrapping_add(add1) >> shift) as u32
+                        }) as Box<dyn Fn(u32) -> u32>,
+                        {
+                            let (m1, x1, m2, a1, x2, a2) = (
+                                g.mask2_mul1, g.mask2_xor1, g.mask2_mul2, g.mask2_add1, g.mask2_xor2, g.mask2_add2,
+                            );
+                            Box::new(move |v: u32| -> u32 {
+                                let mut r = (v.wrapping_mul(m1) ^ x1).wrapping_mul(m2);
+                                r = r.wrapping_add(a1);
+                                r ^= x2;
+                                r.wrapping_add(a2)
+                            }) as Box<dyn Fn(u32) -> u32>
+                        },
+                        g.gp_row_add,
+                        g.gp_value_off as usize,
+                        g.gp_stride as usize,
+                        g.gc_stride as usize,
+                        g.gc_data_add,
+                        g.gc_owner_xor,
+                    )
+                }
+                None => (
+                    0,
+                    0,
+                    0,
+                    Box::new(|_gpi: u32| 0u32) as Box<dyn Fn(u32) -> u32>,
+                    Box::new(|_v: u32| 0u32) as Box<dyn Fn(u32) -> u32>,
+                    0u16,
+                    0usize,
+                    14usize,
+                    16usize,
+                    0u32,
+                    0u32,
+                ),
+            };
         let mut generic_params_by_type: std::collections::HashMap<u32, Vec<u32>> =
             std::collections::HashMap::new();
         let mut generic_params_by_method: std::collections::HashMap<u32, Vec<u32>> =
             std::collections::HashMap::new();
         for gpi in 0..gp_count as u32 {
-            let at = gp_base + 14 * gpi as usize + 0xC;
+            let at = gp_base + gp_stride * gpi as usize + gp_value_off;
             let Some(row) = body_buf.get(at..at + 2) else { break };
             let raw = u16::from_le_bytes([row[0], row[1]]);
-            let v = raw.wrapping_add(0xA8E2) ^ (gp_mask(gpi) as u16);
-            let entry = gc_base + 16 * v as usize;
-            let Some(ent) = body_buf.get(entry..entry + 16) else { continue };
+            let v = raw.wrapping_add(gp_row_add) ^ (gp_mask(gpi) as u16);
+            let entry = gc_base + gc_stride * v as usize;
+            let Some(ent) = body_buf.get(entry..entry + gc_stride) else { continue };
             let data = u32::from_le_bytes([ent[0], ent[1], ent[2], ent[3]]);
             let attrs = u32::from_le_bytes([ent[12], ent[13], ent[14], ent[15]]);
-            let x = data.wrapping_add(0x8EDE_A6E9);
-            let owner = attrs ^ x ^ 0x5C56_350B;
+            let x = data.wrapping_add(gc_data_add);
+            let owner = attrs ^ x ^ gc_owner_xor;
             if x == container_mask2(v as u32) {
                 // VAR: owner is a typeDef index.
                 generic_params_by_type.entry(owner).or_default().push(gpi);
@@ -1248,7 +1285,7 @@ mod tests {
     fn generic_param_names_sample() {
         let exe = std::fs::read(std::env::var("MHY_SAMPLE_EXE").expect("MHY_SAMPLE_EXE")).unwrap();
         let dat = std::fs::read(std::env::var("MHY_SAMPLE_DAT").expect("MHY_SAMPLE_DAT")).unwrap();
-        let m = Meta::load(&exe, &dat, crate::derive::layout71::gen71()).expect("load");
+        let m = Meta::load(&exe, &dat, crate::derive::seed_profile::seed_profile()).expect("load");
         assert_eq!(m.gp_count, 5_796);
         assert_eq!(m.generic_param_name(0).as_deref(), Some("T"));
         let names: Vec<String> = (0..m.gp_count as u32)

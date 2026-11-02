@@ -298,9 +298,9 @@ enum Cmd {
     },
     /// Generation dump pipeline: full dump.cs + script.json via the derived profile.
     /// Version-generic: behaviour is fully profile-driven; the shipped default profile
-    /// is the 7.1-measured one (layout71). `dump71` stays as a deprecated alias until
-    /// the multi-version profile derivation lands (REQUIREMENTS R9).
-    #[clap(name = "dump-gen", alias = "dump71")]
+    /// is the 7.1-measured one (seed_profile). `dump71` stays as a deprecated alias until
+    /// retired per-version dump path.
+    #[clap(name = "dump-gen")]
     DumpGen {
         #[arg(long)]
         exe: String,
@@ -326,19 +326,6 @@ enum Cmd {
         /// Export structured type/field/method data (JSONL) for the DummyDll generator.
         #[arg(long)]
         dummy_out: Option<String>,
-    },
-    /// Milestones (e)/(f): emit dump.cs. With --only, restrict to given TypeDefIndices.
-    Dump {
-        #[arg(long)]
-        exe: String,
-        #[arg(long)]
-        metadata: String,
-        /// Output path for dump.cs.
-        #[arg(short, long, default_value = "dump.cs")]
-        out: String,
-        /// Comma-separated TypeDefIndices to emit (milestone e). Omit for the full dump (f).
-        #[arg(long, value_delimiter = ',')]
-        only: Option<Vec<usize>>,
     },
 }
 
@@ -500,7 +487,6 @@ fn main() -> Result<()> {
                 attributes_out.as_deref(),
                 dummy_out.as_deref(),
             ),
-        Cmd::Dump { exe, metadata, out, only } => dump_cmd(&exe, &metadata, &out, only.as_deref()),
     }
 }
 
@@ -1021,7 +1007,7 @@ fn dump_gen_cmd(
     let gm = std::fs::read(metadata)?;
     let mut profile: Profile = match profile_in {
         Some(p) => serde_json::from_str(&std::fs::read_to_string(p)?)?,
-        None => static_mhy_dumper::derive::layout71::gen71(),
+        None => static_mhy_dumper::derive::seed_profile::seed_profile(),
     };
 
     // Constant-free cipher cross-check. The profile's table constants are only valid
@@ -1153,37 +1139,6 @@ fn dump_gen_cmd(
     w.flush()?;
     wj.flush()?;
     println!("wrote {out} + {json_path}: {nt} types, {nf} fields, {nm} methods");
-    Ok(())
-}
-
-/// Milestones (e)/(f): emit dump.cs.
-fn dump_cmd(exe: &str, metadata: &str, out: &str, only: Option<&[usize]>) -> Result<()> {
-    let ga = std::fs::read(exe)?;
-    let gm = std::fs::read(metadata)?;
-    let md = static_mhy_dumper::decrypt::file::load(&ga, &gm)?;
-    if !md.tables.tables_ok {
-        // current-generation path: MethodDefinition table + method-pointer array
-        let json_path = match out.rfind('/') {
-            Some(p) => format!("{}script.json", &out[..=p]),
-            None => "script.json".to_string(),
-        };
-        let f = std::fs::File::create(out)?;
-        let mut w = std::io::BufWriter::new(f);
-        let fj = std::fs::File::create(&json_path)?;
-        let mut wj = std::io::BufWriter::new(fj);
-        let (nt, nm_out, nm_total) = static_mhy_dumper::methods_71::dump_full(&md, &mut w, &mut wj)?;
-        w.flush()?;
-        wj.flush()?;
-        println!("wrote {out} + {json_path}: {nt} types, {nm_out} methods emitted (of {nm_total})");
-        return Ok(());
-    }
-    let dm = static_mhy_dumper::metadata::DecodedMetadata::new(&md);
-    let f = std::fs::File::create(out)?;
-    let mut w = std::io::BufWriter::new(f);
-    let (nt, nf, nm) = static_mhy_dumper::dump::dump_all(&dm, &mut w, only)?;
-    use std::io::Write;
-    w.flush()?;
-    println!("wrote {out}: {nt} types, {nf} fields, {nm} methods");
     Ok(())
 }
 
@@ -1422,7 +1377,7 @@ fn auto_tables_cmd(
         let seedp = match seed_profile_path {
             Some(sp) => static_mhy_dumper::profile_splice::load_seed_profile(sp)
                 .map_err(|e| anyhow::anyhow!("seed profile {sp}: {e}"))?,
-            None => static_mhy_dumper::derive::layout71::gen71(),
+            None => static_mhy_dumper::derive::seed_profile::seed_profile(),
         };
         let derived = static_mhy_dumper::derive::cipher::derive_build(&d, &md)?;
         // structural typeDef solve: needs no seed semantics, only the target

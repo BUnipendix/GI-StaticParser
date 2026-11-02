@@ -5,21 +5,6 @@
 //! structural validators. All results are deterministic (known-plaintext or
 //! self-consistency verified), never guesses.
 
-/// Per-row index mask used by the 7.1 methodDef table (`pmask`, shape "m71").
-pub fn pmask_71(i: u32) -> u32 {
-    let mut v = ((i as u64) * 0x4E94) ^ 0x62D8_B7B8;
-    v = v.wrapping_mul(0x7572_748A).wrapping_add(0x1F4D_9EEA);
-    v ^= 0x6E89_31D6;
-    ((v as u32).wrapping_mul(0xC6FC_9C8B)) as u32
-}
-
-/// Per-row index mask of the 7.0 methodDef table (shape library entry "m70").
-pub fn pmask_70(i: u32) -> u32 {
-    let v = ((i as u64).wrapping_mul(0x11C1_79E1_B7D6).wrapping_add(0x1EF8_D469_61E5_672) & 0xFFFF_FFFF_FFFF_FFFF) >> 16;
-    let v = v.wrapping_mul(0x445E_9994) & 0xFFFF_FFFF_FFFF_FFFF;
-    let v = (v >> 9) as u32;
-    v.wrapping_mul(0x613D_19A0)
-}
 
 /// How a stored u32 column value de-obfuscates to plaintext.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

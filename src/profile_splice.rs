@@ -1470,14 +1470,14 @@ mod tests {
     }
 
     fn seed_profile() -> Profile {
-        crate::derive::layout71::gen71()
+        crate::derive::seed_profile::seed_profile()
     }
 
     /// The str semantic inversion: 7.1 seed str {slot 0x150, add, 0xC8542DD2}
-    /// must land on layout71's own str_hdr_off/str_sub — the profile and the
+    /// must land on seed_profile's own str_hdr_off/str_sub — the profile and the
     /// semantic describe the same loader idiom in two notations.
     #[test]
-    fn str_semantic_matches_layout71() {
+    fn str_semantic_matches_seed_profile() {
         let mut report = TransferReport {
             target_exe: String::new(),
             semantics: Default::default(),
@@ -1490,7 +1490,7 @@ mod tests {
         assert_eq!(p.str_hdr_off, 0x150);
         assert_eq!(p.str_sub, 0x37AB_D22E);
         assert!(m.solved.iter().any(|s| s.contains("str_hdr_off")));
-        // seed profile baseline: layout71 says the same thing
+        // seed profile baseline: seed_profile says the same thing
         assert_eq!(seed_profile().str_sub, 0x37AB_D22E);
     }
 

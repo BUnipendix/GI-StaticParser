@@ -400,8 +400,40 @@ impl StartupNameTable {
     }
 }
 
+/// One build's generic-parameter and generic-container tables (RECIPE §gp).
+/// All constants come from the profile; the engine has no built-in values.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GenericTables {
+    pub gp_slot_hdr_off: u32,
+    /// base = body + (hdr[slot] + add)
+    pub gp_slot_add: u32,
+    pub gp_stride: u32,
+    pub gp_value_off: u32,
+    pub gp_row_add: u16,
+    pub gp_mask_mul1: u64,
+    pub gp_mask_add1: u64,
+    pub gp_mask_shift: u32,
+    pub gc_slot_hdr_off: u32,
+    /// base = body + (hdr[slot] ^ xor)
+    pub gc_slot_xor: u32,
+    pub gc_stride: u32,
+    pub gc_data_add: u32,
+    pub gc_owner_xor: u32,
+    pub mask2_mul1: u32,
+    pub mask2_xor1: u32,
+    pub mask2_mul2: u32,
+    pub mask2_add1: u32,
+    pub mask2_xor2: u32,
+    pub mask2_add2: u32,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Profile {
+    /// Generic-parameter / generic-container table constants, as data. `None`
+    /// (or absent) disables generic rendering for the build — the engine no
+    /// longer carries any built-in gp/gc constants.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generic_tables: Option<GenericTables>,
     /// String-key schedule, **as data**. When present it supersedes the legacy
     /// `str_m1..str_m4` triple, and it is the only form that can describe the
     /// two-stage 5-constant generations (7.0.0 / 6.4.0 complete only after the
