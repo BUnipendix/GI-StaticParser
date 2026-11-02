@@ -4,3 +4,10 @@
 
 # Input binaries (game files) — not redistributable.
 /Original
+
+# Local-only development notes and scratch tools (never published).
+/IMPLEMENTATION_LOG.md
+/REQUIREMENTS.md
+/PLAN-auto-derive.md
+/docs
+/tools

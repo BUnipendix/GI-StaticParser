@@ -14,7 +14,7 @@ use crate::mem::Buffer;
 /// an offset *within the body buffer*: `body + (i32(header+OFF) - SUB)` or `body + (u32(header+OFF)
 /// ^ XOR)`.
 mod hdr {
-    pub const STRINGS: (usize, i64) = (272, 1426623823);
+    pub const STRINGS: (usize, i64) = (0x150, 0x37AB_D22E as i64);
     pub const PARAMS: (usize, i64) = (420, 178973881);
     pub const FIELD_DEFS: (usize, i64) = (468, 48572191);
     pub const FIELD_OFFS: (usize, i64) = (20, 1964484308);

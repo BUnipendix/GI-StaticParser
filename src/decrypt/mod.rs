@@ -29,6 +29,9 @@ pub struct Metadata {
 /// image base for RVA math. Resolved by [`file::load`] from the static pointer chains.
 #[derive(Clone, Copy, Debug)]
 pub struct Tables {
+    /// false = the static pointer-chain anchors did not resolve for this build
+    /// (per-build RE pending); typearr/methodptrs-dependent output is invalid.
+    pub tables_ok: bool,
     pub image_base: u64,
     /// Il2CppType array (stride 16; kind@+0xA, data@+0). File offset into game_assembly.
     pub typearr: usize,
