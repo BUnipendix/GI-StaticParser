@@ -77,3 +77,12 @@
 - **已验证的替代路径**：R103 的手工 .upx0 逆向已提取全套 gc72 常数（gc_base=hdr[0x140]^0x649E2FD4、七步 mask 链），通过 profile.prev.json carry-forward 机制注入 auto-dump。二次运行 extends 90.8%。
 - **当前 auto-dump 产出**（无 gc72）：extends 62%，类型判定 ✓，名字 ✓。gc72 需要 .upx0 消费函数的精确逆向（已有完整常数）。
 - **下轮入口**：①改进 derive_gc72 的模式匹配（用 ×14 而非 ×16 锚、放宽寄存器约束、用指令序列而非单条匹配）；②或接受 gc72 为半自动步骤（.upx0 分析脚本 + profile 注入）。
+
+## R108 诊断（2026-11-04）：方法签名 99.5% object 根因分析（不是需求，方案记录）
+
+- **根因**：md_ret_type 列 seed 值（AddCSubMask2 @offset 0, c=3857596545）在 7.2 上失效 → 解码出垃圾 Il2CppType 索引 → type_name 回退 object。
+- **7.2 方法表参数**：md_stride=26、md_rows=741013、md_base=hdr[0xB0]^0x51324A1F 区域（derive 确认锚）。md_name 已解（GenSubMaskAddC @8）、md_param_start 已解（GenSubMaskAddC @4）、md_param_count 已解（GenCountXorSub8 @24）。
+- **方法表 mask**：md_mask_expr = (r9×5689 ^ 1577173051) + 1183080060986543307 + 477379137638038260（Gen 链）+ md_pmask（6 步固定形状链：×20116 ^ 1658369976 × 1970435210 + 525180650 ^ 1854484950 × 3338443915）。
+- **methodStart 列**：td_method_start = XorC c=1522241981 @offset 12，methodStart(0)=0xFFFFFFFF（<Module> 无方法 ✓）。
+- **求解入口**：md_ret_type 在 26 字节行的 u32 候选 offset = {0, 12, 16, 20}（排除已解的 4=param_start、8=name、24=param_count byte）。求解需要：①计算 md_mask(i)；②对每个 offset 尝试已知 shape（XorC/AddC/XorCSubMask 等）× C 候选；③判板 = 解码值 < typearr_len（690935）+ kind 多样性。
+- **下一轮精确定位**：①用 methodStart 列定位特定类型的 md 行（如 Locale 的 GetText 方法）；②已知 GetText 返回 String → 找到 String 的 typearr 索引 → 反推 C。
