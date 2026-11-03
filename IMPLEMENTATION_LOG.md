@@ -64,3 +64,9 @@
 - **7.2 端到端验证**：flags@0x2C ^0x5A65E232 ✓、parent@0x10 ^0x74AD6F3E ✓、class_bit0=true ✓——与 R102 手工 RE 逐位一致。extends 62%（无 gc72 时）。
 - **判板演化教训**：①parent 板的 `parent_col.is_none()` 条件阻止了更优候选的更新——必须移除；②obj_rate 单独不可靠（假阳性 89% > 真值 70.9%）——**obj_distance ≤ 0.70** 才是正确判据；③typearr data < td_rows 校验不区分真假（两者的 typearr data 都 < ROWS）；④distinct count 也不行（假阳性反而更高）。
 - **auto-dump 当前限制**：extends 62%（gc72 常数不在 auto-tables 产出中，需 .upx0 逆向提取——下一轮通过 ×14 stride 字节锚自动化）。
+
+## R107b（2026-11-04）：extends 62%→90.8% 根因 + auto-dump gc72 carry-forward（不是需求，方案记录）
+
+- **extends 62% vs 90.8% 根因**：auto-dump profile 从 seed 继承了 `generic_tables`（7.1 gp/gc 常数），与 `gc72`（7.2 常数）**共存导致引擎用 7.1 基址做泛型查找 → extends 渲染断**。修复 = `gc72` 存在时 splice 清除 `generic_tables`。验证：去掉 generic_tables 后 extends 62%→90.8%。
+- **auto-dump gc72 carry-forward**：二次运行时从 `work_dir/profile.prev.json` 继承 gc72 常数。首次运行 62% extends（无 gc72），用户手动/脚本添加 gc72 后二次运行 90.8%。
+- **方法论**：多世代常数共存 = 隐性炸弹——profile 的 `generic_tables`（7.1）和 `gc72`（7.2）结构相似但常数完全不同，引擎按优先级选择但未选的那个仍在影响其他路径（gp_row 等）。
