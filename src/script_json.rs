@@ -316,7 +316,7 @@ impl<'a> Namer<'a> {
             0x11 => {
                 let tdi = data as usize;
                 let td = self.tds.get(tdi)?;
-                if td.bitfield & 2 != 0 {
+                if self.m.is_enum_kind(td.bitfield) {
                     let fti = self.m.field_type_idx(td.fields_start);
                     self.parse_type(structs, fti, depth + 1)?
                 } else {
@@ -333,10 +333,10 @@ impl<'a> Namer<'a> {
                 let (def_tdi, _) = self.m.generic_instance(data)?;
                 let td = self.tds.get(def_tdi as usize)?;
                 let name = self.inst_struct_name(def_tdi, data, depth + 1)?;
-                if td.bitfield & 2 != 0 {
+                if self.m.is_enum_kind(td.bitfield) {
                     let fti = self.m.field_type_idx(td.fields_start);
                     self.parse_type(structs, fti, depth + 1)?
-                } else if td.bitfield & 1 != 0 {
+                } else if self.m.is_value_type_kind(td.bitfield) {
                     format!("{}_o", name)
                 } else {
                     format!("{}_o*", name)
@@ -386,7 +386,7 @@ impl<'a> Namer<'a> {
         let mut params: Vec<String> = Vec::new();
         let is_static = md.flags & 0x10 != 0;
         if !is_static {
-            let self_c = if td.bitfield & 1 != 0 {
+            let self_c = if self.m.is_value_type_kind(td.bitfield) {
                 format!("{}_o", structs.get(tdi)?.clone())
             } else {
                 format!("{}_o*", structs.get(tdi)?.clone())

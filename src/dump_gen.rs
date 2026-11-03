@@ -223,11 +223,11 @@ impl<'a> LayoutCalc<'a> {
         if flags != u32::MAX && flags & 0x18 == 0x10 {
             return None;
         }
-        if bitfield & 2 != 0 {
+        if self.m.is_enum_kind(bitfield) {
             // enum: no instance fields; unboxed size 4.
             return Some(Layout { end: 0x14, align: 4, offsets: Vec::new() });
         }
-        let mut off = if bitfield & 1 != 0 {
+        let mut off = if self.m.is_value_type_kind(bitfield) {
             // struct / value type: boxed offsets start at 0x10.
             0x10
         } else {
@@ -441,9 +441,9 @@ pub fn type_kind(m: &Meta, tds: &[Td], td: &Td) -> &'static str {
     if td.flags != u32::MAX {
         if td.flags & 0x20 != 0 {
             return "interface";
-        } else if td.bitfield & 2 != 0 {
+        } else if m.is_enum_kind(td.bitfield) {
             return "enum";
-        } else if td.bitfield & 1 != 0 {
+        } else if m.is_value_type_kind(td.bitfield) {
             return "struct";
         }
         return "class";
@@ -1011,7 +1011,7 @@ pub fn dump<W: Write, WJ: Write>(m: &Meta, w: &mut W, wj: &mut WJ) -> Result<(us
         // base; base is unqualified; interfaces are qualified; every list is ` : a, b, c`).
         let kind = type_kind(m, &tds, td);
         let mut extends: Vec<String> = Vec::new();
-        let is_value_like = td.bitfield & 3 != 0; // bit0 IsValueType, bit1 IsEnum
+        let is_value_like = m.is_enum_kind(td.bitfield) || m.is_value_type_kind(td.bitfield);
         if kind == "class" && !is_value_like {
             if let Some(base) = base_name(m, &tds, td.parent_tarr) {
                 extends.push(base);

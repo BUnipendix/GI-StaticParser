@@ -496,6 +496,12 @@ pub struct Profile {
     /// without `md_decl` (which is seed data on 6.x builds).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub td_method_count: Option<Column>,
+    /// 7.2 changed the typeDef bitfield's bit0 semantics: 7.1 packs
+    /// {bit0 = IsValueType (struct), bit1 = IsEnum}, 7.2 packs
+    /// {bit0 = IsClass, bit1 = IsEnum, 00 = struct}. Set on 7.2+ profiles so
+    /// every consumer dispatches on the right bit. Default false = 7.1.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub td_bitfield_class_bit0: bool,
     /// typeDef fieldStart column: `idx = raw ^ c`, `td_fs_sentinel_raw` = stored value
     /// meaning "no fields" (decodes to 0xFFFFFFFF).
     pub td_field_start: Column,

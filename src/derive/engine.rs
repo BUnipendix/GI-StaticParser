@@ -901,6 +901,19 @@ impl<'a> Meta<'a> {
         ))
     }
 
+    /// Type-kind discriminators from the typeDef bitfield, honoring
+    /// `td_bitfield_class_bit0` (7.2 inverted bit0 semantics).
+    pub fn is_enum_kind(&self, bitfield: u16) -> bool {
+        bitfield & 2 != 0
+    }
+    pub fn is_value_type_kind(&self, bitfield: u16) -> bool {
+        if self.profile.td_bitfield_class_bit0 {
+            bitfield & 1 == 0 // 7.2: 00 = struct/value type
+        } else {
+            bitfield & 1 != 0 // 7.1: bit0 = IsValueType
+        }
+    }
+
     /// typeDef methodCount (u16 column; None when the profile lacks it).
     /// Honors `row_shift` (the 6.2 method frame lives one td row early).
     pub fn td_method_count(&self, i: usize) -> Option<u32> {
