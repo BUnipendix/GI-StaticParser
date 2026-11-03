@@ -70,3 +70,10 @@
 - **extends 62% vs 90.8% 根因**：auto-dump profile 从 seed 继承了 `generic_tables`（7.1 gp/gc 常数），与 `gc72`（7.2 常数）**共存导致引擎用 7.1 基址做泛型查找 → extends 渲染断**。修复 = `gc72` 存在时 splice 清除 `generic_tables`。验证：去掉 generic_tables 后 extends 62%→90.8%。
 - **auto-dump gc72 carry-forward**：二次运行时从 `work_dir/profile.prev.json` 继承 gc72 常数。首次运行 62% extends（无 gc72），用户手动/脚本添加 gc72 后二次运行 90.8%。
 - **方法论**：多世代常数共存 = 隐性炸弹——profile 的 `generic_tables`（7.1）和 `gc72`（7.2）结构相似但常数完全不同，引擎按优先级选择但未选的那个仍在影响其他路径（gp_row 等）。
+
+## R107b 状态（2026-11-04）：gc72 自动推导尝试 + 收口（不是需求，方案记录）
+
+- **derive_gc72 实现**（events_solve.rs）：扫 .upx0 找 ×16 stride 标记 → capstone 反汇编窗口 → 按指令模式提取 gc slot/xor/mask 链/gp 常数。**当前返回 None**——.upx0 混淆代码的指令序列与模式匹配不完全对应（寄存器分配变化、垃圾指令插入、×16 标记可能不在 gc 函数附近）。
+- **已验证的替代路径**：R103 的手工 .upx0 逆向已提取全套 gc72 常数（gc_base=hdr[0x140]^0x649E2FD4、七步 mask 链），通过 profile.prev.json carry-forward 机制注入 auto-dump。二次运行 extends 90.8%。
+- **当前 auto-dump 产出**（无 gc72）：extends 62%，类型判定 ✓，名字 ✓。gc72 需要 .upx0 消费函数的精确逆向（已有完整常数）。
+- **下轮入口**：①改进 derive_gc72 的模式匹配（用 ×14 而非 ×16 锚、放宽寄存器约束、用指令序列而非单条匹配）；②或接受 gc72 为半自动步骤（.upx0 分析脚本 + profile 注入）。

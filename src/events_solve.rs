@@ -1335,3 +1335,159 @@ pub fn solve_td_flags_parent(
         parent_object_rate: obj_rate,
     })
 }
+
+/// Derive 7.2 generic-container table constants from the binary.
+/// Scans .upx0 for the ×16 gc-stride marker (`shl r13, 4`), then walks the
+/// disassembled consumer function to extract:
+///   - gc slot (hdr offset) and XOR constant (gc_base computation)
+///   - 7-step mask chain constants (mul1, xor1, mul2, add1, shift, mul3, xor2)
+///   - data_add (for gc@+0 decode)
+///   - col8_xor (for gc@+8 decode)
+pub fn derive_gc72(
+    exe: &[u8],
+    img: &crate::pe::Image,
+) -> Option<crate::derive::profile::Gc72> {
+    use iced_x86::{Decoder, DecoderOptions, Mnemonic, OpKind};
+    use crate::derive::profile::Gc72;
+
+    let upx = img.sections().iter().find(|s| s.name == ".upx0")?;
+    let upx_off = upx.raw_pointer as usize;
+    let upx_sz = upx.raw_size as usize;
+    let upx_va = img.image_base() + upx.virtual_address as u64;
+    if upx_off + upx_sz > exe.len() { return None; }
+    let code = &exe[upx_off..upx_off + upx_sz];
+
+    // Find the ×16 gc-stride marker: shl r13, 4 = 49 c1 e6 04
+    let sig16: &[u8] = &[0x49, 0xc1, 0xe6, 0x04];
+    let mut pos16 = None;
+    let mut search = 0usize;
+    while search + 4 <= code.len() {
+        if code[search..search + 4] == *sig16 {
+            // verify: preceded by imul (mask chain) and followed by add r13, rdx
+            if search > 0x10 && search + 0x10 < code.len() {
+                pos16 = Some(search);
+                break;
+            }
+        }
+        search += 1;
+    }
+    let p16 = pos16?;
+
+    // disassemble ±0x200 around ×16
+    let lo = p16.saturating_sub(0x200);
+    let hi = (p16 + 0x200).min(code.len());
+    let va_base = upx_va + lo as u64;
+    let mut dec = Decoder::with_ip(64, &code[lo..hi], va_base, DecoderOptions::NONE);
+
+    let mut gc_slot = 0u64;
+    let mut gc_xor = 0u32;
+    let mut data_add = 0u32;
+    let mut col8_xor = 0u32;
+    let mut m1 = 0u64; let mut x1 = 0u32;
+    let mut m2 = 0u64; let mut a1 = 0u64;
+    let mut sh = 0u32; let mut m3 = 0u32; let mut x2 = 0u32;
+    let mut found_gc_slot = false;
+    let mut found_gc_xor = false;
+    let mut found_m1 = false;
+    let mut found_x1 = false;
+    let mut found_m2 = false;
+    let mut found_a1 = false;
+    let mut found_sh = false;
+    let mut found_m3 = false;
+    let mut found_x2 = false;
+    let mut found_data_add = false;
+    let mut found_col8 = false;
+
+    while dec.can_decode() {
+        let ins = dec.decode();
+        let disp = if ins.op_count() > 1 && ins.op_kind(1) == OpKind::Memory {
+            ins.memory_displacement64()
+        } else { 0 };
+        match ins.mnemonic() {
+            Mnemonic::Movsxd => {
+                if !found_gc_slot && disp > 0 && disp <= 0x210 && disp != 0x94 {
+                    gc_slot = disp as u64;
+                    found_gc_slot = true;
+                }
+            }
+            Mnemonic::Xor => {
+                if ins.op_count() == 2 {
+                    let imm = match ins.op_kind(1) {
+                        OpKind::Immediate32 => ins.immediate32(),
+                        OpKind::Immediate8 => ins.immediate8() as u32,
+                        _ => 0,
+                    };
+                    if found_gc_slot && !found_gc_xor && imm > 0x1000000 {
+                        gc_xor = imm; found_gc_xor = true;
+                    } else if found_m3 && !found_x2 && imm > 0x100000 {
+                        x2 = imm; found_x2 = true;
+                    } else if found_m3 && found_x2 && !found_col8 && imm > 0x10000 {
+                        col8_xor = imm; found_col8 = true;
+                    }
+                }
+            }
+            Mnemonic::Imul => {
+                if ins.op_count() == 3 {
+                    let imm = match ins.op_kind(2) {
+                        OpKind::Immediate32 => ins.immediate32() as u64,
+                        OpKind::Immediate8 => ins.immediate8() as u64,
+                        _ => 0u64,
+                    };
+                    if found_gc_xor && !found_m1 && imm > 0 && imm < 0x10000 {
+                        m1 = imm; found_m1 = true;
+                    } else if found_m1 && !found_x1 && imm > 0x1000000 {
+                        // this might be x1 via imul (unlikely) or m2
+                    }
+                    if found_x1 && !found_m2 && imm > 0x1000000 {
+                        m2 = imm; found_m2 = true;
+                    } else if found_m2 && !found_m3 && imm > 0x1000000 {
+                        m3 = imm as u32; found_m3 = true;
+                    }
+                }
+            }
+            Mnemonic::Mov => {
+                if ins.op_count() == 2 && ins.op_kind(1) == OpKind::Immediate64 {
+                    let imm = ins.immediate64();
+                    if found_m2 && !found_a1 && imm > 0x100000000 {
+                        a1 = imm; found_a1 = true;
+                    }
+                }
+            }
+            Mnemonic::Shr => {
+                if ins.op_count() == 2 && ins.op_kind(1) == OpKind::Immediate8 {
+                    let imm = ins.immediate8();
+                    if found_a1 && !found_sh && imm > 0 && imm < 32 {
+                        sh = imm as u32; found_sh = true;
+                    }
+                }
+            }
+            Mnemonic::Add => {
+                if ins.op_count() == 2 && ins.op_kind(1) == OpKind::Immediate32 {
+                    let imm = ins.immediate32();
+                    if found_sh && !found_data_add && imm > 0x1000000 {
+                        data_add = imm; found_data_add = true;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if !found_gc_slot || !found_gc_xor || !found_m1 || !found_m2 || !found_data_add {
+        return None;
+    }
+
+    Some(Gc72 {
+        slot_hdr_off: gc_slot as u32,
+        slot_xor: gc_xor,
+        stride: 16,
+        data_add,
+        mask_mul1: m1,
+        mask_xor1: x1,
+        mask_mul2: m2,
+        mask_add1: a1,
+        mask_shift: sh,
+        mask_mul3: m3,
+        mask_xor2: x2,
+    })
+}

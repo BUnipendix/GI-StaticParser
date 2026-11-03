@@ -99,6 +99,7 @@ pub fn splice_profile(
     method: Option<&TableReport>,
     td: Option<&TdSolve>,
     fp: Option<&crate::events_solve::TdFlagsParentSolve>,
+    gc72d: Option<&crate::derive::profile::Gc72>,
     ev: Option<&crate::events_solve::EventSolve>,
     pr: Option<&crate::events_solve::PropSolve>,
     derived: Option<&BuildDerivation>,
@@ -439,6 +440,13 @@ pub fn splice_profile(
     // ---- typeDef slice (structural solve; no seed semantics needed) ----
     if let Some(td) = td {
         splice_td(&mut p, td, &mut m);
+    }
+
+    // ---- gc72 from .upx0 derivation ----
+    if let Some(gc) = gc72d {
+        p.gc72 = Some(gc.clone());
+        p.generic_tables = None;
+        m.solved.push("gc72 (derived from .upx0 consumer function)".into());
     }
 
     // ---- generic tables generation guard ----
@@ -1565,7 +1573,7 @@ mod tests {
         report
             .semantics
             .insert("method_defs".into(), rec(0x1E0, "xor", 0x2EEC_3A0B, 0x1000, 1.0));
-        let (p, m) = splice_profile(seed_profile(), &report, Some(&rep), None, None, None, None, None, &[], None);
+        let (p, m) = splice_profile(seed_profile(), &report, Some(&rep), None, None, None, None, None, None, &[], None);
 
         assert_eq!(p.md_stride, 26);
         assert!(p.md_mask_expr.is_some());

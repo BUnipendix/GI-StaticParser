@@ -1619,6 +1619,10 @@ fn auto_tables_cmd(
                 None
             }
         };
+        // derive gc72 from .upx0 consumer function (R107b)
+        let img_for_gc = static_mhy_dumper::pe::Image::parse(&d).ok();
+        let gc72_derived = img_for_gc.as_ref()
+            .and_then(|img| static_mhy_dumper::events_solve::derive_gc72(&d, img));
         // structural td_flags / td_parent solve (R107)
         let fp = match (derived.as_ref(), td.as_ref()) {
             (Some(dv), Some(tds)) => {
@@ -1642,12 +1646,19 @@ fn auto_tables_cmd(
             }
             _ => None,
         };
+        // inject derived gc72 if available
+        if let Some(gc) = &gc72_derived {
+            println!("gc72 derived: slot={:#x} xor={:#x} m1={:#x} x1={:#x} m2={:#x} a1={:#x} sh={} m3={:#x} x2={:#x}",
+                gc.slot_hdr_off, gc.slot_xor, gc.mask_mul1, gc.mask_xor1,
+                gc.mask_mul2, gc.mask_add1, gc.mask_shift, gc.mask_mul3, gc.mask_xor2);
+        }
         let (spliced, manifest) = static_mhy_dumper::profile_splice::splice_profile(
             seedp,
             &report,
             solved_rep.as_ref(),
             td.as_ref(),
             fp.as_ref(),
+            gc72_derived.as_ref(),
             ev.as_ref(),
             pr.as_ref(),
             derived.as_ref(),
