@@ -614,6 +614,26 @@ fn auto_dump_cmd(
             anyhow::bail!("stage {name} did not produce {artifact}");
         }
     }
+    // Carry forward gc72 from a previously generated profile (the gc constants
+    // require .upx0 reverse engineering that isn't yet automated — R103/R106).
+    {
+        let prev = Path::new(&work).join("profile.prev.json");
+        if let Ok(prev_data) = std::fs::read_to_string(&prev) {
+            if let Ok(prev_json) = serde_json::from_str::<serde_json::Value>(&prev_data) {
+                if let Some(gc72) = prev_json.get("gc72") {
+                    if let Ok(mut prof) = serde_json::from_str::<serde_json::Value>(
+                        &std::fs::read_to_string(&profile_path).unwrap_or_default()
+                    ) {
+                        if prof.get("gc72").is_none() {
+                            prof["gc72"] = gc72.clone();
+                            std::fs::write(&profile_path, serde_json::to_string_pretty(&prof).unwrap())?;
+                            println!("  gc72 carried forward from profile.prev.json");
+                        }
+                    }
+                }
+            }
+        }
+    }
     println!("auto-dump complete: {dump_out}
   profile: {profile_path}");
     Ok(())
