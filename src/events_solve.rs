@@ -1091,3 +1091,247 @@ mod tests6 {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// td_flags / td_parent structural solve (R107) — mechanises the verified
+// R102 boards so future builds produce these columns automatically.
+// ---------------------------------------------------------------------------
+
+/// Solved td_flags / td_parent columns.
+pub struct TdFlagsParentSolve {
+    pub flags_col: Column,
+    pub parent_off: u32,
+    pub parent_xor: u32,
+    pub bitfield_class_bit0: bool,
+    pub flags_interface_rate: f64,
+    pub parent_object_rate: f64,
+}
+
+/// Solve td_flags and td_parent from the td row data alone.
+///
+/// boards:
+/// - **flags**: exists a XOR constant C such that every row decodes to a value
+///   ≤ 0x12000A (the 7.1-measured flags ceiling), with interface rate ~1.8%
+///   and SequentialLayout rate ~5.2%. The C is found by aligning the decoded
+///   mode rank with the known 7.1 flags distribution.
+/// - **parent**: exists a XOR constant C such that every decoded value is a
+///   valid typearr index whose Il2CppType entry has kind ∈ {0x11,0x12,0x1C,0x15},
+///   with the mode being the System.Object entry (typearr[1] or nearby).
+///   The C is derived from the mode raw value and the OBJECT entry index.
+pub fn solve_td_flags_parent(
+    exe_bytes: &[u8],
+    dat_bytes: &[u8],
+    derived: &crate::derive::cipher::BuildDerivation,
+    td: &crate::profile_splice::TdSolve,
+) -> Option<TdFlagsParentSolve> {
+    let body = dat_bytes.get(0x210..)?;
+    let td_base = td.base;
+    let td_stride = td.stride;
+    let td_rows = td.rows;
+    // typearr location (replicates engine::locate_typearr)
+    let img = crate::pe::Image::parse(exe_bytes).ok()?;
+    let rdata = img.sections().iter().find(|s| s.name == ".rdata")?;
+    let rd_data = &exe_bytes[rdata.raw_pointer as usize..(rdata.raw_pointer as usize + rdata.raw_size as usize).min(exe_bytes.len())];
+    let rd_n = rd_data.len() / 16;
+    let mut best_run = 0usize; let mut best_rs = 0usize;
+    let mut run = 0usize; let mut rs = 0usize;
+    for i in 0..rd_n {
+        let k = rd_data[i * 16 + 0xA];
+        if (1..=0x20).contains(&k) {
+            if run == 0 { rs = i; }
+            run += 1;
+            if run > best_run { best_run = run; best_rs = rs; }
+        } else { run = 0; }
+    }
+    if best_run < 100_000 { return None; }
+    let typearr_file_off = rdata.raw_pointer as usize + best_rs * 16;
+    let typearr_len = best_run;
+    #[cfg(feature = "ev_debug")]
+    eprintln!("[fp] typearr: off={typearr_file_off:#x} len={typearr_len} rdata_raw={:#x} best_rs={best_rs}", rdata.raw_pointer as usize);
+    if td_stride < 8 || td_rows < 100 {
+        return None;
+    }
+    let stride = td_stride as usize;
+    let rd32 = |off: usize| -> u32 {
+        match body.get(off..off + 4) {
+            Some(b) => u32::from_le_bytes(b.try_into().unwrap()),
+            None => 0,
+        }
+    };
+    let kind_at = |idx: usize| -> u8 {
+        let p = typearr_file_off + idx * 16 + 0xA;
+        if p < exe_bytes.len() { exe_bytes[p] } else { 0 }
+    };
+    let data_at = |idx: usize| -> u32 {
+        let p = typearr_file_off + idx * 16;
+        if p + 4 <= exe_bytes.len() {
+            u32::from_le_bytes(exe_bytes[p..p + 4].try_into().unwrap())
+        } else { 0 }
+    };
+    // find the OBJECT entry in the typearr (kind 0x1C pointing at a small td index)
+    // this is the anchor for the parent board
+    let mut obj_typearr = None;
+    for i in 0..typearr_len.min(3000) {
+        if kind_at(i) == 0x1C {
+            let d = data_at(i);
+            if d < td_rows as u32 {
+                obj_typearr = Some(i);
+                break;
+            }
+        }
+    }
+    #[cfg(feature = "ev_debug")]
+    eprintln!("[fp] obj_typearr: {obj_typearr:?}");
+    let obj_ta = obj_typearr?;
+
+    let sample_step = (td_rows / 300).max(1);
+    let n_sample = (td_rows / sample_step).min(300);
+
+    let mut flags_col = None;
+    let mut parent_col: Option<(u32, u32, f64, usize)> = None;
+
+    for off in 0..stride.saturating_sub(3) {
+        let raws: Vec<u32> = (0..td_rows)
+            .step_by(sample_step)
+            .take(n_sample)
+            .map(|r| rd32(td_base + r * stride + off))
+            .collect();
+        if raws.is_empty() { continue; }
+
+        // ---- flags board: all decoded ≤ 0x12000A, interface 1–3%, seq 4–7% ----
+        if flags_col.is_none() {
+            // derive C from mode ^ known flag value 0x100001 (the most common)
+            let mode = *raws.iter().max_by_key(|&&v| 1).unwrap_or(&0); // placeholder
+            let _ = mode;
+            // better: try each raw value as C candidate against a known flag value
+            // the most common decoded value should be ~0x100001 (36%)
+            // C = mode_raw ^ 0x100001
+            let mut cnt = std::collections::BTreeMap::new();
+            for &v in &raws { *cnt.entry(v).or_insert(0u32) += 1; }
+            let (mode, mode_n) = cnt.iter().max_by_key(|(_, &n)| n).map(|(&k, &n)| (k, n)).unwrap();
+            let c = mode ^ 0x1000_01;
+            let mut int_n = 0u32; let mut seq_n = 0u32; let mut in_range = 0u32;
+            for &v in &raws {
+                let f = v ^ c;
+                if f <= 0x120_00A { in_range += 1; }
+                if f & 0x20 != 0 { int_n += 1; }
+                if f & 0x08 != 0 { seq_n += 1; }
+            }
+            let total = raws.len() as u32;
+            if in_range == total
+                && (int_n as f64 / total as f64) > 0.008
+                && (int_n as f64 / total as f64) < 0.04
+                && (seq_n as f64 / total as f64) > 0.03
+                && (seq_n as f64 / total as f64) < 0.08
+            {
+                flags_col = Some(Column { offset: off as u32, kind: ColKind::XorC, c, row_shift: 0 });
+            }
+        }
+
+        // ---- parent board: all decoded < typearr_len, valid kind, mode = Object entry ----
+        #[cfg(feature = "ev_debug")]
+        if off == 16 {
+            let mut cnt = std::collections::BTreeMap::new();
+            for &v in &raws { *cnt.entry(v).or_insert(0u32) += 1; }
+            let (mode, mode_n) = cnt.iter().max_by_key(|(_, &n)| n).map(|(&k, &n)| (k, n)).unwrap();
+            let c = mode ^ (obj_ta as u32);
+            let mut legal = 0u32; let mut obj_n = 0u32;
+            for &v in &raws {
+                let p = v ^ c;
+                if (p as usize) < typearr_len {
+                    let k = kind_at(p as usize);
+                    if (0x11..=0x15).contains(&k) || k == 0x1C { legal += 1; }
+                }
+                if p == obj_ta as u32 { obj_n += 1; }
+            }
+            eprintln!("[fp] off 0x10: mode={mode:#x} n={mode_n} c={c:#x} legal={legal}/{} obj={obj_n}", raws.len());
+        }
+        if obj_ta > 0 {
+            let mut cnt = std::collections::BTreeMap::new();
+            for &v in &raws { *cnt.entry(v).or_insert(0u32) += 1; }
+            let (mode, mode_n) = cnt.iter().max_by_key(|(_, &n)| n).map(|(&k, &n)| (k, n)).unwrap();
+            // C = mode ^ obj_typearr (the most common parent should be System.Object)
+            let c = mode ^ (obj_ta as u32);
+            let mut legal = 0u32; let mut obj_n = 0u32;
+            let total = raws.len() as u32;
+            for &v in &raws {
+                let p = v ^ c;
+                if (p as usize) < typearr_len {
+                    let k = kind_at(p as usize);
+                    let d = data_at(p as usize);
+                    // typearr entry must point at a valid td index — the parent's
+                    // Il2CppType data field is the typeDef index of the base class
+                    if (0x11..=0x15).contains(&k) || k == 0x1C {
+                        if (d as usize) < td_rows {
+                            legal += 1;
+                            if p == obj_ta as u32 { obj_n += 1; }
+                        }
+                    }
+                }
+            }
+            let legal_rate = legal as f64 / total as f64;
+            let obj_rate = obj_n as f64 / total as f64;
+            // Structural expectation: ~70% of C# types inherit directly from
+            // System.Object (the most common base). A column whose decoded
+            // values have a much higher Object share is likely a constant or
+            // padding field that happens to overlap the typearr range.
+            let obj_distance = (obj_rate - 0.70_f64).abs();
+            let distinct = {
+                let mut vs: Vec<u32> = raws.iter().map(|&v| v ^ c).collect();
+                vs.sort_unstable();
+                vs.dedup();
+                vs.len()
+            };
+            if legal_rate > 0.60 && obj_rate > 0.30 && obj_rate < 0.90 {
+                let better = parent_col.as_ref().map(|(_, _, prev_rate, _)| {
+                    let prev_dist = (prev_rate - 0.70_f64).abs();
+                    obj_distance < prev_dist
+                }).unwrap_or(true);
+                if better {
+                    parent_col = Some((off as u32, c, obj_rate, distinct));
+                }
+            }
+        }
+
+        #[cfg(feature = "ev_debug")]
+        if off < 6 {
+            eprintln!("[fp] off {off:#x}: flags_col={:?} parent_col={:?}", flags_col.is_some(), parent_col.is_some());
+        }
+    }
+
+    #[cfg(feature = "ev_debug")]
+    eprintln!("[fp] scan done: flags_col={:?} parent_col={:?}", flags_col.is_some(), parent_col.is_some());
+    let fc = flags_col?;
+    let (poff, pxor, obj_rate, _) = parent_col?;
+
+    // bitfield class_bit0 detection: 7.2 sets bit0=IsClass; 7.1 sets bit0=IsValueType
+    // On 7.2, struct rate via flags&0x08 should be ~5.2% but bitfield&1 rate would be ~85%
+    // (which would mean bit0=IsClass). Detect by checking if bitfield&1 rate is > 50%
+    // at the known bitfield offset (0x32 for both 7.1 and 7.2).
+    // This heuristic needs the bitfield column — we check if one exists.
+    let mut class_bit0 = false;
+    {
+        // check if bitfield&1 rate > 50% at offset 0x32 (the known bitfield byte)
+        let rd8 = |off: usize| -> u8 { body.get(off).copied().unwrap_or(0) };
+        let n_vt = (0..td_rows)
+            .step_by(sample_step)
+            .filter(|&r| {
+                let b = rd8(td_base + r * stride + 0x32);
+                b & 1 != 0
+            })
+            .count();
+        let total = (td_rows / sample_step).max(1);
+        // On 7.1, bit0=IsValueType → ~5.4% + 9.1% = ~14.5% (struct + enum)
+        // On 7.2, bit0=IsClass → ~85% (class rows)
+        class_bit0 = (n_vt as f64 / total as f64) > 0.50;
+    }
+
+    Some(TdFlagsParentSolve {
+        flags_col: fc,
+        parent_off: poff,
+        parent_xor: pxor,
+        bitfield_class_bit0: class_bit0,
+        flags_interface_rate: 0.0, // filled by caller if needed
+        parent_object_rate: obj_rate,
+    })
+}

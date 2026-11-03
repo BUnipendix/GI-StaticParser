@@ -57,3 +57,10 @@
 - **验证**：extends **62%→90.8%**（81534/89746，甚至超过 7.1 oracle 的 84%——因为 7.2 新增了更多带 extends 的类型）；class/struct/interface/enum 不变；**7.1 BYTE-IDENTICAL ✓**（44 测试绿）。
 - **签名仍 99.5% object**：gp 表（泛型参数名/位置）和 typearr 的完整 Il2CppType 表仍未解——这是独立的下一轮（签名走的是 type_name→il2cpp_type→typearr 路径，不走 gc 表）。泛型类名已开始出现（Dictionary`2、IList`1 等 4933 处）但参数渲染为 Locale<> 占位——gp 表接线后可修复。
 - **方法论**：64 位混淆链的位宽是关键判据（`imul rdx, rbx` 的 64 位乘法 vs `imul r15d, ebx` 的 32 位截断，capstone 的 op_str 直接告诉你位宽）；gc@+0 解出小 td 索引 = def_tdi 的语义自洽（泛型定义的 typeDef 索引必然小，因为在 metadata 前段的 mscorlib/System 程序集里）。
+
+## R107（2026-11-04）：flags/parent/bitfield 求解器机械化——auto-tables 管线闭环（不是需求，方案记录）
+
+- **solve_td_flags_parent 加入 events_solve.rs + auto_tables_cmd 管线**：td solve 后自动扫 td 行全部 u32 offset，**flags 板**（值域 ≤ 0x12000A + interface 1-3% + seq 4-7%）+ **parent 板**（全部解码值 < typearr_len + kind 合法 + data < td_rows + obj_distance ≤ 0.70）。解出的列自动 splice 进 profile（td_flags/td_parent_off/td_parent_xor/td_bitfield_class_bit0）。
+- **7.2 端到端验证**：flags@0x2C ^0x5A65E232 ✓、parent@0x10 ^0x74AD6F3E ✓、class_bit0=true ✓——与 R102 手工 RE 逐位一致。extends 62%（无 gc72 时）。
+- **判板演化教训**：①parent 板的 `parent_col.is_none()` 条件阻止了更优候选的更新——必须移除；②obj_rate 单独不可靠（假阳性 89% > 真值 70.9%）——**obj_distance ≤ 0.70** 才是正确判据；③typearr data < td_rows 校验不区分真假（两者的 typearr data 都 < ROWS）；④distinct count 也不行（假阳性反而更高）。
+- **auto-dump 当前限制**：extends 62%（gc72 常数不在 auto-tables 产出中，需 .upx0 逆向提取——下一轮通过 ×14 stride 字节锚自动化）。

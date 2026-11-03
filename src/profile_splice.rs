@@ -98,6 +98,7 @@ pub fn splice_profile(
     report: &TransferReport,
     method: Option<&TableReport>,
     td: Option<&TdSolve>,
+    fp: Option<&crate::events_solve::TdFlagsParentSolve>,
     ev: Option<&crate::events_solve::EventSolve>,
     pr: Option<&crate::events_solve::PropSolve>,
     derived: Option<&BuildDerivation>,
@@ -438,6 +439,19 @@ pub fn splice_profile(
     // ---- typeDef slice (structural solve; no seed semantics needed) ----
     if let Some(td) = td {
         splice_td(&mut p, td, &mut m);
+    }
+
+    // ---- td_flags / td_parent / bitfield (R107 structural solve) ----
+    if let Some(fp) = fp {
+        p.td_flags = Some(fp.flags_col.clone());
+        p.td_parent_off = fp.parent_off;
+        p.td_parent_xor = fp.parent_xor;
+        p.td_bitfield_class_bit0 = fp.bitfield_class_bit0;
+        m.solved.push(format!(
+            "td_flags/parent (flags ^{:#x} iface {}%, parent ^{:#x} obj {}%, class_bit0={})",
+            fp.flags_col.c, (fp.flags_interface_rate * 100.0) as u32,
+            fp.parent_xor, (fp.parent_object_rate * 100.0) as u32, fp.bitfield_class_bit0
+        ));
     }
 
     // ---- event section (R95 structural solve) ----
@@ -1486,7 +1500,7 @@ mod tests {
             "str".into(),
             rec(0x150, "add", 0xC854_2DD2, 0xDEAD_BEEF, 1.0),
         );
-        let (p, m) = splice_profile(seed_profile(), &report, None, None, None, None, None, &[], None);
+        let (p, m) = splice_profile(seed_profile(), &report, None, None, None, None, None, None, &[], None);
         assert_eq!(p.str_hdr_off, 0x150);
         assert_eq!(p.str_sub, 0x37AB_D22E);
         assert!(m.solved.iter().any(|s| s.contains("str_hdr_off")));
@@ -1542,7 +1556,7 @@ mod tests {
         report
             .semantics
             .insert("method_defs".into(), rec(0x1E0, "xor", 0x2EEC_3A0B, 0x1000, 1.0));
-        let (p, m) = splice_profile(seed_profile(), &report, Some(&rep), None, None, None, None, &[], None);
+        let (p, m) = splice_profile(seed_profile(), &report, Some(&rep), None, None, None, None, None, &[], None);
 
         assert_eq!(p.md_stride, 26);
         assert!(p.md_mask_expr.is_some());
@@ -1608,7 +1622,7 @@ mod tests {
         report
             .semantics
             .insert("params".into(), rec(0x1D0, "+", 0x08F4_E5DB, 0x5000, 0.9));
-        let (p, m) = splice_profile(seed_profile(), &report, None, None, None, None, None, &[], None);
+        let (p, m) = splice_profile(seed_profile(), &report, None, None, None, None, None, None, &[], None);
         // L6 gate: with no decodable body the transfer pick cannot be
         // validated, so the SEED base stays and the failure is noted.
         assert_eq!(p.field_names.hdr_off, seed_profile().field_names.hdr_off);

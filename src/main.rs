@@ -1599,11 +1599,35 @@ fn auto_tables_cmd(
                 None
             }
         };
+        // structural td_flags / td_parent solve (R107)
+        let fp = match (derived.as_ref(), td.as_ref()) {
+            (Some(dv), Some(tds)) => {
+                match static_mhy_dumper::events_solve::solve_td_flags_parent(
+                    &d, &md, dv, tds,
+                ) {
+                    Some(s) => {
+                        println!(
+                            "flags/parent solve: flags@{:#x} ^{:#x} iface {:.1}%  parent@{:#x} ^{:#x} obj {:.1}%  class_bit0={}",
+                            s.flags_col.offset, s.flags_col.c, s.flags_interface_rate * 100.0,
+                            s.parent_off, s.parent_xor, s.parent_object_rate * 100.0,
+                            s.bitfield_class_bit0
+                        );
+                        Some(s)
+                    }
+                    None => {
+                        println!("flags/parent solve: no candidate");
+                        None
+                    }
+                }
+            }
+            _ => None,
+        };
         let (spliced, manifest) = static_mhy_dumper::profile_splice::splice_profile(
             seedp,
             &report,
             solved_rep.as_ref(),
             td.as_ref(),
+            fp.as_ref(),
             ev.as_ref(),
             pr.as_ref(),
             derived.as_ref(),
