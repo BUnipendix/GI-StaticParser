@@ -86,3 +86,11 @@
 - **methodStart 列**：td_method_start = XorC c=1522241981 @offset 12，methodStart(0)=0xFFFFFFFF（<Module> 无方法 ✓）。
 - **求解入口**：md_ret_type 在 26 字节行的 u32 候选 offset = {0, 12, 16, 20}（排除已解的 4=param_start、8=name、24=param_count byte）。求解需要：①计算 md_mask(i)；②对每个 offset 尝试已知 shape（XorC/AddC/XorCSubMask 等）× C 候选；③判板 = 解码值 < typearr_len（690935）+ kind 多样性。
 - **下一轮精确定位**：①用 methodStart 列定位特定类型的 md 行（如 Locale 的 GetText 方法）；②已知 GetText 返回 String → 找到 String 的 typearr 索引 → 反推 C。
+
+## R108（2026-11-04）：md_ret_type 破解——签名 99.5%→16% object（不是需求，方案记录）
+
+- **根因**：md_ret_type 列 seed 值（AddCSubMask2 c=3857596545）在 7.2 上失效。7.2 的 ret_type 解码 = **GenSubMaskAddC**（`raw - mask(i) + c`），c = 0xD4E0B12E。
+- **破解方法**：methodStart 列（XorC c=1522241981 @offset 12）定位 Locale(td1) 的方法 → md rows 0-2 → GetText(md row 1) 返回 String → String typearr[33] → 反推 C。
+- **shape 爆破**：12 种算术形态（xor/add/sub × mask 交互），只有 **raw_sub_mask**（`raw - mask(i) - C`）给出 100% 合法 typearr 条目 → **GenSubMaskAddC**（`raw - mask + c`）的 c = -C (mod 2^32) 等价。
+- **验证**：7.2 签名 99.5%→**16.0%** object。System.Void 453K、Boolean 70K、Int32 33K、String 15K 全恢复。7.1 BYTE-IDENTICAL ✓、44 测试绿。
+- **方法论**：①methodStart 列定位已知返回类型的方法（Locale.GetText→String）→ 用 typearr 索引反推列常数；②shape 爆破（12 种算术形态全试，100% 合法 typearr 的就是对的）；③mask 链已经从 name 列的 solve 中获得（GenSubMaskAddC 共用同一 mask）。
