@@ -1,0 +1,1 @@
+{"semantics": {"method_defs": {"slot": 56, "op": "add", "imm": 3574975139, "stride": 26}, "param_defs": {"slot": 332, "op": "xor", "imm": 315172235, "stride": 8}, "field_names": {"slot": 12, "op": "add", "imm": 3544898307, "stride": 8}, "prop": {"slot": 488, "op": "add", "imm": 3925827455, "stride": 10}, "event": {"slot": 320, "op": "add", "imm": 3094762624, "stride": 14}}}

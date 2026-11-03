@@ -296,6 +296,33 @@ enum Cmd {
         #[arg(short, long)]
         out: Option<String>,
     },
+    /// One-shot cross-version dump: derive → loadsites → strings → auto-tables → dump-gen.
+    /// All constants are derived from the target files at runtime; the only fixed
+    /// input is the 6.7.0 shape seed (assets/seed/, overridable).
+    #[clap(name = "auto-dump")]
+    AutoDump {
+        #[arg(long)]
+        exe: String,
+        #[arg(long)]
+        metadata: String,
+        /// Working directory for intermediates (default: the metadata's directory).
+        #[arg(long)]
+        work_dir: Option<String>,
+        /// Output dump.cs path (default: <work_dir>/dump.cs).
+        #[arg(short, long)]
+        out: Option<String>,
+        /// Method-row count hint (default 750000; the td solve reports the true count).
+        #[arg(long, default_value_t = 750_000)]
+        rows: usize,
+        /// Seed overrides (default: assets/seed/{seed,sites,derive}.json).
+        #[arg(long)]
+        seed: Option<String>,
+        #[arg(long)]
+        seed_sites: Option<String>,
+        #[arg(long)]
+        seed_derive: Option<String>,
+    },
+
     /// Generation dump pipeline: full dump.cs + script.json via the derived profile.
     /// Version-generic: behaviour is fully profile-driven; the shipped default profile
     /// is the 7.1-measured one (seed_profile). `dump71` stays as a deprecated alias until
@@ -487,7 +514,109 @@ fn main() -> Result<()> {
                 attributes_out.as_deref(),
                 dummy_out.as_deref(),
             ),
+        Cmd::AutoDump { exe, metadata, work_dir, out, rows, seed, seed_sites, seed_derive } =>
+            auto_dump_cmd(&exe, &metadata, work_dir.as_deref(), out.as_deref(), rows,
+                          seed.as_deref(), seed_sites.as_deref(), seed_derive.as_deref()),
     }
+}
+
+/// Resolve a path relative to the repo root (the binary may run from anywhere;
+/// CARGO_MANIFEST_DIR is baked in at build time and also works from `target/release`).
+fn seed_default(name: &str) -> String {
+    let manifest = env!("CARGO_MANIFEST_DIR");
+    format!("{manifest}/assets/seed/{name}")
+}
+
+/// One-shot pipeline: derive → loadsites → strings → auto-tables → dump-gen.
+/// Spawns the same binary per stage so every stage keeps its own CLI contract
+/// and failure point; a stage failure stops the chain with its full output.
+fn auto_dump_cmd(
+    exe: &str,
+    metadata: &str,
+    work_dir: Option<&str>,
+    out: Option<&str>,
+    rows: usize,
+    seed: Option<&str>,
+    seed_sites: Option<&str>,
+    seed_derive: Option<&str>,
+) -> Result<()> {
+    use std::path::Path;
+    let work = match work_dir {
+        Some(w) => w.to_string(),
+        None => match Path::new(metadata).parent() {
+            Some(p) if !p.as_os_str().is_empty() => p.display().to_string(),
+            _ => ".".to_string(),
+        },
+    };
+    std::fs::create_dir_all(&work)?;
+    let dump_out = out.map(|o| o.to_string()).unwrap_or_else(|| format!("{work}/dump.cs"));
+    let self_exe = std::env::current_exe()?;
+    let self_exe = self_exe.to_str().ok_or_else(|| anyhow::anyhow!("current_exe not utf-8"))?;
+
+    let seed = seed.map(|s| s.to_string()).unwrap_or_else(|| seed_default("seed.json"));
+    let seed_sites = seed_sites.map(|s| s.to_string()).unwrap_or_else(|| seed_default("sites.json"));
+    let seed_derive = seed_derive.map(|s| s.to_string()).unwrap_or_else(|| seed_default("derive.json"));
+    for f in [&seed, &seed_sites, &seed_derive] {
+        if !Path::new(f).exists() {
+            anyhow::bail!("seed file missing: {f} — place the 6.7.0 seed triple under assets/seed/ or pass --seed-*");
+        }
+    }
+
+    let derive_path = format!("{work}/derive.json");
+    let sites_path = format!("{work}/sites.json");
+    let strings_path = format!("{work}/strings.txt");
+    let profile_path = format!("{work}/profile.json");
+
+    let stages: Vec<(&str, Vec<String>, Vec<String>)> = vec![
+        ("derive", vec!["derive".into()], vec![
+            "--exe".into(), exe.into(), "--metadata".into(), metadata.into(), "--out".into(), derive_path.clone()]),
+        ("loadsites", vec!["loadsites".into()], vec![
+            "--exe".into(), exe.into(), "--out".into(), sites_path.clone()]),
+        ("strings", vec!["strings".into()], vec![
+            "--exe".into(), exe.into(), "--metadata".into(), metadata.into(),
+            "--min-len".into(), "3".into(), "--out".into(), strings_path.clone()]),
+        ("auto-tables", vec!["auto-tables".into()], vec![
+            "--exe".into(), exe.into(), "--metadata".into(), metadata.into(),
+            "--sites".into(), sites_path.clone(),
+            "--seed".into(), seed.clone(), "--seed-sites".into(), seed_sites.clone(),
+            "--seed-derive".into(), seed_derive.clone(),
+            "--strings".into(), strings_path.clone(),
+            "--solve-method".into(), "--solve-td".into(),
+            "--rows".into(), rows.to_string(),
+            "--profile-out".into(), profile_path.clone(),
+            "--verify-rows".into(), "128".into()]),
+        ("dump-gen", vec!["dump-gen".into()], vec![
+            "--exe".into(), exe.into(), "--metadata".into(), metadata.into(),
+            "--profile-in".into(), profile_path.clone(),
+            "--out".into(), dump_out.clone()]),
+    ];
+
+    for (name, argv0, args) in &stages {
+        println!("=== auto-dump stage: {name} ===");
+        eprintln!("[auto-dump] spawn: {self_exe} {} {}", argv0.join(" "), args.join(" "));
+        let status = std::process::Command::new(self_exe)
+            .args(argv0)
+            .args(args)
+            .status()
+            .map_err(|e| anyhow::anyhow!("spawn {name}: {e}"))?;
+        if !status.success() {
+            anyhow::bail!("stage {name} failed ({status}); intermediates kept under {work}");
+        }
+        // hard existence checks on the artifacts the later stages consume
+        let artifact = match *name {
+            "derive" => &derive_path,
+            "loadsites" => &sites_path,
+            "strings" => &strings_path,
+            "auto-tables" => &profile_path,
+            _ => continue,
+        };
+        if !Path::new(artifact).exists() {
+            anyhow::bail!("stage {name} did not produce {artifact}");
+        }
+    }
+    println!("auto-dump complete: {dump_out}
+  profile: {profile_path}");
+    Ok(())
 }
 
 /// Constant-free string-cipher derivation.

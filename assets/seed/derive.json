@@ -1,0 +1,2881 @@
+{
+  "anchors": [
+    {
+      "confirmed": false,
+      "hdr_off": 212,
+      "imm": 3041450180,
+      "op": "Add",
+      "resolved": 59795520,
+      "site": "0x1400011D7"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 116,
+      "imm": 1762977913,
+      "op": "Xor",
+      "resolved": 24005900,
+      "site": "0x140001219"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 3858607818,
+      "op": "Add",
+      "resolved": 3864459031,
+      "site": "0x140001311"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 0,
+      "imm": 9,
+      "op": "Add",
+      "resolved": 5851222,
+      "site": "0x140034614"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 0,
+      "imm": 1,
+      "op": "Xor",
+      "resolved": 5851212,
+      "site": "0x140060BEB"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 72,
+      "op": "Add",
+      "resolved": 5851285,
+      "site": "0x140061309"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 24,
+      "imm": 32,
+      "op": "Add",
+      "resolved": 1396076435,
+      "site": "0x140064A0B"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 40,
+      "imm": 32,
+      "op": "Add",
+      "resolved": 196922565,
+      "site": "0x140064B18"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 20,
+      "imm": 3479695601,
+      "op": "Add",
+      "resolved": 3564132433,
+      "site": "0x1400B1476"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 16,
+      "imm": 1390102216,
+      "op": "Xor",
+      "resolved": 1183628293,
+      "site": "0x1400B1484"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 24,
+      "imm": 2753397781,
+      "op": "Add",
+      "resolved": 4149474184,
+      "site": "0x1400B148E"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 0,
+      "imm": 3,
+      "op": "Xor",
+      "resolved": 5851214,
+      "site": "0x1400F48DB"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 32,
+      "imm": 16,
+      "op": "Add",
+      "resolved": 1813251305,
+      "site": "0x14012E220"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 96,
+      "imm": 16,
+      "op": "Add",
+      "resolved": 653369183,
+      "site": "0x1401341C0"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 40,
+      "imm": 16,
+      "op": "Add",
+      "resolved": 196922549,
+      "site": "0x140193794"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 24,
+      "imm": 16,
+      "op": "Add",
+      "resolved": 1396076419,
+      "site": "0x1401DD4D4"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 72,
+      "imm": 16,
+      "op": "Add",
+      "resolved": 1150543672,
+      "site": "0x140207CE0"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 16,
+      "imm": 20,
+      "op": "Add",
+      "resolved": 341310177,
+      "site": "0x1404364EC"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 24,
+      "imm": 20,
+      "op": "Add",
+      "resolved": 1396076423,
+      "site": "0x140436568"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 56,
+      "imm": 16,
+      "op": "Add",
+      "resolved": 761473113,
+      "site": "0x1404368E0"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 480,
+      "imm": 1315349750,
+      "op": "Xor",
+      "resolved": 35616688,
+      "site": "0x14045C24F"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 140,
+      "imm": 1810987298,
+      "op": "Xor",
+      "resolved": 34013780,
+      "site": "0x14045C279"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 24,
+      "imm": 4149300,
+      "op": "Xor",
+      "resolved": 1393114951,
+      "site": "0x14045C4B8"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 16,
+      "imm": 1,
+      "op": "Add",
+      "resolved": 341310158,
+      "site": "0x14045C4F2"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 2201457513,
+      "op": "Add",
+      "resolved": 2207308726,
+      "site": "0x14045C5B9"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 40,
+      "imm": 57565008,
+      "op": "Xor",
+      "resolved": 148018165,
+      "site": "0x14045C5C3"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 16,
+      "imm": 16,
+      "op": "Add",
+      "resolved": 341310173,
+      "site": "0x14045C992"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 8,
+      "op": "Add",
+      "resolved": 1227179799,
+      "site": "0x14045C996"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 148,
+      "imm": 1943272478,
+      "op": "Xor",
+      "resolved": 4119948,
+      "site": "0x140462BA8"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 344,
+      "imm": 357833424,
+      "op": "Xor",
+      "resolved": 63988048,
+      "site": "0x140462C0A"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 16,
+      "imm": 2216734065,
+      "op": "Xor",
+      "resolved": 2423740348,
+      "site": "0x140462FE3"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 472,
+      "imm": 763749821,
+      "op": "Xor",
+      "resolved": 23836872,
+      "site": "0x1404709BB"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 20,
+      "imm": 490207368,
+      "op": "Xor",
+      "resolved": 406822888,
+      "site": "0x1404712D9"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 56,
+      "imm": 32,
+      "op": "Add",
+      "resolved": 761473129,
+      "site": "0x14047167D"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 208,
+      "imm": 2448331098,
+      "op": "Add",
+      "resolved": 858984,
+      "site": "0x140471AC9"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 388,
+      "imm": 1085012570,
+      "op": "Xor",
+      "resolved": 4829160,
+      "site": "0x140471B0F"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 500,
+      "imm": 927889995,
+      "op": "Xor",
+      "resolved": 4187516,
+      "site": "0x140471BBF"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 2216734065,
+      "op": "Xor",
+      "resolved": 2222581052,
+      "site": "0x14047232A"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 1094528229,
+      "op": "Add",
+      "resolved": 1100379442,
+      "site": "0x140473154"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 260,
+      "imm": 804734074,
+      "op": "Xor",
+      "resolved": 59363724,
+      "site": "0x140473E16"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 136,
+      "imm": 1947094356,
+      "op": "Xor",
+      "resolved": 366692,
+      "site": "0x140473E24"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 80,
+      "imm": 10,
+      "op": "Add",
+      "resolved": 1824713623,
+      "site": "0x140473E8C"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 80,
+      "imm": 3973828121,
+      "op": "Add",
+      "resolved": 1503574438,
+      "site": "0x140473FB3"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 76,
+      "imm": 1184790759,
+      "op": "Xor",
+      "resolved": 16247804,
+      "site": "0x1404835F6"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 104,
+      "imm": 2664876100,
+      "op": "Add",
+      "resolved": 5864252,
+      "site": "0x14048B62A"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 25,
+      "op": "Add",
+      "resolved": 5851238,
+      "site": "0x14048C8F4"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 380,
+      "imm": 3265169401,
+      "op": "Add",
+      "resolved": 23739784,
+      "site": "0x14048F788"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 120,
+      "imm": 1073741824,
+      "op": "Add",
+      "resolved": 2505814729,
+      "site": "0x14048F812"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 8,
+      "imm": 1,
+      "op": "Xor",
+      "resolved": 1227179790,
+      "site": "0x140490590"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 16,
+      "imm": 1,
+      "op": "Xor",
+      "resolved": 341310156,
+      "site": "0x1404905DE"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 16,
+      "imm": 56,
+      "op": "Xor",
+      "resolved": 341310197,
+      "site": "0x140490604"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 288,
+      "imm": 1430491850,
+      "op": "Xor",
+      "resolved": 16454144,
+      "site": "0x140490951"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 200,
+      "imm": 4164106247,
+      "op": "Add",
+      "resolved": 16496,
+      "site": "0x140490965"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 416,
+      "imm": 2300005730,
+      "op": "Add",
+      "resolved": 59730416,
+      "site": "0x1404909C5"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 56,
+      "imm": 1,
+      "op": "Add",
+      "resolved": 761473098,
+      "site": "0x14048F8A7"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 120,
+      "op": "Add",
+      "resolved": 1227179911,
+      "site": "0x140490C9E"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 324,
+      "imm": 4019215181,
+      "op": "Add",
+      "resolved": 68315032,
+      "site": "0x1404BB551"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 496,
+      "imm": 4003543213,
+      "op": "Add",
+      "resolved": 23739784,
+      "site": "0x1404BCAEA"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 40,
+      "op": "Add",
+      "resolved": 5851253,
+      "site": "0x1404BC81B"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 404,
+      "imm": 661129913,
+      "op": "Xor",
+      "resolved": 3165040,
+      "site": "0x1404BDD67"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 268,
+      "imm": 680180795,
+      "op": "Xor",
+      "resolved": 35326468,
+      "site": "0x1404BDE88"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 340,
+      "imm": 2673090746,
+      "op": "Add",
+      "resolved": 23404692,
+      "site": "0x1404BDE97"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 12,
+      "imm": 1,
+      "op": "Add",
+      "resolved": 762963382,
+      "site": "0x1404BDFA5"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 484,
+      "imm": 759626015,
+      "op": "Xor",
+      "resolved": 34993760,
+      "site": "0x1404BE31F"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 80,
+      "imm": 120,
+      "op": "Add",
+      "resolved": 1824713733,
+      "site": "0x1404BD1FC"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 12,
+      "imm": 1,
+      "op": "Sub",
+      "resolved": 762963380,
+      "site": "0x1404BD456"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 4,
+      "imm": 2216734065,
+      "op": "Add",
+      "resolved": 2216734065,
+      "site": "0x1404BD955"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 8,
+      "imm": 3986546312,
+      "op": "Add",
+      "resolved": 918758807,
+      "site": "0x1404BD6BC"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 12,
+      "imm": 3544898307,
+      "op": "Add",
+      "resolved": 12894392,
+      "site": "0x1404BDF2B"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 160,
+      "imm": 1811831032,
+      "op": "Xor",
+      "resolved": 4078556,
+      "site": "0x1404BEB61"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 280,
+      "imm": 3297034227,
+      "op": "Add",
+      "resolved": 23838352,
+      "site": "0x1404BEEAF"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 3083991049,
+      "op": "Add",
+      "resolved": 16203544,
+      "site": "0x1404BEECD"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 80,
+      "imm": 1867709993,
+      "op": "Xor",
+      "resolved": 59774372,
+      "site": "0x1404BF003"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 96,
+      "imm": 3641606657,
+      "op": "Add",
+      "resolved": 8528,
+      "site": "0x1404BF017"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 48,
+      "imm": 8,
+      "op": "Add",
+      "resolved": 1100066328,
+      "site": "0x1404BE3B6"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 128,
+      "imm": 1787631681,
+      "op": "Xor",
+      "resolved": 33660976,
+      "site": "0x1404BF394"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 212,
+      "imm": 3641606657,
+      "op": "Add",
+      "resolved": 659951997,
+      "site": "0x1404BF4B8"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 56,
+      "imm": 3574975139,
+      "op": "Add",
+      "resolved": 41480940,
+      "site": "0x1404BFB48"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 20,
+      "imm": 4210605164,
+      "op": "Add",
+      "resolved": 74700,
+      "site": "0x1404BFBEA"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 144,
+      "imm": 3389487023,
+      "op": "Add",
+      "resolved": 0,
+      "site": "0x1404BFC64"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 144,
+      "imm": 4210605164,
+      "op": "Xor",
+      "resolved": 3472897085,
+      "site": "0x1404BFD5F"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 56,
+      "imm": 112981133,
+      "op": "Add",
+      "resolved": 874454230,
+      "site": "0x1404BFFE9"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 48,
+      "imm": 16,
+      "op": "Xor",
+      "resolved": 1100066304,
+      "site": "0x1404C0083"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 0,
+      "imm": 3805030858,
+      "op": "Add",
+      "resolved": 3810882071,
+      "site": "0x1404C03E8"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 120,
+      "imm": 112981133,
+      "op": "Add",
+      "resolved": 1545054038,
+      "site": "0x1404C03FC"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 0,
+      "imm": 192,
+      "op": "Xor",
+      "resolved": 5851277,
+      "site": "0x1404C0438"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 320,
+      "imm": 3094762624,
+      "op": "Add",
+      "resolved": 59355084,
+      "site": "0x1404C03E6"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 488,
+      "imm": 3925827455,
+      "op": "Add",
+      "resolved": 32573504,
+      "site": "0x1404C084A"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 16,
+      "imm": 168,
+      "op": "Add",
+      "resolved": 341310325,
+      "site": "0x1404C0273"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 0,
+      "imm": 112981133,
+      "op": "Xor",
+      "resolved": 115522752,
+      "site": "0x1404C0415"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 49390,
+      "op": "Xor",
+      "resolved": 5867683,
+      "site": "0x1404C0481"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 48,
+      "imm": 124,
+      "op": "Add",
+      "resolved": 1100066444,
+      "site": "0x1404C0558"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 8,
+      "imm": 3805030858,
+      "op": "Xor",
+      "resolved": 2884202181,
+      "site": "0x1404C067C"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 24,
+      "imm": 1,
+      "op": "Xor",
+      "resolved": 1396076402,
+      "site": "0x1404C06CC"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 80,
+      "imm": 4097792988,
+      "op": "Add",
+      "resolved": 1627539305,
+      "site": "0x1404C07A4"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 80,
+      "imm": 4294956444,
+      "op": "Add",
+      "resolved": 1824702761,
+      "site": "0x1404C07C4"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 512,
+      "imm": 907213300,
+      "op": "Xor",
+      "resolved": 68171768,
+      "site": "0x1404C0AC0"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 248,
+      "imm": 2388524308,
+      "op": "Add",
+      "resolved": 59790180,
+      "site": "0x1404C0DDB"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 64,
+      "imm": 3805030858,
+      "op": "Add",
+      "resolved": 1046552612,
+      "site": "0x1404C063D"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 80,
+      "imm": 11372,
+      "op": "Xor",
+      "resolved": 1824704481,
+      "site": "0x1404C0AAD"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 64,
+      "imm": 54882,
+      "op": "Xor",
+      "resolved": 1536434232,
+      "site": "0x1404C0896"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 80,
+      "imm": 3858607818,
+      "op": "Add",
+      "resolved": 1388354135,
+      "site": "0x1404C1A80"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 44,
+      "imm": 1252805547,
+      "op": "Xor",
+      "resolved": 823457526,
+      "site": "0x1404C0D4B"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 8,
+      "imm": 96,
+      "op": "Sub",
+      "resolved": 1227179695,
+      "site": "0x1404C1041"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 1,
+      "op": "Add",
+      "resolved": 5851214,
+      "site": "0x1404C16B5"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 32,
+      "imm": 4294967294,
+      "op": "Xor",
+      "resolved": 2481716007,
+      "site": "0x1404C1A3D"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 48,
+      "imm": 1,
+      "op": "Xor",
+      "resolved": 1100066321,
+      "site": "0x1404C5E5C"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 144,
+      "imm": 1894896137,
+      "op": "Add",
+      "resolved": 2800376410,
+      "site": "0x1404C89B7"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 14,
+      "imm": 621331381,
+      "op": "Xor",
+      "resolved": 3754290892,
+      "site": "0x1404C85DE"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 22,
+      "op": "Add",
+      "resolved": 5851235,
+      "site": "0x1404C8B82"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 448,
+      "imm": 3854284666,
+      "op": "Add",
+      "resolved": 16470640,
+      "site": "0x1404CE6E9"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 436,
+      "imm": 1137298598,
+      "op": "Xor",
+      "resolved": 17619548,
+      "site": "0x1404CE7CB"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 364,
+      "imm": 3149413123,
+      "op": "Add",
+      "resolved": 2841156,
+      "site": "0x1404CE9DE"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 384,
+      "imm": 4130185313,
+      "op": "Add",
+      "resolved": 30301940,
+      "site": "0x1404CEA32"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 184,
+      "imm": 266017351,
+      "op": "Xor",
+      "resolved": 1896000742,
+      "site": "0x1404D0442"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 420,
+      "imm": 2459848444,
+      "op": "Add",
+      "resolved": 2749868,
+      "site": "0x1404D044E"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 476,
+      "imm": 571801317,
+      "op": "Xor",
+      "resolved": 33735676,
+      "site": "0x1404D0DDE"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 4,
+      "op": "Add",
+      "resolved": 5851217,
+      "site": "0x1404D1CD8"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 108,
+      "imm": 3565473154,
+      "op": "Add",
+      "resolved": 1148908,
+      "site": "0x1404D260A"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 32,
+      "imm": 3535656002,
+      "op": "Add",
+      "resolved": 1053939995,
+      "site": "0x1404D263D"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 69,
+      "op": "Xor",
+      "resolved": 1227179850,
+      "site": "0x1404D2A7A"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 24,
+      "imm": 69,
+      "op": "Xor",
+      "resolved": 1396076342,
+      "site": "0x1404D2AAD"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 304,
+      "imm": 800957244,
+      "op": "Xor",
+      "resolved": 289802,
+      "site": "0x1404D2C0D"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 68,
+      "imm": 2262260688,
+      "op": "Add",
+      "resolved": 34553340,
+      "site": "0x1404D2C96"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 16,
+      "imm": 12,
+      "op": "Add",
+      "resolved": 341310169,
+      "site": "0x1404D2CB5"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 16,
+      "imm": 2262260688,
+      "op": "Xor",
+      "resolved": 2457903389,
+      "site": "0x1404D2D04"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 32,
+      "imm": 32,
+      "op": "Add",
+      "resolved": 1813251321,
+      "site": "0x1404D34EA"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 2262260688,
+      "op": "Xor",
+      "resolved": 2257458077,
+      "site": "0x1404D3544"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 16,
+      "imm": 8,
+      "op": "Add",
+      "resolved": 341310165,
+      "site": "0x1404D3821"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 224572757,
+      "op": "Xor",
+      "resolved": 222035224,
+      "site": "0x1404D2C76"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 4,
+      "imm": 1416597257,
+      "op": "Xor",
+      "resolved": 1416597257,
+      "site": "0x1404D38AA"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 332,
+      "imm": 315172235,
+      "op": "Xor",
+      "resolved": 64065008,
+      "site": "0x1404D3C1D"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 120,
+      "imm": 3574975139,
+      "op": "Add",
+      "resolved": 712080748,
+      "site": "0x1404D38D2"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 48,
+      "imm": 496638586,
+      "op": "Xor",
+      "resolved": 1544270954,
+      "site": "0x1404D3ADD"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 120,
+      "imm": 224572757,
+      "op": "Add",
+      "resolved": 1656645662,
+      "site": "0x1404D3C76"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 24,
+      "imm": 168,
+      "op": "Add",
+      "resolved": 1396076571,
+      "site": "0x1404D3B0B"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 24,
+      "imm": 4294967216,
+      "op": "Add",
+      "resolved": 1396076323,
+      "site": "0x1404D3E34"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 100,
+      "imm": 1919307667,
+      "op": "Xor",
+      "resolved": 35274980,
+      "site": "0x1404D680B"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 220,
+      "imm": 1548867296,
+      "op": "Xor",
+      "resolved": 51494,
+      "site": "0x1404D6822"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 40,
+      "imm": 4097792988,
+      "op": "Add",
+      "resolved": 4294715521,
+      "site": "0x1404DF29F"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 76,
+      "imm": 1895464094,
+      "op": "Xor",
+      "resolved": 915664773,
+      "site": "0x1404DF3A5"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 64,
+      "imm": 490207368,
+      "op": "Xor",
+      "resolved": 1185091282,
+      "site": "0x1404DF3B2"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 16,
+      "imm": 224572757,
+      "op": "Xor",
+      "resolved": 422924184,
+      "site": "0x1404DF58A"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 1895464094,
+      "op": "Xor",
+      "resolved": 1889744083,
+      "site": "0x1404DF821"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 80,
+      "imm": 3574975139,
+      "op": "Sub",
+      "resolved": 2544705770,
+      "site": "0x1404DF993"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 396,
+      "imm": 1058937424,
+      "op": "Xor",
+      "resolved": 17874144,
+      "site": "0x1404E05FF"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 204,
+      "imm": 4020356480,
+      "op": "Add",
+      "resolved": 6296040,
+      "site": "0x1404E0661"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 80,
+      "imm": 4294966579,
+      "op": "Add",
+      "resolved": 1824712896,
+      "site": "0x1404DF373"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 176,
+      "imm": 1342982040,
+      "op": "Xor",
+      "resolved": 2964,
+      "site": "0x1404E06CF"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 24,
+      "imm": 4097792988,
+      "op": "Add",
+      "resolved": 1198902095,
+      "site": "0x1404DF724"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 412,
+      "imm": 3260382081,
+      "op": "Add",
+      "resolved": 1184,
+      "site": "0x1404E07CA"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 188,
+      "imm": 218341466,
+      "op": "Xor",
+      "resolved": 1697703630,
+      "site": "0x1404E08DD"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 308,
+      "imm": 1677359396,
+      "op": "Xor",
+      "resolved": 611976,
+      "site": "0x1404E0934"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 316,
+      "imm": 2298705114,
+      "op": "Add",
+      "resolved": 0,
+      "site": "0x1404E1113"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 4,
+      "imm": 371437491,
+      "op": "Xor",
+      "resolved": 371437491,
+      "site": "0x1404E1186"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 72,
+      "imm": 3148199704,
+      "op": "Add",
+      "resolved": 3776064,
+      "site": "0x1404E148C"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 88,
+      "imm": 3867458938,
+      "op": "Add",
+      "resolved": 255308,
+      "site": "0x1404E14A1"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 12,
+      "imm": 1141669623,
+      "op": "Xor",
+      "resolved": 1769315138,
+      "site": "0x1404E15F2"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 4,
+      "imm": 869466522,
+      "op": "Xor",
+      "resolved": 869466522,
+      "site": "0x1404E1621"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 28,
+      "imm": 404121407,
+      "op": "Xor",
+      "resolved": 1183935193,
+      "site": "0x1404E1630"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 16,
+      "imm": 1092499248,
+      "op": "Add",
+      "resolved": 1433809405,
+      "site": "0x1404E1646"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 24,
+      "imm": 1618311919,
+      "op": "Xor",
+      "resolved": 860034460,
+      "site": "0x1404E165A"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 1586058175,
+      "op": "Xor",
+      "resolved": 1590696946,
+      "site": "0x1404E1668"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 334514786,
+      "op": "Xor",
+      "resolved": 1523912045,
+      "site": "0x1404E1677"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 20,
+      "imm": 3966307543,
+      "op": "Xor",
+      "resolved": 3915475895,
+      "site": "0x1404E1680"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 284,
+      "imm": 1638710217,
+      "op": "Xor",
+      "resolved": 510912,
+      "site": "0x1404E1977"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 444,
+      "imm": 180079394,
+      "op": "Xor",
+      "resolved": 3644104,
+      "site": "0x1404E1A1D"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 108,
+      "imm": 3702744781,
+      "op": "Add",
+      "resolved": 138420535,
+      "site": "0x1404E0BD2"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 36,
+      "imm": 1199320947,
+      "op": "Xor",
+      "resolved": 1356928388,
+      "site": "0x1404E134C"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 593077916,
+      "op": "Xor",
+      "resolved": 587263697,
+      "site": "0x1404E1380"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 24,
+      "imm": 2077992100,
+      "op": "Add",
+      "resolved": 3474068503,
+      "site": "0x1404E139C"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 28,
+      "imm": 215482657,
+      "op": "Xor",
+      "resolved": 1381960903,
+      "site": "0x1404E13B3"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 32,
+      "imm": 1138924026,
+      "op": "Xor",
+      "resolved": 804691235,
+      "site": "0x1404E13C3"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 20,
+      "imm": 1077995912,
+      "op": "Xor",
+      "resolved": 1162383080,
+      "site": "0x1404E13DF"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 16,
+      "imm": 115093366,
+      "op": "Xor",
+      "resolved": 311154107,
+      "site": "0x1404E13EF"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 12,
+      "imm": 57565008,
+      "op": "Xor",
+      "resolved": 773307109,
+      "site": "0x1404E140B"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 64,
+      "imm": 3424601359,
+      "op": "Add",
+      "resolved": 666123113,
+      "site": "0x1404E1B0C"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 48,
+      "imm": 2,
+      "op": "Add",
+      "resolved": 1100066322,
+      "site": "0x1404E1B5C"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 32,
+      "imm": 232841657,
+      "op": "Xor",
+      "resolved": 1643439456,
+      "site": "0x1404E15C8"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 224,
+      "imm": 134602751,
+      "op": "Xor",
+      "resolved": 5688144,
+      "site": "0x1404E2CEC"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 424,
+      "imm": 3271476750,
+      "op": "Add",
+      "resolved": 7206248,
+      "site": "0x1404E2D06"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 8,
+      "op": "Add",
+      "resolved": 5851221,
+      "site": "0x1404E1FD2"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 132,
+      "imm": 1061141984,
+      "op": "Xor",
+      "resolved": 252349,
+      "site": "0x1404E3073"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 164,
+      "imm": 212946479,
+      "op": "Xor",
+      "resolved": 2960,
+      "site": "0x1404E311F"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 368,
+      "imm": 2153524341,
+      "op": "Add",
+      "resolved": 258564,
+      "site": "0x1404E313C"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 132,
+      "imm": 265285496,
+      "op": "Xor",
+      "resolved": 821267237,
+      "site": "0x1404E3158"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 40,
+      "imm": 162490017,
+      "op": "Xor",
+      "resolved": 34843140,
+      "site": "0x1404E3187"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 3271476750,
+      "op": "Add",
+      "resolved": 203689245,
+      "site": "0x1404E32DB"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 8,
+      "imm": 22,
+      "op": "Xor",
+      "resolved": 1227179801,
+      "site": "0x1404E56AC"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 16,
+      "imm": 2,
+      "op": "Add",
+      "resolved": 341310159,
+      "site": "0x1404E5707"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 16,
+      "imm": 3271476750,
+      "op": "Xor",
+      "resolved": 3601415363,
+      "site": "0x1404E5723"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 24,
+      "imm": 4294967280,
+      "op": "Add",
+      "resolved": 1396076387,
+      "site": "0x1404E516E"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 80,
+      "imm": 3371730504,
+      "op": "Add",
+      "resolved": 901476821,
+      "site": "0x1404E525F"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 60,
+      "imm": 48726641,
+      "op": "Xor",
+      "resolved": 986730349,
+      "site": "0x1404E528F"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 312,
+      "imm": 96900104,
+      "op": "Xor",
+      "resolved": 16258608,
+      "site": "0x1404F237D"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 456,
+      "imm": 4082143746,
+      "op": "Add",
+      "resolved": 34969316,
+      "site": "0x1404F239E"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 80,
+      "imm": 99,
+      "op": "Add",
+      "resolved": 1824713712,
+      "site": "0x1404F2A04"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 272,
+      "imm": 4294967288,
+      "op": "Add",
+      "resolved": 237401433,
+      "site": "0x1404F1EC7"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 296,
+      "imm": 40,
+      "op": "Add",
+      "resolved": 898725852,
+      "site": "0x1404F1ED8"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 304,
+      "imm": 4294967288,
+      "op": "Add",
+      "resolved": 800706350,
+      "site": "0x1404F1F21"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 328,
+      "imm": 40,
+      "op": "Add",
+      "resolved": 1907993107,
+      "site": "0x1404F1F32"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 232,
+      "imm": 4294967288,
+      "op": "Add",
+      "resolved": 1012978056,
+      "site": "0x1404F1FD8"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 256,
+      "imm": 40,
+      "op": "Add",
+      "resolved": 998653308,
+      "site": "0x1404F1FE5"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 4294967280,
+      "imm": 32,
+      "op": "Add",
+      "resolved": null,
+      "site": "0x1404F25AB"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 16,
+      "imm": 4294967288,
+      "op": "Add",
+      "resolved": 341310149,
+      "site": "0x1404F2948"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 40,
+      "imm": 40,
+      "op": "Add",
+      "resolved": 196922573,
+      "site": "0x1404F2959"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 4294967264,
+      "imm": 4294967288,
+      "op": "Add",
+      "resolved": null,
+      "site": "0x1404F2A68"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 4294967288,
+      "imm": 40,
+      "op": "Add",
+      "resolved": null,
+      "site": "0x1404F2A75"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 0,
+      "imm": 2,
+      "op": "Add",
+      "resolved": 5851215,
+      "site": "0x14648AB56"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 7,
+      "op": "Add",
+      "resolved": 1227179798,
+      "site": "0x1467F0C5D"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 2,
+      "op": "Add",
+      "resolved": 1227179793,
+      "site": "0x1467F0DD2"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 40,
+      "imm": 2,
+      "op": "Add",
+      "resolved": 196922535,
+      "site": "0x1469DE0CB"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 40,
+      "imm": 4,
+      "op": "Add",
+      "resolved": 196922537,
+      "site": "0x1469DE11F"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 16,
+      "imm": 32,
+      "op": "Add",
+      "resolved": 341310189,
+      "site": "0x1469DE4C5"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 3041450180,
+      "op": "Add",
+      "resolved": 3047301393,
+      "site": "0x146D5073B"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 160,
+      "imm": 3041450180,
+      "op": "Xor",
+      "resolved": 3733502944,
+      "site": "0x146D50755"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 265,
+      "op": "Add",
+      "resolved": 5851478,
+      "site": "0x146E36D71"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 24,
+      "imm": 690013,
+      "op": "Add",
+      "resolved": 1396766416,
+      "site": "0x1470CC16E"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 6,
+      "op": "Add",
+      "resolved": 1227179797,
+      "site": "0x14739613D"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 1,
+      "op": "Add",
+      "resolved": 1227179792,
+      "site": "0x1473966B4"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 3,
+      "op": "Add",
+      "resolved": 1227179794,
+      "site": "0x147399166"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 656,
+      "imm": 4294967294,
+      "op": "Add",
+      "resolved": null,
+      "site": "0x1473DCE32"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 159734,
+      "op": "Add",
+      "resolved": 6010947,
+      "site": "0x1473DD0DF"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 11,
+      "op": "Add",
+      "resolved": 1227179802,
+      "site": "0x14743F79D"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 5,
+      "op": "Add",
+      "resolved": 1227179796,
+      "site": "0x14743FE56"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 20,
+      "imm": 1,
+      "op": "Xor",
+      "resolved": 84436833,
+      "site": "0x14744A8A7"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 16,
+      "imm": 4,
+      "op": "Add",
+      "resolved": 341310161,
+      "site": "0x14744A988"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 64,
+      "imm": 200000,
+      "op": "Add",
+      "resolved": 1536689050,
+      "site": "0x1474BF6E7"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 88,
+      "imm": 1,
+      "op": "Xor",
+      "resolved": 427763667,
+      "site": "0x1474BF77C"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 44,
+      "imm": 3041450180,
+      "op": "Xor",
+      "resolved": 3471861145,
+      "site": "0x1477F9B4F"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 896,
+      "imm": 23,
+      "op": "Xor",
+      "resolved": null,
+      "site": "0x14783EB6D"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 112,
+      "imm": 23,
+      "op": "Xor",
+      "resolved": 1351746920,
+      "site": "0x1478C51BD"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 64,
+      "imm": 56,
+      "op": "Add",
+      "resolved": 1536489106,
+      "site": "0x147CB3648"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 584,
+      "imm": 4294967294,
+      "op": "Add",
+      "resolved": null,
+      "site": "0x147D0F4FC"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 24,
+      "imm": 2066363588,
+      "op": "Xor",
+      "resolved": 672947127,
+      "site": "0x1480ACC4D"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 46410,
+      "op": "Add",
+      "resolved": 5897623,
+      "site": "0x1482FF2ED"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 32,
+      "op": "Add",
+      "resolved": 5851245,
+      "site": "0x148752E2C"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 608,
+      "imm": 1,
+      "op": "Xor",
+      "resolved": null,
+      "site": "0x14882791E"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 256,
+      "imm": 65665,
+      "op": "Add",
+      "resolved": 998718933,
+      "site": "0x148C710A8"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 6461056,
+      "op": "Add",
+      "resolved": 12312269,
+      "site": "0x148CF32E8"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 4,
+      "op": "Add",
+      "resolved": 1227179795,
+      "site": "0x148DF2B06"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 17,
+      "op": "Add",
+      "resolved": 1227179808,
+      "site": "0x148DF2D76"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 15,
+      "op": "Add",
+      "resolved": 1227179806,
+      "site": "0x148DF301E"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 4294967193,
+      "op": "Add",
+      "resolved": 5851110,
+      "site": "0x148E689F2"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 176,
+      "imm": 7,
+      "op": "Xor",
+      "resolved": 1342983179,
+      "site": "0x14903CF44"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 128,
+      "imm": 3,
+      "op": "Xor",
+      "resolved": 1754052722,
+      "site": "0x1490404CC"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 896,
+      "imm": 62468,
+      "op": "Xor",
+      "resolved": null,
+      "site": "0x14904575A"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 40,
+      "imm": 8,
+      "op": "Add",
+      "resolved": 196922541,
+      "site": "0x1493C5CA8"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 16,
+      "imm": 418840099,
+      "op": "Add",
+      "resolved": 760150256,
+      "site": "0x1493C5CB6"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 14,
+      "op": "Add",
+      "resolved": 1227179805,
+      "site": "0x14945AA7B"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 122976,
+      "imm": 167643,
+      "op": "Xor",
+      "resolved": null,
+      "site": "0x1496F6F09"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 48,
+      "imm": 170969,
+      "op": "Xor",
+      "resolved": 1100166601,
+      "site": "0x1497FBE8A"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 0,
+      "imm": 168922,
+      "op": "Add",
+      "resolved": 6020135,
+      "site": "0x14A0985AB"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 24,
+      "op": "Add",
+      "resolved": 1227179815,
+      "site": "0x14A182E06"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 12,
+      "op": "Add",
+      "resolved": 1227179803,
+      "site": "0x14A1832A6"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 104,
+      "imm": 1,
+      "op": "Xor",
+      "resolved": 1635955449,
+      "site": "0x14A48B208"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 568,
+      "imm": 1,
+      "op": "Xor",
+      "resolved": null,
+      "site": "0x14A4EC987"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 536,
+      "imm": 52,
+      "op": "Add",
+      "resolved": null,
+      "site": "0x14A4ECB9D"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 56,
+      "imm": 133,
+      "op": "Xor",
+      "resolved": 761473228,
+      "site": "0x14A4F2545"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 32,
+      "imm": 3581663758,
+      "op": "Xor",
+      "resolved": 3111116503,
+      "site": "0x14A5F1CFE"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 32,
+      "imm": 1318518904,
+      "op": "Xor",
+      "resolved": 579011745,
+      "site": "0x14A5F1D5F"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 32,
+      "imm": 3358864446,
+      "op": "Xor",
+      "resolved": 2753573095,
+      "site": "0x14A5F1DC4"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 6040,
+      "imm": 3358864446,
+      "op": "Add",
+      "resolved": null,
+      "site": "0x14A5F1FC7"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 9,
+      "op": "Add",
+      "resolved": 1227179800,
+      "site": "0x14A930FCE"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 27,
+      "op": "Add",
+      "resolved": 1227179818,
+      "site": "0x14A93615F"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 10,
+      "op": "Add",
+      "resolved": 1227179801,
+      "site": "0x14A939092"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 135049,
+      "op": "Add",
+      "resolved": 5986262,
+      "site": "0x14A9DFEA2"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 904,
+      "imm": 109912,
+      "op": "Xor",
+      "resolved": null,
+      "site": "0x14AA589A4"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 4294966587,
+      "op": "Add",
+      "resolved": 5850504,
+      "site": "0x14AAD62F6"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 584,
+      "imm": 1,
+      "op": "Xor",
+      "resolved": null,
+      "site": "0x14ABAB277"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 16,
+      "imm": 88,
+      "op": "Add",
+      "resolved": 341310245,
+      "site": "0x14AF50871"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 28,
+      "imm": 4294966696,
+      "op": "Add",
+      "resolved": 1585908622,
+      "site": "0x14AFF49EB"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 0,
+      "imm": 132502,
+      "op": "Add",
+      "resolved": 5983715,
+      "site": "0x14B03B342"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 752,
+      "imm": 25,
+      "op": "Xor",
+      "resolved": null,
+      "site": "0x14B631D07"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 4294964800,
+      "op": "Add",
+      "resolved": 5848717,
+      "site": "0x14B721F83"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 40,
+      "imm": 130356,
+      "op": "Xor",
+      "resolved": 196948369,
+      "site": "0x14B8074C8"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 544,
+      "imm": 16,
+      "op": "Add",
+      "resolved": null,
+      "site": "0x14B955D3E"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 544,
+      "imm": 32,
+      "op": "Add",
+      "resolved": null,
+      "site": "0x14B955E06"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 20,
+      "op": "Add",
+      "resolved": 1227179811,
+      "site": "0x14BE7E13B"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 48,
+      "imm": 32452,
+      "op": "Add",
+      "resolved": 1100098772,
+      "site": "0x14BECF549"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 56,
+      "imm": 7,
+      "op": "Add",
+      "resolved": 761473104,
+      "site": "0x14C17BB78"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 8,
+      "imm": 106234,
+      "op": "Xor",
+      "resolved": 1227151861,
+      "site": "0x14C47F2C4"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 48,
+      "imm": 69519,
+      "op": "Xor",
+      "resolved": 1099997599,
+      "site": "0x14C5BF143"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 16,
+      "imm": 1117249910,
+      "op": "Add",
+      "resolved": 1458560067,
+      "site": "0x14C5ED4FB"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 32,
+      "imm": 2335732546,
+      "op": "Xor",
+      "resolved": 3878451099,
+      "site": "0x14CB8CFFB"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 0,
+      "imm": 3909694150,
+      "op": "Xor",
+      "resolved": 3914365579,
+      "site": "0x14CB8D5EF"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 32,
+      "imm": 4267265787,
+      "op": "Xor",
+      "resolved": 2454538786,
+      "site": "0x14D121753"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 32,
+      "imm": 438323431,
+      "op": "Add",
+      "resolved": 2251574720,
+      "site": "0x14D12178E"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 40,
+      "imm": 1830420366,
+      "op": "Xor",
+      "resolved": 1722102571,
+      "site": "0x14D137EFF"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 120,
+      "op": "Add",
+      "resolved": 5851333,
+      "site": "0x14D237A12"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 172,
+      "imm": 4284953292,
+      "op": "Add",
+      "resolved": 674463321,
+      "site": "0x14D28CF95"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 904,
+      "imm": 81326,
+      "op": "Xor",
+      "resolved": null,
+      "site": "0x14D4FD33F"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 32,
+      "imm": 2156180624,
+      "op": "Add",
+      "resolved": 3969431913,
+      "site": "0x14D4FDFDC"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 772,
+      "imm": 1,
+      "op": "Xor",
+      "resolved": null,
+      "site": "0x14D840E33"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 40,
+      "imm": 1,
+      "op": "Xor",
+      "resolved": 196922532,
+      "site": "0x14D95D077"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 192,
+      "imm": 1,
+      "op": "Xor",
+      "resolved": 1735013470,
+      "site": "0x14DB42CAB"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 360,
+      "imm": 1,
+      "op": "Xor",
+      "resolved": 1584122508,
+      "site": "0x14DE7D6BE"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 19,
+      "op": "Add",
+      "resolved": 1227179810,
+      "site": "0x14E109BA7"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 4294967280,
+      "imm": 15,
+      "op": "Xor",
+      "resolved": null,
+      "site": "0x14E30A647"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 104,
+      "imm": 13,
+      "op": "Xor",
+      "resolved": 1635955445,
+      "site": "0x14E30CF13"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 32,
+      "imm": 3041450180,
+      "op": "Xor",
+      "resolved": 3646741533,
+      "site": "0x14E411B57"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 544,
+      "imm": 113672,
+      "op": "Xor",
+      "resolved": null,
+      "site": "0x14E5B295A"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 7229,
+      "op": "Xor",
+      "resolved": 5854320,
+      "site": "0x14EBAD8C5"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 212,
+      "imm": 3858607844,
+      "op": "Add",
+      "resolved": 876953184,
+      "site": "0x14EC777DD"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 16,
+      "imm": 3457668100,
+      "op": "Add",
+      "resolved": 3798978257,
+      "site": "0x14ECE993C"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 236,
+      "imm": 1,
+      "op": "Xor",
+      "resolved": 1163476861,
+      "site": "0x14ED3D64F"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 408,
+      "imm": 1,
+      "op": "Xor",
+      "resolved": 1486746178,
+      "site": "0x14ED73DB6"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 32,
+      "imm": 112478,
+      "op": "Xor",
+      "resolved": 1813361543,
+      "site": "0x14EDAD371"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 32,
+      "imm": 20,
+      "op": "Xor",
+      "resolved": 1813251277,
+      "site": "0x14EDB34A8"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 0,
+      "imm": 3858607889,
+      "op": "Xor",
+      "resolved": 3852789596,
+      "site": "0x14EF85C16"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 0,
+      "imm": 4,
+      "op": "Xor",
+      "resolved": 5851209,
+      "site": "0x14EFF781A"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 4294967224,
+      "imm": 32,
+      "op": "Add",
+      "resolved": null,
+      "site": "0x14F1BBAD2"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 4294967288,
+      "imm": 8,
+      "op": "Add",
+      "resolved": null,
+      "site": "0x14F22BFCD"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 4294967200,
+      "imm": 4294967232,
+      "op": "Add",
+      "resolved": null,
+      "site": "0x14F22C075"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 24,
+      "imm": 24,
+      "op": "Add",
+      "resolved": 1396076427,
+      "site": "0x14F3B9FD4"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 3,
+      "op": "Add",
+      "resolved": 5851216,
+      "site": "0x14F3FEFFF"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 40,
+      "imm": 2053683188,
+      "op": "Xor",
+      "resolved": 1909750609,
+      "site": "0x14F6AFE36"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 56,
+      "imm": 3041450180,
+      "op": "Xor",
+      "resolved": 2553016461,
+      "site": "0x14F6C60B3"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 1160,
+      "imm": 77824,
+      "op": "Xor",
+      "resolved": null,
+      "site": "0x14FA44F9C"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 104,
+      "imm": 15,
+      "op": "Xor",
+      "resolved": 1635955447,
+      "site": "0x14FB7D03B"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 32,
+      "imm": 4183786801,
+      "op": "Add",
+      "resolved": 1702070794,
+      "site": "0x14FB7D252"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 32,
+      "imm": 1751765842,
+      "op": "Add",
+      "resolved": 3565017131,
+      "site": "0x14FB7D2BD"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 544,
+      "imm": 3,
+      "op": "Sub",
+      "resolved": null,
+      "site": "0x14FBE9AD7"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 608,
+      "imm": 4294967286,
+      "op": "Add",
+      "resolved": null,
+      "site": "0x14FE1CB0A"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 100281,
+      "op": "Add",
+      "resolved": 5951494,
+      "site": "0x15007E0F1"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 212,
+      "imm": 3858607901,
+      "op": "Add",
+      "resolved": 876953241,
+      "site": "0x150459327"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 65665,
+      "op": "Add",
+      "resolved": 5916878,
+      "site": "0x15089CD84"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 4294967289,
+      "op": "Add",
+      "resolved": 5851206,
+      "site": "0x150C34A76"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 32,
+      "imm": 26673,
+      "op": "Xor",
+      "resolved": 1813277928,
+      "site": "0x150E64409"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 60,
+      "imm": 4294967292,
+      "op": "Add",
+      "resolved": 943181080,
+      "site": "0x150FAB126"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 112,
+      "imm": 4294967276,
+      "op": "Add",
+      "resolved": 1351746923,
+      "site": "0x150FADE7C"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 128,
+      "imm": 1,
+      "op": "Xor",
+      "resolved": 1754052720,
+      "site": "0x15101D310"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 28,
+      "imm": 20,
+      "op": "Add",
+      "resolved": 1585909242,
+      "site": "0x151099E1D"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 24,
+      "imm": 654410,
+      "op": "Add",
+      "resolved": 1396730813,
+      "site": "0x1511CA7C1"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 28,
+      "op": "Add",
+      "resolved": 1227179819,
+      "site": "0x15127032A"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 30,
+      "op": "Add",
+      "resolved": 1227179821,
+      "site": "0x1512703E6"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 4294967272,
+      "imm": 32,
+      "op": "Add",
+      "resolved": null,
+      "site": "0x1513559F2"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 28,
+      "imm": 4294965873,
+      "op": "Add",
+      "resolved": 1585907799,
+      "site": "0x1516C6C7E"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 20,
+      "imm": 1,
+      "op": "Sub",
+      "resolved": 84436831,
+      "site": "0x1519BB885"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 3858607821,
+      "op": "Add",
+      "resolved": 790820316,
+      "site": "0x151B5197C"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 576,
+      "imm": 25,
+      "op": "Sub",
+      "resolved": null,
+      "site": "0x151B7CA77"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 0,
+      "imm": 4294966591,
+      "op": "Add",
+      "resolved": 5850508,
+      "site": "0x151BCC4B6"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 48,
+      "imm": 3,
+      "op": "Xor",
+      "resolved": 1100066323,
+      "site": "0x1522AFDB3"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 56,
+      "imm": 55,
+      "op": "Xor",
+      "resolved": 761473150,
+      "site": "0x152861537"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 32,
+      "imm": 5381,
+      "op": "Xor",
+      "resolved": 1813254620,
+      "site": "0x152AA6239"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 16,
+      "imm": 3,
+      "op": "Xor",
+      "resolved": 341310158,
+      "site": "0x152FC92F2"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 576,
+      "imm": 1,
+      "op": "Xor",
+      "resolved": null,
+      "site": "0x153396D54"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 88,
+      "imm": 27,
+      "op": "Xor",
+      "resolved": 427763657,
+      "site": "0x1550E02AE"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 208,
+      "imm": 10,
+      "op": "Xor",
+      "resolved": 1847495172,
+      "site": "0x15550DBB2"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 72,
+      "imm": 32,
+      "op": "Sub",
+      "resolved": 1150543624,
+      "site": "0x1571CCCE7"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 24,
+      "imm": 12438,
+      "op": "Add",
+      "resolved": 1396088841,
+      "site": "0x1571CCE25"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 16,
+      "op": "Add",
+      "resolved": 1227179807,
+      "site": "0x1571CD068"
+    },
+    {
+      "confirmed": true,
+      "hdr_off": 16,
+      "imm": 8649,
+      "op": "Xor",
+      "resolved": 341302020,
+      "site": "0x1578CC5DA"
+    },
+    {
+      "confirmed": false,
+      "hdr_off": 8,
+      "imm": 23,
+      "op": "Add",
+      "resolved": 1227179814,
+      "site": "0x157A02764"
+    }
+  ],
+  "artifact": "mhydump-derive",
+  "artifact_version": 1,
+  "blob_va": "0x142418C00",
+  "cipher": {
+    "mask_site": 5373670678,
+    "schedule": {
+      "ops": [
+        {
+          "op": "And",
+          "v": 16777215
+        },
+        {
+          "op": "Mul",
+          "v": 12255999544391170664
+        },
+        {
+          "op": "Add",
+          "v": 2630997457440276966
+        },
+        {
+          "op": "Xor",
+          "v": 8847782104981826457
+        }
+      ],
+      "step": 4609239390607091218
+    },
+    "score": 15119,
+    "site": 5373670834,
+    "step_table": 5423461472,
+    "strsec": 68315032
+  },
+  "module": "constant-algorithm-analysis-extract (REQUIREMENTS R10)",
+  "sanity": {
+    "body_len": 77271144,
+    "heap0": "mscorlib"
+  },
+  "tables": [
+    {
+      "hdr_off": 480,
+      "imm": 1315349750,
+      "op": "Xor",
+      "site": "0x14048B65A",
+      "stride": 70
+    }
+  ]
+}
