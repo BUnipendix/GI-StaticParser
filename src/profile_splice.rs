@@ -441,6 +441,15 @@ pub fn splice_profile(
         splice_td(&mut p, td, &mut m);
     }
 
+    // ---- generic tables generation guard ----
+    // When the 7.2 gc72 table is present, the 7.1 generic_tables (gp/gc
+    // constants from the seed) must be cleared — mixing generations causes
+    // the engine to use wrong base addresses for generic parameter lookups,
+    // which silently breaks extends rendering (62% vs 90.8% on 7.2).
+    if p.gc72.is_some() {
+        p.generic_tables = None;
+    }
+
     // ---- td_flags / td_parent / bitfield (R107 structural solve) ----
     if let Some(fp) = fp {
         p.td_flags = Some(fp.flags_col.clone());
