@@ -400,6 +400,25 @@ impl StartupNameTable {
     }
 }
 
+/// 7.2-generation generic-container table (body-embedded, 16-byte rows).
+/// `def_tdi = (u32@row + data_add) ^ mask_full(V)` where mask_full is the
+/// 7-step chain: V×m1 ^ x1 ×m2 +a1 >>s ×m3 ^x2 (steps 1–5 in 64-bit,
+/// steps 6–7 in 32-bit).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Gc72 {
+    pub slot_hdr_off: u32,
+    pub slot_xor: u32,
+    pub stride: u32,
+    pub data_add: u32,
+    pub mask_mul1: u64,
+    pub mask_xor1: u32,
+    pub mask_mul2: u64,
+    pub mask_add1: u64,
+    pub mask_shift: u32,
+    pub mask_mul3: u32,
+    pub mask_xor2: u32,
+}
+
 /// One build's generic-parameter and generic-container tables (RECIPE §gp).
 /// All constants come from the profile; the engine has no built-in values.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -434,6 +453,9 @@ pub struct Profile {
     /// longer carries any built-in gp/gc constants.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generic_tables: Option<GenericTables>,
+    /// 7.2-generation generic-container table (body-embedded, 16-byte rows).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gc72: Option<Gc72>,
     /// String-key schedule, **as data**. When present it supersedes the legacy
     /// `str_m1..str_m4` triple, and it is the only form that can describe the
     /// two-stage 5-constant generations (7.0.0 / 6.4.0 complete only after the

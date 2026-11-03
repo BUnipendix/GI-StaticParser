@@ -49,3 +49,11 @@
 - **extends 62% 的真正缺口 = GENERICINST 渲染**（gp/gc 依赖），非 parent 缺失。**gp/gc 的 7.2 常数已全套提取（R103）**，唯一缺口 = gp 行 14B 内部字段（def_tdi 位段）。
 - **非法行 8.5%（7658）画像**：接口 + 委托 + `<>c` + 互操作类——不是解码失败，是**il2cpp 语义上的无 parent 类型**。
 - 方法论：消费函数的列读清单（[r15+disp] 全量反汇编）是 td 行布局的 ground truth——数据判板无法区分「解码错」和「语义上就无值」。
+
+## R106（2026-11-04）：gc72 Rust 接线——extends 62%→90.8%（不是需求，方案记录）
+
+- **gc@+0 64-bit 修正破局**：7.2 gc mask 链的 step 3（×0x17E6E15B）和 step 4（+0x923FD8CC66）是 **64 位运算**（`imul rdx, rbx` 的 rbx 是 64 位）——此前截断到 32 位导致链输出全错。修正后 gc@+0 解出**小的 td 索引**（V=0→1, V=2→2...）= **def_tdi** ✓。
+- **Rust 落地**：profile 增 `Gc72` 结构（slot/xor/stride/data_add + 7 步 mask 链常数）+ `gc72: Option<Gc72>`；engine `generic_instance` 加 7.2 回退路径（当 `gc72` present 时从 body 嵌入的 gc 表读 def_tdi，无需 startup-metadata）。
+- **验证**：extends **62%→90.8%**（81534/89746，甚至超过 7.1 oracle 的 84%——因为 7.2 新增了更多带 extends 的类型）；class/struct/interface/enum 不变；**7.1 BYTE-IDENTICAL ✓**（44 测试绿）。
+- **签名仍 99.5% object**：gp 表（泛型参数名/位置）和 typearr 的完整 Il2CppType 表仍未解——这是独立的下一轮（签名走的是 type_name→il2cpp_type→typearr 路径，不走 gc 表）。泛型类名已开始出现（Dictionary`2、IList`1 等 4933 处）但参数渲染为 Locale<> 占位——gp 表接线后可修复。
+- **方法论**：64 位混淆链的位宽是关键判据（`imul rdx, rbx` 的 64 位乘法 vs `imul r15d, ebx` 的 32 位截断，capstone 的 op_str 直接告诉你位宽）；gc@+0 解出小 td 索引 = def_tdi 的语义自洽（泛型定义的 typeDef 索引必然小，因为在 metadata 前段的 mscorlib/System 程序集里）。

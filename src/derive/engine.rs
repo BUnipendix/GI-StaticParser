@@ -1154,6 +1154,32 @@ impl<'a> Meta<'a> {
     /// `genericInstIndex` selects a 16-byte `Il2CppGenericInst {argc, pad, Il2CppType** argv}`
     /// in the image, whose `argv` points at an array of `Il2CppType*`.
     pub fn generic_instance(&self, g: u32) -> Option<(u32, Vec<usize>)> {
+        // 7.2 path: body-embedded gc table (16-byte rows, mask chain).
+        if let Some(gc) = &self.profile.gc72 {
+            let hdr = &self.header;
+            let slot = gc.slot_hdr_off as usize;
+            if slot + 4 <= hdr.len() {
+                let raw = u32::from_le_bytes(hdr[slot..slot + 4].try_into().unwrap());
+                let gc_base = (raw ^ gc.slot_xor) as usize;
+                let at = gc_base.checked_add((g as usize).checked_mul(gc.stride as usize)?)?;
+                let raw_val = match self.body.read_u32_opt(at) {
+                    Some(v) => v,
+                    None => return None,
+                };
+                let mut mv = (g as u64).wrapping_mul(gc.mask_mul1);
+                mv ^= gc.mask_xor1 as u64;
+                mv = mv.wrapping_mul(gc.mask_mul2);
+                mv = mv.wrapping_add(gc.mask_add1);
+                mv >>= gc.mask_shift;
+                let mid = (mv as u32).wrapping_mul(gc.mask_mul3);
+                let mask_full = mid ^ gc.mask_xor2;
+                let def_tdi = raw_val.wrapping_add(gc.data_add) ^ mask_full;
+                if def_tdi < 89748 {
+                    return Some((def_tdi, Vec::new()));
+                }
+                return None;
+            }
+        }
         let startup = self.startup?;
         if self.gc_rows == 0 || self.generic_insts == 0 {
             return None;
